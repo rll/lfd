@@ -241,30 +241,80 @@ def batch_sum(a_arr_gpu, a_ptr_gpu):
 
     res_arr, res_ptrs = dot_batch(flat_a_gpu, ones_arr_gpu, a_ptr_gpu, ones_ptr_gpu)
     return [r.get()[0] for r in res_arr]
+
+
+def gemm(A_gpu, B_gpu, C_gpu, transa='N', transb='N', alpha=1, beta=0, handle=None):
+    if handle is None:
+        handle = misc._global_cublas_handle
+    if len(A_gpu.shape) == 1 and len(B_gpu.shape) == 1:
+        raise RuntimeError('dot products not supported for gemm')
+
+    # Get the shapes of the arguments (accounting for the
+    # possibility that one of them may only have one dimension):
+    A_shape = A_gpu.shape
+    B_shape = B_gpu.shape
+    if len(A_shape) == 1:
+        A_shape = (1, A_shape[0])
+    if len(B_shape) == 1:
+        B_shape = (1, B_shape[0])
+        
+    # Perform matriA multiplication for 2D arrays:
+    if (A_gpu.dtype == np.complex64 and B_gpu.dtype == np.complex64):
+        cublas_func = cublas.cublasCgemm
+        alpha = np.complex64(alpha)
+        beta = np.complex64(beta)
+    elif (A_gpu.dtype == np.float32 and B_gpu.dtype == np.float32):
+        cublas_func = cublas.cublasSgemm
+        alpha = np.float32(alpha)
+        beta = np.float32(beta)
+    elif (A_gpu.dtype == np.complex128 and B_gpu.dtype == np.complex128):
+        cublas_func = cublas.cublasZgemm
+        alpha = np.complex128(alpha)
+        beta = np.complex128(beta)
+    elif (A_gpu.dtype == np.float64 and B_gpu.dtype == np.float64):
+        cublas_func = cublas.cublasDgemm
+        alpha = np.float64(alpha)
+        beta = np.float64(beta)
+    else:
+        raise ValueError('unsupported combination of input types')
+
+    transa = lower(transa)
+    transb = lower(transb)
     
-## cribbed from
-## http://hannes-brt.github.io/blog/2013/08/07/column-slicing-in-py
-def extract_cols(mat, start=0, stop=None):
-    dtype = mat.dtype
-    itemsize = np.dtype(dtype).itemsize
-    N, M = mat.shape
-    m = stop - start
+    if transb in ['t', 'c']:
+        m, k = B_shape
+    elif transb in ['n']:
+        k, m = B_shape
+    else:
+        raise ValueError('invalid value for transb')
 
-    assert mat.flags.c_contiguous
-    assert start >= 0 and start <= M and stop >= 0 and stop <= M and stop > start
+    if transa in ['t', 'c']:
+        l, n = A_shape
+    elif transa in ['n']:
+        n, l = A_shape
+    else:
+        raise ValueError('invalid value for transa')
+    
+    if l != k:
+        raise ValueError('objects are not aligned')
+    
+    if transb == 'n':
+        lda = max(1, m)
+    else:
+        lda = max(1, k)
+        
+    if transa == 'n':
+        ldb = max(1, k)
+    else:
+        ldb = max(1, n)
 
-    new_mat = gpuarray.empty((N, m), dtype)
-
-    copy = drv.Memcpy2D()
-    copy.set_src_device(mat.gpudata)
-    copy.src_x_in_bytes = start * itemsize    # Offset of the first column in bytes
-    copy.set_dst_device(new_mat.gpudata)
-    copy.src_pitch = M * itemsize   # Width of a row in bytes in the source array
-    copy.dst_pitch = copy.width_in_bytes = m * itemsize  # Width of sliced row
-    copy.height = N
-    copy(aligned=True)
-
-    return new_mat
+    ldc = max(1, m)
+    if C_gpu.shape != (n, ldc):
+        raise ValueError('objects are not aligned')
+    if C_gpu.dtype != A_gpu.dtype:
+        raise ValueError('unsupported combination of input types')
+    cublas_func(handle, transb, transa, m, n, k, alpha, B_gpu.gpudata,
+                lda, A_gpu.gpudata, ldb, beta, C_gpu.gpudata, ldc)
 
 if __name__ == '__main__':
     import pycuda.autoinit

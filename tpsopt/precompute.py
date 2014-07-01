@@ -4,7 +4,7 @@ import scipy.linalg
 import scipy.spatial.distance as ssd
 import argparse
 
-from tps import tps_kernel_matrix 
+from tps import tps_kernel_matrix, tps_kernel_matrix2
 from transformations import unit_boxify
 from rapprentice import clouds, plotting_plt
 
@@ -16,7 +16,7 @@ from pycuda import gpuarray
 import scikits.cuda.linalg
 from scikits.cuda.linalg import dot as cu_dot
 from scikits.cuda.linalg import pinv as cu_pinv
-from defaults import N_ITER_CHEAP, DEFAULT_LAMBDA, DS_SIZE, BEND_COEFF_DIGITS
+from constants import N_ITER_CHEAP, DEFAULT_LAMBDA, DS_SIZE, BEND_COEF_DIGITS, EXACT_LAMBDA, N_ITER_EXACT
 import sys
 
 import IPython as ipy
@@ -30,7 +30,10 @@ def parse_arguments():
     parser.add_argument('datafile', type=str)
     parser.add_argument('--bend_coef_init', type=float, default=DEFAULT_LAMBDA[0])
     parser.add_argument('--bend_coef_final', type=float, default=DEFAULT_LAMBDA[1])
+    parser.add_argument('--exact_bend_coef_init', type=float, default=EXACT_LAMBDA[0])
+    parser.add_argument('--exact_bend_coef_final', type=float, default=EXACT_LAMBDA[1])
     parser.add_argument('--n_iter', type=int, default=N_ITER_CHEAP)
+    parser.add_argument('--exact_n_iter', type=int, default=N_ITER_EXACT)
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--replace', action='store_true')
     parser.add_argument('--cloud_name', type=str, default='cloud_xyz')
@@ -97,6 +100,41 @@ def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1
 
     return proj_mats, offset_mats
 
+def get_exact_solver(x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+    """
+    precomputes several of the matrix products needed to fit a TPS w/o the approximations
+    for the batch computation
+
+    a TPS is fit by solving the system
+    N'(Q'WQ +O_b)N z = -N'(Q'W'y - N'R)
+    x = Nz
+
+    This function returns a tuple
+    N, QN, N'O_bN, N'R
+    where N'O_bN is a dict mapping the desired bending coefs to the appropriate product
+    """
+    n,d = x_na.shape
+    Q = np.c_[np.ones((n, 1)), x_na, K_nn]
+    A = np.r_[np.zeros((d+1, d+1)), np.c_[np.ones((n, 1)), x_na]].T
+
+    R = np.zeros((n+d+1, d))
+    R[1:d+1, :d] = np.diag(rot_coef)
+    
+    n_cnts = A.shape[0]    
+    _u,_s,_vh = np.linalg.svd(A.T)
+    N = _u[:,n_cnts:]
+    QN = Q.dot(N)
+    NR = N.T.dot(R)
+
+    NON = {}
+    for b in bend_coefs:
+        O = np.zeros((n+d+1, n+d+1))
+        O[d+1:, d+1:] += b * K_nn
+        O[1:d+1, 1:d+1] += np.diag(rot_coef)
+        NON[b] = N.T.dot(O.dot(N))
+    return N, QN, NON, NR
+
+
 # @profile
 def get_sol_params(x_na, K_nn, bend_coef, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
     """
@@ -154,7 +192,7 @@ def main():
     f = h5py.File(args.datafile, 'r+')
     
     bend_coefs = np.around(loglinspace(args.bend_coef_init, args.bend_coef_final, args.n_iter), 
-                           BEND_COEFF_DIGITS)
+                           BEND_COEF_DIGITS)
 
     for seg_name, seg_info in f.iteritems():
         if 'inv' in seg_info:
@@ -174,12 +212,23 @@ def main():
             x_na = downsample_cloud(seg_info[args.cloud_name][:, :])
             scaled_x_na, scale_params = unit_boxify(x_na)
             K_nn = tps_kernel_matrix(scaled_x_na)
-            ds_g['cloud_xyz'] = x_na
-            ds_g['scaled_cloud_xyz'] = scaled_x_na
-            ds_g['scaling'] = scale_params[0]
-            ds_g['scaled_translation'] = scale_params[1]
-            ds_g['scaled_K_nn'] = K_nn
 
+            r_traj          = seg_info['r_gripper_tool_frame']['hmat'][:, :3, 3]
+            l_traj          = seg_info['l_gripper_tool_frame']['hmat'][:, :3, 3]
+            scaled_r_traj   = r_traj * scale_params[0] + scale_params[1]
+            scaled_l_traj   = l_traj * scale_params[0] + scale_params[1]
+            scaled_r_traj_K = tps_kernel_matrix2(scaled_r_traj, scaled_x_na)
+            scaled_l_traj_K = tps_kernel_matrix2(scaled_l_traj, scaled_x_na)
+
+            ds_g['cloud_xyz']          = x_na
+            ds_g['scaled_cloud_xyz']   = scaled_x_na
+            ds_g['scaling']            = scale_params[0]
+            ds_g['scaled_translation'] = scale_params[1]
+            ds_g['scaled_K_nn']        = K_nn
+            ds_g['scaled_r_traj']      = scaled_r_traj
+            ds_g['scaled_l_traj']      = scaled_l_traj
+            ds_g['scaled_r_traj_K']    = scaled_r_traj_K
+            ds_g['scaled_l_traj_K']    = scaled_l_traj_K
         for bend_coef in bend_coefs:
             if str(bend_coef) in inv_group:
                 continue
@@ -193,6 +242,35 @@ def main():
             sys.stdout.write('\rprecomputed tps solver for segment {}'.format(seg_name))
             sys.stdout.flush()
     print ""
+
+    bend_coefs = np.around(loglinspace(args.exact_bend_coef_init, args.exact_bend_coef_final,
+                                       args.exact_n_iter), 
+                           BEND_COEF_DIGITS)
+    for seg_name, seg_info in f.iteritems():
+        if 'solver' in seg_info:
+            if args.replace:
+                del seg_info['solver']
+                solver_g = seg_info.create_group('solver')
+            else:
+                solver_g = seg_info['solver']
+        else:
+            solver_g = seg_info.create_group('solver')
+        x_nd = seg_info['inv'][ds_key]['scaled_cloud_xyz'][:]
+        K_nn = seg_info['inv'][ds_key]['scaled_K_nn'][:]
+        N, QN, NON, NR = get_exact_solver(x_nd, K_nn, bend_coefs)
+        solver_g['N']    = N
+        solver_g['QN']   = QN
+        solver_g['NR']   = NR
+        solver_g['x_nd'] = x_nd
+        solver_g['K_nn'] = K_nn
+        NON_g = solver_g.create_group('NON')
+        for b in bend_coefs:
+            NON_g[str(b)] = NON[b]
+        if args.verbose:
+            sys.stdout.write('\rprecomputed exact tps solver for segment {}'.format(seg_name))
+            sys.stdout.flush()
+    print ""
+
 
     f.close()
 
