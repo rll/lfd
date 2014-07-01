@@ -1,0 +1,18 @@
+current time in my kernels: 6.7678ms
+
+Some basic set of ideas for final optimized code
+
+   -- batched matrix multiplies to initialize the matrices of sq differences
+           -- might be an issue here with getting column major/row major correct
+           -- needs 5 multiplies to setup matrices (RW and CW) (~600us)
+	         precompue X'X, need to get Y'Y, X'Y (4 total)
+		 need to get transpose for RW order (1 total)
+           -- then need to copy over (beat 1ms to get improve)
+                 probably doable b/c we're going to have very good access patterns
+           -- don't copy over --> just adapt normalization to use implicit values for the outlier priors
+
+   -- have normalization not write to corr_nm, just return col and row sums (2ms)
+   -- don't recompute sums for getTargPts
+   -- batched matrix multiply to compute xt, yt (~200us)
+
+Estimated improvement -- .6 ms from norm, 1.2 ms from getTgtPts, 1ms from init
