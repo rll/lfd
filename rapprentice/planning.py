@@ -1,6 +1,7 @@
 from __future__ import division
 import openravepy,trajoptpy, numpy as np, json
-import util, sim_util
+import util
+from ropesimulation import sim_util
 from rapprentice import tps, registration, math_utils as mu
 from rapprentice.registration import ThinPlateSpline
 import IPython as ipy

@@ -2,7 +2,7 @@
 # The purpose of this class is to eventually consolidate the various
 # instantiations of do_task_eval.py
 import argparse
-import sim_util
+from ropesimulation import sim_util
 import util
 import openravepy, trajoptpy
 import h5py, numpy as np
