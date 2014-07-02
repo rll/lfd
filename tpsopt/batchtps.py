@@ -11,13 +11,15 @@ from pycuda import gpuarray
 from scikits.cuda import linalg
 linalg.init()
 
-from tps import tps_kernel_matrix, tps_eval
+from tps import tps_kernel_matrix, tps_eval, tps_kernel_matrix2
 from transformations import unit_boxify
 from culinalg_exts import dot_batch_nocheck, get_gpu_ptrs, m_dot_batch
 from precompute import downsample_cloud, batch_get_sol_params
-from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs
+from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
+    closest_point_cost
 from registration import registration_cost as cpu_registration_cost
-from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
+from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
+    DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
 
 import IPython as ipy
 from pdb import pm, set_trace
@@ -61,7 +63,6 @@ class GPUContext(object):
         self.bend_coefs = bend_coefs
         self.ptrs_valid = False
         self.N = 0
-        self.ptr_list = []
 
         self.tps_params     = []
         self.tps_param_ptrs = None
@@ -84,6 +85,8 @@ class GPUContext(object):
         self.proj_mat_ptrs   = dict([(b, None) for b in bend_coefs])
         self.offset_mats     = dict([(b, []) for b in bend_coefs])
         self.offset_mat_ptrs = dict([(b, None) for b in bend_coefs])
+
+
         self.pts          = []
         self.pt_ptrs      = None
         self.kernels      = []
@@ -112,7 +115,8 @@ class GPUContext(object):
         self.c_coefs_cn     = []
         self.c_coef_cn_ptrs = None
 
-        self.seg_names       = []
+        self.seg_names      = []
+        self.names2inds  = {}
 
     def reset_tps_params(self):
         """
@@ -154,6 +158,7 @@ class GPUContext(object):
         self.ptrs_valid = False
         self.N += 1
         self.seg_names.append(name)
+        self.names2inds[name] = self.N - 1
         self.tps_params.append(self.default_tps_params.copy())
         self.trans_d.append(self.tps_params[-1][0, :])
         self.lin_dd.append(self.tps_params[-1][1:DATA_DIM+1, :])
@@ -522,32 +527,44 @@ class SrcContext(GPUContext):
         self.l_traj_K_ptrs   = None
         self.l_traj_w        = []
         self.l_traj_w_ptrs   = None
+        self.l_traj_dims     = []
+        self.l_traj_dims_gpu = None
+
         self.r_traj          = []
         self.r_traj_ptrs     = None
         self.r_traj_K        = []
         self.r_traj_K_ptrs   = None
         self.r_traj_w        = []
         self.r_traj_w_ptrs   = None
-        self.ptr_list.extend([(self.l_traj,   self.l_traj_ptrs),
-                              (self.l_traj_K, self.l_traj_K_ptrs),
-                              (self.l_traj_w, self.l_traj_w_ptrs),
-                              (self.r_traj,   self.r_traj_ptrs),
-                              (self.r_traj_K, self.r_traj_K_ptrs),
-                              (self.r_traj_w, self.r_traj_w_ptrs)])
+        self.r_traj_dims     = []
+        self.r_traj_dims_gpu = None
+
+        self.traj_costs      = None
+        self.tgt_traj_ptrs   = None
+        self.tgt_dim_gpu     = None
+        
 
     def update_ptrs(self):
-        self.l_traj_ptrs = get_gpu_ptrs(self.l_traj)
+        self.l_traj_ptrs   = get_gpu_ptrs(self.l_traj)
         self.l_traj_K_ptrs = get_gpu_ptrs(self.l_traj_K)
-        self.l_traj_w_Ptrs = get_gpu_ptrs(self.l_traj_w)
-        self.r_traj_ptrs = get_gpu_ptrs(self.r_traj)
+        self.l_traj_w_ptrs = get_gpu_ptrs(self.l_traj_w)
+        self.r_traj_ptrs   = get_gpu_ptrs(self.r_traj)
         self.r_traj_K_ptrs = get_gpu_ptrs(self.r_traj_K)
-        self.r_traj_w_Ptrs = get_gpu_ptrs(self.r_traj_w)
+        self.r_traj_w_ptrs = get_gpu_ptrs(self.r_traj_w)
+
+        self.l_traj_dims_gpu = gpuarray.to_gpu(np.array(self.l_traj_dims, dtype=np.int32))
+        self.r_traj_dims_gpu = gpuarray.to_gpu(np.array(self.r_traj_dims, dtype=np.int32))
+
+        self.traj_costs = gpuarray.empty(self.N, np.float32)
+        self.tgt_traj_ptrs = gpuarray.empty(self.N, np.int64)
+        self.tgt_dim_gpu = gpuarray.empty(self.N, np.int32)
+
         GPUContext.update_ptrs(self)
 
     def add_cld(self, name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params,
                 r_traj, r_traj_K, l_traj, l_traj_K, update_ptrs = False):
         """
-        does the normal add, but also adds the trajectories too
+        does the normal add, but also adds the trajectories
         """
         # don't update ptrs there, do it after this
         GPUContext.add_cld(self, name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params,
@@ -555,10 +572,13 @@ class SrcContext(GPUContext):
         self.r_traj.append(gpu_pad(r_traj, (MAX_TRAJ_LEN, DATA_DIM)))
         self.r_traj_K.append(gpu_pad(r_traj_K, (MAX_TRAJ_LEN, MAX_CLD_SIZE)))
         self.l_traj.append(gpu_pad(l_traj, (MAX_TRAJ_LEN, DATA_DIM)))
-        self.l_traj_K.append(gpu_pad(r_traj_K, (MAX_TRAJ_LEN, MAX_CLD_SIZE)))
+        self.l_traj_K.append(gpu_pad(l_traj_K, (MAX_TRAJ_LEN, MAX_CLD_SIZE)))
 
         self.r_traj_w.append(gpuarray.zeros_like(self.r_traj[-1]))
         self.l_traj_w.append(gpuarray.zeros_like(self.l_traj[-1]))
+
+        self.l_traj_dims.append(l_traj.shape[0])
+        self.r_traj_dims.append(r_traj.shape[0])
 
         if update_ptrs:
             self.update_ptrs()
@@ -567,7 +587,7 @@ class SrcContext(GPUContext):
         f = h5py.File(fname, 'r')
         for seg_name, seg_info in f.iteritems():
             if 'inv' not in seg_info:
-                raise KeyError("H5 File does not have precomputed values")
+                raise KeyError("Batch Mode only works with precomputed solvers")
             seg_info = seg_info['inv']
 
             proj_mats   = {}
@@ -590,7 +610,95 @@ class SrcContext(GPUContext):
             self.add_cld(seg_name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params,
                          r_traj, r_traj_K, l_traj, l_traj_K)
         f.close()
-        self.update_ptrs()        
+        self.update_ptrs()
+
+    def transform_trajs(self):
+        """
+        computes the warp of l_traj and r_traj under current tps params
+        """
+        fill_mat(self.l_traj_w_ptrs, self.trans_d_ptrs, self.l_traj_dims_gpu, self.N)
+        fill_mat(self.r_traj_w_ptrs, self.trans_d_ptrs, self.r_traj_dims_gpu, self.N)
+        dot_batch_nocheck(self.l_traj,      self.lin_dd,      self.l_traj_w,
+                          self.l_traj_ptrs, self.lin_dd_ptrs, self.l_traj_w_ptrs)
+        dot_batch_nocheck(self.r_traj,      self.lin_dd,      self.r_traj_w,
+                          self.r_traj_ptrs, self.lin_dd_ptrs, self.r_traj_w_ptrs)
+        dot_batch_nocheck(self.l_traj_K,      self.w_nd,        self.l_traj_w,
+                          self.l_traj_K_ptrs, self.w_nd_ptrs,   self.l_traj_w_ptrs) 
+        dot_batch_nocheck(self.r_traj_K,      self.w_nd,        self.r_traj_w,
+                          self.r_traj_K_ptrs, self.w_nd_ptrs,   self.r_traj_w_ptrs) 
+        sync()
+
+    def test_transform_trajs(self):
+        self.transform_trajs()
+        for i in range(self.N):
+            l_dim = self.l_traj_dims[i]
+            r_dim = self.r_traj_dims[i]
+            dim   = self.dims[i]
+            l_traj   = self.l_traj[i].get()[:l_dim]
+            l_traj_w = self.l_traj_w[i].get()[:l_dim]
+            l_traj_K = self.l_traj_K[i].get()[:l_dim, :dim]
+            r_traj   = self.r_traj[i].get()[:r_dim]
+            r_traj_w = self.r_traj_w[i].get()[:r_dim]
+            r_traj_K = self.l_traj_K[i].get()[:l_dim]
+            
+            w_nd    = self.w_nd[i].get()[:dim]
+            lin_dd  = self.lin_dd[i].get()
+            trans_d = self.trans_d[i].get()
+            pts     = self.pts[i].get()[:dim]
+            
+            l_traj_cpu = tps_eval(l_traj, lin_dd, trans_d, w_nd, pts)
+            r_traj_cpu = tps_eval(r_traj, lin_dd, trans_d, w_nd, pts)
+            
+            assert np.allclose(l_traj_cpu, l_traj_w, atol=1e-4)
+            assert np.allclose(r_traj_cpu, r_traj_w, atol=1e-4)
+
+    def traj_cost(self, tgt_seg):
+        i = self.names2inds[tgt_seg]
+        self.transform_trajs()
+        self.tgt_traj_ptrs.fill(int(self.l_traj_w[i].gpudata))
+        self.tgt_dim_gpu.fill(self.l_traj_dims[i])
+        closest_point_cost(self.l_traj_w_ptrs,   self.tgt_traj_ptrs, self.l_traj_dims_gpu, self.tgt_dim_gpu, 
+                           self.traj_costs, self.N)
+        check_cuda_err()
+        l_cost = self.traj_costs.get()[:self.N]
+
+        self.tgt_traj_ptrs.fill(int(self.r_traj_w[i].gpudata))
+        self.tgt_dim_gpu.fill(self.r_traj_dims[i])
+        closest_point_cost(self.r_traj_w_ptrs,   self.tgt_traj_ptrs, self.r_traj_dims_gpu, self.tgt_dim_gpu, 
+                           self.traj_costs, self.N)
+        r_cost = self.traj_costs.get()[:self.N]
+
+        return (l_cost + r_cost) / float(2)
+
+    def test_traj_cost(self):
+        self.transform_trajs()
+        l_trajs = [x.get()[:self.l_traj_dims[i]] for i, x in enumerate(self.l_traj_w)]
+        r_trajs = [x.get()[:self.r_traj_dims[i]] for i, x in enumerate(self.r_traj_w)]        
+                   
+        for i, tgt_seg in enumerate(self.seg_names):
+            cost_gpu = self.traj_cost(tgt_seg)
+            tgt_traj_l = l_trajs[i]
+            tgt_traj_r = r_trajs[i]
+            for j in range(self.N):
+                dist_l = ssd.cdist(l_trajs[j], tgt_traj_l)
+                dist_r = ssd.cdist(r_trajs[j], tgt_traj_r)
+                cost_l = np.sum(np.min(dist_l, axis=1)) / float(self.l_traj_dims[j])
+                cost_r = np.sum(np.min(dist_r, axis=1)) / float(self.r_traj_dims[j])
+                cost_cpu = (cost_l + cost_r)/float(2) 
+                assert np.abs(cost_gpu[j] - cost_cpu) < 1e-4
+
+    def unit_test(self, other):
+        GPUContext.unit_test(self, other)
+        print "Running batch_tps_rpm"
+        batch_tps_rpm_bij(self, other)
+        print "testing transform_trajs"
+        self.test_transform_trajs()
+        print "doing exhaustive testing traj_cost"
+        self.test_traj_cost()
+    
+        
+        
+
 
 class TgtContext(GPUContext):
     """
@@ -877,7 +985,7 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
 def parse_arguments():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_file", type=str, default='../data/actions.h5')
+    parser.add_argument("--input_file", type=str, default='../data/misc/actions.h5')
     parser.add_argument("--sync", action='store_true')
     parser.add_argument("--n_copies", type=int, default=1)
     parser.add_argument("--test", action='store_true')
@@ -899,6 +1007,7 @@ if __name__=='__main__':
     tgt_ctx.set_cld(tgt_cld)
     if args.test_full:
         src_ctx.unit_test(tgt_ctx)
+        test_batch_tps_rpm_bij(src_ctx, tgt_ctx)
         print "unit tests passed, doing full check on batch tps rpm"
         for i in range(src_ctx.N):
             sys.stdout.write("\rtesting source cloud {}".format(i))
@@ -919,7 +1028,7 @@ if __name__=='__main__':
         sys.stdout.write("\rRunning Timing test {}/{}".format(i, args.timing_runs))
         sys.stdout.flush()
         start = time.time()
-        tgt_ctx.set_cld(scaled_tgt_cld)
+        tgt_ctx.set_cld(tgt_cld)
         c = batch_tps_rpm_bij(src_ctx, tgt_ctx)
         time_taken = time.time() - start
         times.append(time_taken)

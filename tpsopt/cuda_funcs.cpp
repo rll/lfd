@@ -33,6 +33,19 @@ void pySqDiffMat(py::object x, py::object y, py::object z, int N, bool overwrite
   sqDiffMat(x_ptr, y_ptr, z_ptr, N, overwrite);
 }
 
+void pyClosestPointCost(py::object x, py::object y, py::object xdims, py::object ydims, py::object res, int N){
+  float** x_ptr = getGPUPointer<float*>(x);
+  float** y_ptr = getGPUPointer<float*>(y);
+
+  int* xdims_ptr = getGPUPointer<int>(xdims);
+  int* ydims_ptr = getGPUPointer<int>(ydims);
+  
+  float* res_ptr = getGPUPointer<float>(res);
+
+  closestPointCost(x_ptr, y_ptr, xdims_ptr, ydims_ptr, res_ptr, N);
+
+}
+
 void pyInitProbNM(py::object x, py::object y, py::object xw, py::object yw, 
 		  py::object xdims, py::object ydims, int N,
 		  float outlierprior, float outlierfrac, float T, 
@@ -120,6 +133,8 @@ BOOST_PYTHON_MODULE(cuda_funcs) {
   py::def("fill_mat", &pyFillMat, (py::arg("dest"), py::arg("vals"), py::arg("dims"), py::arg("N")));
 
   py::def("sq_diffs", &pySqDiffMat, (py::arg("x"), py::arg("y"), py::arg("z"), py::arg("N"), py::arg("overwrite")));
+
+  py::def("closest_point_cost", &pyClosestPointCost, (py::arg("x"), py::arg("y"), py::arg("xdims"), py::arg("ydims"), py::arg("N")));
 
   py::def("init_prob_nm", &pyInitProbNM, (py::arg("x"), py::arg("y"), py::arg("xw"), py::arg("yw"), 
 					  py::arg("xdims"), py::arg("ydims"), py::arg("N"), 

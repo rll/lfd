@@ -107,21 +107,36 @@ __global__ void _sqDiffMat(float* x_ptr[], float* y_ptr[], float* z, bool overwr
   }
 }
 
-
-__global__ void _corrReduce(float* d1_ptr[], float* d2_ptr[], float* out_ptr[], float T){
-  /* Takes pointers to two arrays of pairwise distances b/t forward and backward
-   * warps. Puts the result in out_ptr
-   * Called with 1 block/ptr and MAX_DIM threads
+__global__ void _closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, float* res){
+  /*
+   * Computes the sum of distances from the arrays in x to the closest point in y
+   * Called with 1 block per array comparison and at least 1 thread per xdim
+   * Assumes DATA_DIM = 3
    */
-  int tix = threadIdx.x; int bix = blockIdx.x;
-  int ind;
-  float *d1, *d2, *out;
-  d1  = d1_ptr[bix];
-  d2  = d2_ptr[bix];
-  out = out_ptr[bix];
-  for (int i = 0; i < MAX_DIM; ++i){
-    ind = rMInd(i, tix, MAX_DIM);
-    out[ind] = exp( ( -1 * sqrt(d1[ind]) - sqrt(d2[ind])) / ( (float) 2 * T));
+  int tix = threadIdx.x; int bix = blockIdx.x; int x_ix = rMInd(tix, 0, DATA_DIM);
+  int xdim = xdims[bix]; int ydim = ydims[bix]; int y_ix;
+  float x0, x1, x2, *x, *y, d0, d1, d2, min_diff;
+  __shared__ float diff[MAX_DIM];
+  
+  if (tix < xdim){
+    x = x_ptr[bix]; y = y_ptr[bix];
+    x0 = x[x_ix]; x1 = x[x_ix+1]; x2 = x[x_ix+2];
+    d0 = x0 - y[0]; d1 = x1 - y[1]; d2 = x2 -y[2];
+    min_diff = d0 * d0 + d1 * d1 + d2 * d2;
+    for(int i = 1; i < ydim; ++i){
+      y_ix = rMInd(i, 0, DATA_DIM);
+      d0 = x0 - y[y_ix + 0]; d1 = x1 - y[y_ix + 1]; d2 = x2 -y[y_ix + 2];
+      min_diff = MIN(min_diff, d0 * d0 + d1 * d1 + d2 * d2);
+    }
+    diff[tix] = sqrt(min_diff);
+  }
+  __syncthreads();
+  if (tix == 0){
+    min_diff = 0;
+    for(int i = 0; i < xdim; ++i){
+      min_diff = min_diff + diff[i];
+    }
+    res[bix] = min_diff / (float) xdim;
   }
 }
 
@@ -459,6 +474,15 @@ void fillMat(float* dest_ptr[], float* val_ptr[], int* dims, int N){
 
 void sqDiffMat(float* x_ptr[], float* y_ptr[], float* z, int N, bool overwrite){
   _sqDiffMat<<<N, MAX_DIM>>>(x_ptr, y_ptr, z, overwrite);
+}
+
+void closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, float* res, int N){
+  if (DATA_DIM != 3){
+    printf("Closest Point Only Works for DATA_DIM=3!!!!!!!!!!!\n");
+    cudaDeviceReset();
+    exit(1);
+  }
+  _closestPointCost<<<N, MAX_DIM>>>(x_ptr, y_ptr, xdims, ydims, res);
 }
 
 void initProbNM(float* x[], float* y[], float* xw[], float* yw[],
