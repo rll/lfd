@@ -43,7 +43,13 @@ void pyClosestPointCost(py::object x, py::object y, py::object xdims, py::object
   float* res_ptr = getGPUPointer<float>(res);
 
   closestPointCost(x_ptr, y_ptr, xdims_ptr, ydims_ptr, res_ptr, N);
+}
 
+void pyScalePoints(py::object x, py::object xdims, float scale, float t0, float t1, float t2, int N){
+  float** x_ptr = getGPUPointer<float*>(x);
+  int* xdims_ptr = getGPUPointer<int>(xdims);
+
+  scalePoints(x_ptr, xdims_ptr, scale, t0, t1, t2, N);
 }
 
 void pyInitProbNM(py::object x, py::object y, py::object xw, py::object yw, 
@@ -135,6 +141,8 @@ BOOST_PYTHON_MODULE(cuda_funcs) {
   py::def("sq_diffs", &pySqDiffMat, (py::arg("x"), py::arg("y"), py::arg("z"), py::arg("N"), py::arg("overwrite")));
 
   py::def("closest_point_cost", &pyClosestPointCost, (py::arg("x"), py::arg("y"), py::arg("xdims"), py::arg("ydims"), py::arg("N")));
+
+  py::def("scale_points", &pyScalePoints, (py::arg("x"), py::arg("xdims"), py::arg("scale"), py::arg("t0"), py::arg("t1"), py::arg("t2"), py::arg("N")));
 
   py::def("init_prob_nm", &pyInitProbNM, (py::arg("x"), py::arg("y"), py::arg("xw"), py::arg("yw"), 
 					  py::arg("xdims"), py::arg("ydims"), py::arg("N"), 

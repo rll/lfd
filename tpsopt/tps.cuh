@@ -16,6 +16,8 @@ void sqDiffMat(float* x_ptr[], float* y_ptr[], float* z, int N, bool overwrite);
 
 void closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, float* res, int N);
 
+void scalePoints(float* x_ptr[], int* xdims, float scale, float t0, float t1, float t2, int N);
+
 void initProbNM(float* x[], float* y[], float* xw[], float* yw[],
 		int N, int* xdims, int* ydims, float outlierprior, float outlierfrac,
 		float T, float* corr_cm[], float* corr_rm[]);

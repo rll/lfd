@@ -140,6 +140,20 @@ __global__ void _closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, in
   }
 }
 
+__global__ void _scalePoints(float* x_ptr[], int* xdims, float scale, float t0, float t1, float t2){
+  /*
+   * takes the points in x and scales and translates appropriately
+   * called with 1 block per array in the batch and 1 thread per data item
+   */
+  int tix = threadIdx.x; int bix = blockIdx.x; int x_ix = rMInd(tix, 0, DATA_DIM);
+  int xdim = xdims[bix]; float* x = x_ptr[bix];
+  if (tix < xdim){
+    x[x_ix] = x[x_ix]*scale + t0;
+    x[x_ix+1] = x[x_ix+1]*scale + t1;
+    x[x_ix+2] = x[x_ix+2]*scale + t2;
+  }
+}
+
 __global__ void _initProbNM(float* x_ptr[], float* y_ptr[], float* xw_ptr[], float* yw_ptr[], 
 			    int* xdims, int* ydims, float outlierprior, float outlierfrac, float T, 
 			    float* corr_ptr_cm[], float* corr_ptr_rm[]) {
@@ -483,6 +497,15 @@ void closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, fl
     exit(1);
   }
   _closestPointCost<<<N, MAX_DIM>>>(x_ptr, y_ptr, xdims, ydims, res);
+}
+
+void scalePoints(float* x_ptr[], int* xdims, float scale, float t0, float t1, float t2, int N){
+  if (DATA_DIM != 3){
+    printf("Closest Point Only Works for DATA_DIM=3!!!!!!!!!!!\n");
+    cudaDeviceReset();
+    exit(1);
+  }
+  _scalePoints<<<N, MAX_DIM>>>(x_ptr, xdims, scale, t0, t1, t2);
 }
 
 void initProbNM(float* x[], float* y[], float* xw[], float* yw[],

@@ -16,7 +16,7 @@ from transformations import unit_boxify
 from culinalg_exts import dot_batch_nocheck, get_gpu_ptrs, m_dot_batch
 from precompute import downsample_cloud, batch_get_sol_params
 from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
-    closest_point_cost
+    closest_point_cost, scale_points
 from registration import registration_cost as cpu_registration_cost
 from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
     DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
@@ -652,9 +652,42 @@ class SrcContext(GPUContext):
             assert np.allclose(l_traj_cpu, l_traj_w, atol=1e-4)
             assert np.allclose(r_traj_cpu, r_traj_w, atol=1e-4)
 
-    def traj_cost(self, tgt_seg):
-        i = self.names2inds[tgt_seg]
+    def get_unscaled_trajs(self, other):
+        """
+        transforms the trajectories with the current tps params
+        unscales them assuming that other is the target
+        assumes other is a TgtContext
+        """
         self.transform_trajs()
+        r, s = other.scale_params
+        scale = 1/r
+        t = [float(x) for x in (-s/r)]
+        scale_points(self.l_traj_w_ptrs, self.l_traj_dims_gpu, scale, t[0], t[1], t[2], self.N)
+        scale_points(self.r_traj_w_ptrs, self.r_traj_dims_gpu, scale, t[0], t[1], t[2], self.N)
+
+    def test_get_unscaled_trajs(self, other):
+        self.transform_trajs()
+        scaled_traj_l = [x.get()[:self.l_traj_dims[i]] for i, x in enumerate(self.l_traj_w)]
+        scaled_traj_r = [x.get()[:self.r_traj_dims[i]] for i, x in enumerate(self.r_traj_w)]
+        self.get_unscaled_trajs(other)
+        unscaled_traj_l = [x.get()[:self.l_traj_dims[i]] for i, x in enumerate(self.l_traj_w)]
+        unscaled_traj_r = [x.get()[:self.r_traj_dims[i]] for i, x in enumerate(self.r_traj_w)]
+        
+        r, s = other.scale_params
+        scaling = 1/r
+        trans = (-s/r)
+        for i in range(self.N):
+            traj_l = scaled_traj_l[i]
+            traj_r = scal3ed_traj_r[i]
+            unscaled_traj_l_cpu = traj_l * scaling + trans
+            unscaled_traj_r_cpu = traj_r * scaling + trans
+            assert np.allclose(unscaled_traj_l_cpu, unscaled_traj_l[i])
+            assert np.allclose(unscaled_traj_r_cpu, unscaled_traj_r[i])
+        
+        
+    def traj_cost(self, tgt_seg, other):
+        i = self.names2inds[tgt_seg]
+        self.get_unscaled_trajs(other)
         self.tgt_traj_ptrs.fill(int(self.l_traj_w[i].gpudata))
         self.tgt_dim_gpu.fill(self.l_traj_dims[i])
         closest_point_cost(self.l_traj_w_ptrs,   self.tgt_traj_ptrs, self.l_traj_dims_gpu, self.tgt_dim_gpu, 
@@ -670,13 +703,13 @@ class SrcContext(GPUContext):
 
         return (l_cost + r_cost) / float(2)
 
-    def test_traj_cost(self):
-        self.transform_trajs()
+    def test_traj_cost(self, other):
+        self.get_unscaled_trajs(other)
         l_trajs = [x.get()[:self.l_traj_dims[i]] for i, x in enumerate(self.l_traj_w)]
         r_trajs = [x.get()[:self.r_traj_dims[i]] for i, x in enumerate(self.r_traj_w)]        
                    
         for i, tgt_seg in enumerate(self.seg_names):
-            cost_gpu = self.traj_cost(tgt_seg)
+            cost_gpu = self.traj_cost(tgt_seg, other)
             tgt_traj_l = l_trajs[i]
             tgt_traj_r = r_trajs[i]
             for j in range(self.N):
@@ -693,12 +726,10 @@ class SrcContext(GPUContext):
         batch_tps_rpm_bij(self, other)
         print "testing transform_trajs"
         self.test_transform_trajs()
-        print "doing exhaustive testing traj_cost"
-        self.test_traj_cost()
-    
-        
-        
-
+        print "testing unscaling"
+        self.test_get_unscaled_trajs(other)
+        print "doing exhaustive test for traj_cost"        
+        self.test_traj_cost(other)
 
 class TgtContext(GPUContext):
     """
@@ -734,7 +765,7 @@ class TgtContext(GPUContext):
         K_gpu = gpu_pad(K, (MAX_CLD_SIZE, MAX_CLD_SIZE))
         cld_gpu = gpu_pad(scaled_cld, (MAX_CLD_SIZE, DATA_DIM))
         self.pts          = [cld_gpu for _ in range(self.N)]
-        self.scale_params = [scale_params for _ in range(self.N)]
+        self.scale_params = scale_params
         self.kernels      = [K_gpu for _ in range(self.N)]
         proj_mats_gpu     = dict([(b, gpu_pad(p.get(), (MAX_CLD_SIZE + DATA_DIM + 1, MAX_CLD_SIZE)))
                                   for b, p in proj_mats.iteritems()])
