@@ -21,13 +21,63 @@ PR2_L_POSTURES = dict(
 )
 
 class SimulationEnv:
-    def __init__(self):
-        self.robot  = None
-        self.env    = None
-        self.pr2    = None
-        self.sim    = None
-        self.log    = None
+    def __init__(self, table_height, init_joint_names, init_joint_values, obstacles, dof_limits_factor):
+        self.table_height = table_height
+        self.init_joint_names = init_joint_names
+        self.init_joint_values = init_joint_values
+        self.obstacles = obstacles
+        self.dof_limits_factor = dof_limits_factor
+        self.robot = None
+        self.env = None
+        self.sim = None
         self.viewer = None
+    
+    def initialize(self):
+        self.env = openravepy.Environment()
+        self.env.StopSimulation()
+        self.env.Load("robots/pr2-beta-static.zae")
+    #     self.env.Load("../data/misc/pr2-beta-static-decomposed-shoulder.zae")
+        self.robot = self.env.GetRobots()[0]
+    
+        dof_inds = dof_inds_from_name(self.robot, '+'.join(self.init_joint_names))
+        values, dof_inds = zip(*[(value, dof_ind) for value, dof_ind in zip(self.init_joint_values, dof_inds) if dof_ind != -1])
+        self.robot.SetDOFValues(values, dof_inds)
+ 
+        table_xml = make_table_xml(translation=[1, 0, self.table_height + (-.1 + .01)], extents=[.85, .85, .1])
+    #     table_xml = make_table_xml(translation=[1-.3, 0, self.table_height + (-.1 + .01)], extents=[.85-.3, .85-.3, .1])
+        self.env.LoadData(table_xml)
+        if 'bookshelve' in self.obstacles:
+            self.env.Load("data/bookshelves.env.xml")
+        if 'boxes' in self.obstacles:
+            self.env.LoadData(make_box_xml("box0", [.7,.43,table_height+(.01+.12)], [.12,.12,.12]))
+            self.env.LoadData(make_box_xml("box1", [.74,.47,table_height+(.01+.12*2+.08)], [.08,.08,.08]))
+        if 'cylinders' in self.obstacles:
+            self.env.LoadData(make_cylinder_xml("cylinder0", [.7,.43,table_height+(.01+.5)], .12, 1.))
+            self.env.LoadData(make_cylinder_xml("cylinder1", [.7,-.43,table_height+(.01+.5)], .12, 1.))
+            self.env.LoadData(make_cylinder_xml("cylinder2", [.4,.2,table_height+(.01+.65)], .06, .5))
+            self.env.LoadData(make_cylinder_xml("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5))
+    
+        cc = trajoptpy.GetCollisionChecker(self.env)
+        for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
+            cc.ExcludeCollisionPair(gripper_link, self.env.GetKinBody('table').GetLinks()[0])
+    
+        reset_arms_to_side(self)
+    
+        if self.dof_limits_factor != 1.0:
+            assert 0 < self.dof_limits_factor and self.dof_limits_factor <= 1.0
+            active_dof_indices = self.robot.GetActiveDOFIndices()
+            active_dof_limits = self.robot.GetActiveDOFLimits()
+            for lr in 'lr':
+                manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+                dof_inds = self.robot.GetManipulator(manip_name).GetArmIndices()
+                limits = np.asarray(self.robot.GetDOFLimits(dof_inds))
+                limits_mean = limits.mean(axis=0)
+                limits_width = np.diff(limits, axis=0)
+                new_limits = limits_mean + self.dof_limits_factor * np.r_[-limits_width/2.0, limits_width/2.0]
+                for i, ind in enumerate(dof_inds):
+                    active_dof_limits[0][active_dof_indices.tolist().index(ind)] = new_limits[0,i]
+                    active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
+            self.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
 
 def make_table_xml(translation, extents):
     xml = """
@@ -433,16 +483,15 @@ def load_random_start_segment(demofile):
     seg_name = random.choice(start_keys)
     return demofile[seg_name]['cloud_xyz'][:,:3]
 
-def load_fake_data_segment(sim_env, demofile, fake_data_segment, fake_data_transform, set_robot_state=True):
+def load_fake_data_segment(demofile, fake_data_segment, fake_data_transform):
     fake_seg = demofile[fake_data_segment]
     new_xyz = np.squeeze(fake_seg["cloud_xyz"])[:,:3]
     hmat = openravepy.matrixFromAxisAngle(fake_data_transform[3:6])
     hmat[:3,3] = fake_data_transform[0:3]
     new_xyz = new_xyz.dot(hmat[:3,:3].T) + hmat[:3,3][None,:]
-    r2r = ros2rave.RosToRave(sim_env.robot, asarray(fake_seg["joint_states"]["name"]))
-    if set_robot_state:
-        r2r.set_values(sim_env.robot, asarray(fake_seg["joint_states"]["position"][0]))
-    return new_xyz, r2r
+    joint_names = asarray(fake_seg["joint_states"]["name"])
+    joint_values = asarray(fake_seg["joint_states"]["position"][0])
+    return new_xyz, joint_names, joint_values
 
 def unif_resample(traj, max_diff, wt = None):        
     """
