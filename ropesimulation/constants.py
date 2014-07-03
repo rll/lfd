@@ -19,3 +19,8 @@ ROPE_LIN_STOP_ERP  = .2
 ROPE_MASS          = 1.0
 ROPE_RADIUS_THICK  = .008
 
+##################
+# Planning Params
+##################
+JOINT_LENGTH_PER_STEP = .3
+FINGER_CLOSE_RATE     = .06
