@@ -11,7 +11,7 @@ import re
 
 from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu, plotting_openrave
 from rapprentice.util import yellowprint
-from defaults import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LIN_DAMPING, \
+from constants import GRIPPER_OPEN_CLOSE_THRESH, ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LIN_DAMPING, \
     ROPE_ANG_LIMIT, ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK
 PR2_L_POSTURES = dict(
     untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
@@ -97,15 +97,13 @@ def split_trajectory_by_gripper(seg_info):
     rgrip = asarray(seg_info["r_gripper_joint"])
     lgrip = asarray(seg_info["l_gripper_joint"])
 
-    thresh = .04 # open/close threshold
-
     n_steps = len(lgrip)
 
     # indices BEFORE transition occurs
-    l_openings = np.flatnonzero((lgrip[1:] >= thresh) & (lgrip[:-1] < thresh))
-    r_openings = np.flatnonzero((rgrip[1:] >= thresh) & (rgrip[:-1] < thresh))
-    l_closings = np.flatnonzero((lgrip[1:] < thresh) & (lgrip[:-1] >= thresh))
-    r_closings = np.flatnonzero((rgrip[1:] < thresh) & (rgrip[:-1] >= thresh))
+    l_openings = np.flatnonzero((lgrip[1:] >= GRIPPER_OPEN_CLOSE_THRESH) & (lgrip[:-1] < GRIPPER_OPEN_CLOSE_THRESH))
+    r_openings = np.flatnonzero((rgrip[1:] >= GRIPPER_OPEN_CLOSE_THRESH) & (rgrip[:-1] < GRIPPER_OPEN_CLOSE_THRESH))
+    l_closings = np.flatnonzero((lgrip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (lgrip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
+    r_closings = np.flatnonzero((rgrip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (rgrip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
 
     before_transitions = np.r_[l_openings, r_openings, l_closings, r_closings]
     after_transitions = before_transitions+1
@@ -117,13 +115,11 @@ def split_trajectory_by_gripper(seg_info):
 def split_trajectory_by_lr_gripper(seg_info, lr):
     grip = asarray(seg_info["%s_gripper_joint"%lr])
 
-    thresh = .04 # open/close threshold
-
     n_steps = len(grip)
 
     # indices BEFORE transition occurs
-    openings = np.flatnonzero((grip[1:] >= thresh) & (grip[:-1] < thresh))
-    closings = np.flatnonzero((grip[1:] < thresh) & (grip[:-1] >= thresh))
+    openings = np.flatnonzero((grip[1:] >= GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] < GRIPPER_OPEN_CLOSE_THRESH))
+    closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
 
     before_transitions = np.r_[openings, closings]
     after_transitions = before_transitions+1
@@ -142,8 +138,7 @@ def gripper_joint2gripper_l_finger_joint_values(gripper_joint_vals):
     return gripper_l_finger_joint_vals
 
 def binarize_gripper(angle):
-    thresh = .04
-    return angle > thresh
+    return angle > GRIPPER_OPEN_CLOSE_THRESH
 
 def get_binary_gripper_angle(open):
     mult = 5
