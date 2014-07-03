@@ -93,6 +93,7 @@ class Simulation(object):
         self.bt_env = None
         self.bt_robot = None
         self.rope = None
+        self.rope_pts = None
         self.constraints = {"l": [], "r": []}
         self.constraints_inds = {"l": [], "r": []}
 
@@ -113,6 +114,7 @@ class Simulation(object):
         self.bt_env.SetGravity([0, 0, -9.8])
         self.bt_robot = self.bt_env.GetObjectByName(self.robot.GetName())
         self.rope = bulletsimpy.CapsuleRope(self.bt_env, 'rope', rope_pts, self.rope_params)
+        self.rope_pts = rope_pts
 
         cc = trajoptpy.GetCollisionChecker(self.env)
         for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
@@ -137,6 +139,8 @@ class Simulation(object):
                 for rope_link1 in self.rope.GetKinBody().GetLinks():
                     cc.IncludeCollisionPair(rope_link0, rope_link1)
             self.env.Remove(self.rope.GetKinBody())
+            self.rope = None
+            self.rope_pts = None
 
     def step(self):
         self.bt_robot.UpdateBullet()

@@ -10,9 +10,8 @@ from rapprentice import math_utils as mu
 
 class EvalStats:
     def __init__(self, **kwargs):
-        self.found_feasible_action = False
         self.success = False
-        self.feasible = True
+        self.feasible = False
         self.misgrasp = False
         self.action_elapsed_time = 0
         self.exec_elapsed_time = 0
@@ -41,12 +40,19 @@ def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
 
 def add_dict_to_group(group, d):
     for (k,v) in d.iteritems():
-        if type(v) == dict:
-            add_dict_to_group(group.create_group(k), v)
-        elif v is None:
+        if type(k) != str:
+            k = str(k)
+        if v is None:
             group[k] = 'None'
-        elif type(v) == list and len(v) == 0:
-            group[k] = 'empty_list'
+        elif (type(v) == dict or type(v) == list or type(v) == tuple) and len(v) == 0:
+            group[k] = 'empty'
+            group[k].attrs.create('value_type', type(v).__name__)
+        elif type(v) == dict:
+            add_dict_to_group(group.create_group(k), v)
+        elif type(v) == list or type(v) == tuple:
+            g = group.create_group(k)
+            g.attrs.create('value_type', type(v).__name__)
+            add_dict_to_group(g, dict(enumerate(v)))
         else:
             group[k] = v
     return group
@@ -55,11 +61,20 @@ def group_to_dict(group):
     d = {}
     for (k,v) in group.iteritems():
         if isinstance(v, h5py.Group):
-            d[k] = group_to_dict(v)
+            seq = group_to_dict(v)
+            if 'value_type' in v.attrs.keys():
+                seq_type = eval(v.attrs['value_type'])
+                if seq_type == tuple or seq_type == list:
+                    seq = seq_type(zip(*sorted(seq.items(), key=lambda (seq_k, seq_v): int(seq_k)))[1])
+            d[k] = seq
         elif v[()] == 'None':
             d[k] = None
-        elif v[()] == 'empty_list':
-            d[k] = []
+        elif v[()] == 'empty':
+            if 'value_type' in v.attrs.keys():
+                seq_type = eval(v.attrs['value_type'])
+                d[k] = seq_type([])
+            else:
+                d[k] = []
         else:
             d[k] = v[()]
     return d
@@ -132,49 +147,26 @@ def load_results_args(fname):
     result_file.close()
     return args
 
-def save_task_results_init(fname, task_index, sim_env, init_rope_nodes):
+def save_task_results_step(fname, task_index, step_index, state, best_root_action, q_values_root, full_trajs, next_state, eval_stats, **kwargs):
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
-    task_index = str(task_index)
-    if task_index in result_file:
-        del result_file[task_index]
-    result_file.create_group(task_index)
-    init_group = result_file[task_index].create_group('init')
-    init_group['trans'], init_group['rots'] = sim_util.get_rope_transforms(sim_env)
-    init_group['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
-    init_group['init_rope_nodes'] = init_rope_nodes
-    result_file.close()
-
-def load_task_results_init(fname, task_index):
-    if fname is None:
-        raise RuntimeError("Cannot load task results with an unspecified file name")
-    result_file = h5py.File(fname, 'r')
-    task_index = str(task_index)
-    init_group = result_file[task_index]['init']
-    trans = init_group['trans'][()]
-    rots = init_group['rots'][()]
-    rope_nodes = init_group['rope_nodes'][()]
-    init_rope_nodes = init_group['init_rope_nodes'][()]
-    result_file.close()
-    return trans, rots, rope_nodes, init_rope_nodes
-
-def save_task_results_step(fname, task_index, step_index, sim_env, best_root_action, q_values_root, full_trajs, eval_stats, **kwargs):
-    if fname is None:
-        return
-    result_file = h5py.File(fname, 'a')
+    if int(step_index) == 0:
+        if task_index in result_file:
+            del result_file[task_index]
+        result_file.create_group(task_index)
     task_index = str(task_index)
     step_index = str(step_index)
-    assert task_index in result_file, "Must call save_task_results_init() before save_task_results_step()"
+    assert task_index in result_file, "Must call this function with step_index of 0 first"
     if step_index not in result_file[task_index]:
         step_group = result_file[task_index].create_group(step_index)
     else:
         step_group = result_file[task_index][step_index]
-    step_group['trans'], step_group['rots'] = sim_util.get_rope_transforms(sim_env)
-    step_group['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
+    add_dict_to_group(step_group.create_group('state'), vars(state))
     step_group['best_action'] = str(best_root_action)
     step_group['values'] = q_values_root
     add_full_trajs_to_group(step_group.create_group('full_trajs'), full_trajs)
+    add_dict_to_group(step_group.create_group('next_state'), vars(next_state))
     add_dict_to_group(step_group.create_group('eval_stats'), vars(eval_stats))
     add_dict_to_group(step_group.create_group('kwargs'), kwargs)
     result_file.close()
@@ -186,16 +178,17 @@ def load_task_results_step(fname, task_index, step_index):
     task_index = str(task_index)
     step_index = str(step_index)
     step_group = result_file[task_index][step_index]
-    trans = step_group['trans'][()]
-    rots = step_group['rots'][()]
-    rope_nodes = step_group['rope_nodes'][()]
+    state_dict = group_to_dict(step_group['state'])
+    state = sim_util.RopeState(state_dict['id'], state_dict['cloud'], state_dict['rope_nodes'], state_dict['init_rope_nodes'], state_dict['rope_params'], state_dict['tfs'])
     best_action = step_group['best_action'][()]
     q_values = step_group['values'][()]
     full_trajs = group_to_full_trajs(step_group['full_trajs'])
+    next_state_dict = group_to_dict(step_group['next_state'])
+    next_state = sim_util.RopeState(next_state_dict['id'], next_state_dict['cloud'], next_state_dict['rope_nodes'], next_state_dict['init_rope_nodes'], next_state_dict['rope_params'], next_state_dict['tfs'])
     eval_stats = EvalStats(**group_to_dict(step_group['eval_stats']))
     kwargs = group_to_dict(step_group['kwargs'])
     result_file.close()
-    return trans, rots, rope_nodes, best_action, q_values, full_trajs, eval_stats, kwargs
+    return state, best_action, q_values, full_trajs, next_state, eval_stats, kwargs
 
 def save_task_follow_traj_inputs(fname, sim_env, task_index, step_index, choice_index, miniseg_index, manip_name,
                                  new_hmats, old_traj):

@@ -20,6 +20,15 @@ PR2_L_POSTURES = dict(
     side = [  1.832,  -0.332,   1.011,  -1.437,   1.1  ,  -2.106,  3.074]
 )
 
+class RopeState(object):
+    def __init__(self, id, cloud, rope_nodes, init_rope_nodes, rope_params, tfs):
+        self.id = id
+        self.cloud = cloud
+        self.rope_nodes = rope_nodes
+        self.init_rope_nodes = init_rope_nodes
+        self.rope_params = rope_params
+        self.tfs = tfs
+
 class SimulationEnv:
     def __init__(self, table_height, init_joint_names, init_joint_values, obstacles, dof_limits_factor):
         self.table_height = table_height
@@ -79,6 +88,35 @@ class SimulationEnv:
                     active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
             self.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
 
+    def set_rope_state(self, *args):
+        """
+        set_rope_state(state)
+        set_rope_state(init_rope_nodes, rope_params)
+        set_rope_state(init_rope_nodes, rope_params, tfs)
+        """
+        if len(args) == 1:
+            state = args[0]
+            rope_params = state.rope_params
+            init_rope_nodes = state.init_rope_nodes
+            tfs = state.tfs
+        elif len(args) == 2:
+            init_rope_nodes, rope_params = args
+            tfs = None
+        elif len(args) == 3:
+            init_rope_nodes, rope_params, tfs = args
+        else:
+            raise TypeError("set_rope_state() takes exactly 1, 2 or 3 arguments (%d given)"%len(args))
+
+        if rope_params is None:
+            ### set the defaults
+            rope_params = get_rope_params('default')
+        else:
+            rope_params = get_rope_params(rope_params)
+        replace_rope(init_rope_nodes, self, rope_params, restore=False)
+        if tfs is not None:
+            set_rope_transforms(tfs, self)
+        self.sim.settle()
+    
 def make_table_xml(translation, extents):
     xml = """
 <Environment>
