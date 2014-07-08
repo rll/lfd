@@ -37,6 +37,7 @@ def parse_arguments():
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--replace', action='store_true')
     parser.add_argument('--cloud_name', type=str, default='cloud_xyz')
+    parser.add_argument('--fill_traj', action='store_true')
     return parser.parse_args()
 # @profile
 def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
@@ -212,23 +213,24 @@ def main():
             x_na = downsample_cloud(seg_info[args.cloud_name][:, :])
             scaled_x_na, scale_params = unit_boxify(x_na)
             K_nn = tps_kernel_matrix(scaled_x_na)
+            if args.fill_traj:
+                r_traj          = seg_info['r_gripper_tool_frame']['hmat'][:, :3, 3]
+                l_traj          = seg_info['l_gripper_tool_frame']['hmat'][:, :3, 3]
+                scaled_r_traj   = r_traj * scale_params[0] + scale_params[1]
+                scaled_l_traj   = l_traj * scale_params[0] + scale_params[1]
+                scaled_r_traj_K = tps_kernel_matrix2(scaled_r_traj, scaled_x_na)
+                scaled_l_traj_K = tps_kernel_matrix2(scaled_l_traj, scaled_x_na)
+                ds_g['scaled_r_traj']      = scaled_r_traj
+                ds_g['scaled_l_traj']      = scaled_l_traj
+                ds_g['scaled_r_traj_K']    = scaled_r_traj_K
+                ds_g['scaled_l_traj_K']    = scaled_l_traj_K
 
-            r_traj          = seg_info['r_gripper_tool_frame']['hmat'][:, :3, 3]
-            l_traj          = seg_info['l_gripper_tool_frame']['hmat'][:, :3, 3]
-            scaled_r_traj   = r_traj * scale_params[0] + scale_params[1]
-            scaled_l_traj   = l_traj * scale_params[0] + scale_params[1]
-            scaled_r_traj_K = tps_kernel_matrix2(scaled_r_traj, scaled_x_na)
-            scaled_l_traj_K = tps_kernel_matrix2(scaled_l_traj, scaled_x_na)
 
             ds_g['cloud_xyz']          = x_na
             ds_g['scaled_cloud_xyz']   = scaled_x_na
             ds_g['scaling']            = scale_params[0]
             ds_g['scaled_translation'] = scale_params[1]
             ds_g['scaled_K_nn']        = K_nn
-            ds_g['scaled_r_traj']      = scaled_r_traj
-            ds_g['scaled_l_traj']      = scaled_l_traj
-            ds_g['scaled_r_traj_K']    = scaled_r_traj_K
-            ds_g['scaled_l_traj_K']    = scaled_l_traj_K
         for bend_coef in bend_coefs:
             if str(bend_coef) in inv_group:
                 continue

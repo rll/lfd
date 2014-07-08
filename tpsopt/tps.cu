@@ -107,6 +107,62 @@ __global__ void _sqDiffMat(float* x_ptr[], float* y_ptr[], float* z, bool overwr
   }
 }
 
+__global__ void _gramMatDist(float* x_ptr[], float* y_ptr[], int* dims, float sigma, float* z){
+  /*
+   * Computes the norm of the difference between the normalized gram matricies
+   * K(a, b) = exp( ||a - b||^2/ sigma)
+   * Called with 1 block per item and 1 thread per data entry
+   * z[bix] holds the answer
+   */
+  int tix = threadIdx.x; int bix = blockIdx.x; int zix = rMInd(bix, tix, MAX_DIM);
+  float* x = x_ptr[bix]; float* y = y_ptr[bix]; int dim = dims[bix];
+  float d0, d1, d2, tmp1, tmp2; 
+  __shared__ float costs[MAX_DIM];
+
+  int ix = rMInd(tix, 0, DATA_DIM);  
+  float x0 = x[ix + 0]; float x1 = x[ix + 1]; float x2 = x[ix + 2];
+  float y0 = y[ix + 0]; float y1 = y[ix + 1]; float y2 = y[ix + 2];
+  float x_sum = 0; float y_sum = 0; 
+  for (int i = 0; i < dim; ++i){
+    ix = rMInd(i, 0, DATA_DIM);
+    d0 = x0 - x[ix + 0];
+    d1 = x1 - x[ix + 1];
+    d2 = x2 - x[ix + 2];
+    tmp1 = d0 * d0 + d1 * d1 + d2 * d2;
+    x_sum = x_sum + exp(tmp1 / sigma);
+
+    d0 = y0 - y[ix + 0];
+    d1 = y1 - y[ix + 1];
+    d2 = y2 - y[ix + 2];
+    tmp2 = d0 * d0 + d1 * d1 + d2 * d2;
+    y_sum = y_sum + exp(tmp2 / sigma);
+  }
+
+  costs[tix] = 0;
+  
+  for (int i = 0; i < dim; ++i){
+    d0 = x0 - x[ix + 0];
+    d1 = x1 - x[ix + 1];
+    d2 = x2 - x[ix + 2];
+    tmp1 = exp( (d0 * d0 + d1 * d1 + d2 * d2) / sigma) / x_sum;
+
+    d0 = y0 - y[ix + 0];
+    d1 = y1 - y[ix + 1];
+    d2 = y2 - y[ix + 2];
+    tmp2 = exp( (d0 * d0 + d1 * d1 + d2 * d2) / sigma) / y_sum;
+    tmp1 = tmp1 - tmp2;
+    costs[tix] = costs[tix] + tmp1 * tmp1;
+  }
+  tmp1 = 0;
+  __syncthreads();
+  if (tix == 0){
+    for (int i = 0; i < dim; ++i){
+      tmp1 = tmp1 + costs[i];
+    }
+    z[bix] = tmp1;
+  }
+}
+
 __global__ void _closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, float* res){
   /*
    * Computes the sum of distances from the arrays in x to the closest point in y
@@ -488,6 +544,15 @@ void fillMat(float* dest_ptr[], float* val_ptr[], int* dims, int N){
 
 void sqDiffMat(float* x_ptr[], float* y_ptr[], float* z, int N, bool overwrite){
   _sqDiffMat<<<N, MAX_DIM>>>(x_ptr, y_ptr, z, overwrite);
+}
+
+void gramMatDist(float* x_ptr[], float* y_ptr[], int* dims, float sigma, float* z, int N){
+  if (DATA_DIM != 3){
+    printf("Closest Point Only Works for DATA_DIM=3!!!!!!!!!!!\n");
+    cudaDeviceReset();
+    exit(1);
+  }
+  _gramMatDist<<<N, MAX_DIM>>>(x_ptr, y_ptr, dims, sigma, z);  
 }
 
 void closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, float* res, int N){

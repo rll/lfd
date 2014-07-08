@@ -16,7 +16,7 @@ from transformations import unit_boxify
 from culinalg_exts import dot_batch_nocheck, get_gpu_ptrs, m_dot_batch
 from precompute import downsample_cloud, batch_get_sol_params
 from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
-    closest_point_cost, scale_points
+    closest_point_cost, scale_points, gram_mat_dist
 from registration import registration_cost as cpu_registration_cost
 from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
     DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
@@ -223,6 +223,31 @@ class GPUContext(object):
         self.dims_gpu = gpuarray.to_gpu(np.array(self.dims, dtype=np.int32))
         self.ptrs_valid = True
 
+    def read_h5(self, fname):
+        f = h5py.File(fname, 'r')
+        for seg_name, seg_info in f.iteritems():
+            if 'inv' not in seg_info:
+                raise KeyError("Batch Mode only works with precomputed solvers")
+            seg_info = seg_info['inv']
+
+            proj_mats   = {}
+            offset_mats = {}
+            for b in self.bend_coefs:
+                k = str(b)
+                if k not in seg_info:
+                    raise KeyError("H5 File {} bend coefficient {}".format(seg_name, k))
+                proj_mats[b] = seg_info[k]['proj_mat'][:]
+                offset_mats[b] = seg_info[k]['offset_mat'][:]
+
+            ds_g         = seg_info['DS_SIZE_{}'.format(DS_SIZE)]
+            cloud_xyz    = ds_g['scaled_cloud_xyz'][:]
+            kernel       = ds_g['scaled_K_nn'][:]
+            scale_params = (ds_g['scaling'][()], ds_g['scaled_translation'][:])
+            self.add_cld(seg_name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params)
+
+        f.close()
+        self.update_ptrs()
+
 
     # @profile
     def setup_tgt_ctx(self, cloud_xyz):
@@ -310,14 +335,27 @@ class GPUContext(object):
                           transa='T', b = 0)
         bend_res = self.bend_res_mat.get()        
         return b * np.array([np.trace(bend_res[i*DATA_DIM:(i+1)*DATA_DIM]) for i in range(self.N)])
+
+    def gram_mat_cost(self, sigma):
+        ## assumes that self.pts_w has the warped points
+        ## computes the gram matrices for the source and warped
+        ## points, returns ||K - K_w||^2
+        self.reset_warp_err();
+        gram_mat_dist(self.pt_ptrs, self.pt_w_ptrs, self.dims_gpu, sigma, self.warp_err, self.N)
+        return self.warp_err.get().flatten()[:self.N].reshape(self.N, 1)
     # @profile
     def bidir_tps_cost(self, other, bend_coef=1, outlierprior=1e-1, outlierfrac=1e-2, 
-                       outliercutoff=1e-2,  T = 5e-3, norm_iters = DEFAULT_NORM_ITERS):
+                       outliercutoff=1e-2,  T = 5e-3, norm_iters = DEFAULT_NORM_ITERS,
+                       sigma = 1, return_components = False):
         self.reset_warp_err()
         mapping_err  = self.mapping_cost(other, outlierprior, outlierfrac, outliercutoff, T, norm_iters)
         bending_cost = self.bending_cost(bend_coef)
-        bending_cost += other.bending_cost(bend_coef)
-        return mapping_err + bending_cost
+        other_bending_cost = other.bending_cost(bend_coef)
+        self_gram_mat_cost = self.gram_mat_cost(sigma)
+        other_gram_mat_cost = other.gram_mat_cost(sigma)
+        if return_components:
+            return np.c_[mapping_err, bending_cost, other_bending_cost, self_gram_mat_cost, other_gram_mat_cost]
+        return mapping_err + bending_cost + other_bending_cost
 
     """
     testing for custom kernels
@@ -867,7 +905,8 @@ def check_update(ctx, b):
 
 # @profile
 def batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, 
-                      outlierfrac = 1e-2, outlierprior = 1e-1, outliercutoff = 1e-2, em_iter = EM_ITER_CHEAP):
+                      outlierfrac = 1e-2, outlierprior = 1e-1, outliercutoff = 1e-2, em_iter = EM_ITER_CHEAP,
+                      component_cost = False):
     """
     computes tps rpm for the clouds in src and tgt in batch
     TODO: Fill out comment cleanly
@@ -887,7 +926,7 @@ def batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             src_ctx.update_transform(b)
             # check_update(src_ctx, b)
             tgt_ctx.update_transform(b)
-    return src_ctx.bidir_tps_cost(tgt_ctx)
+    return src_ctx.bidir_tps_cost(tgt_ctx, return_components=component_cost)
 
 def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, 
                            outlierfrac = 1e-2, outlierprior = 1e-1, outliercutoff = .5, em_iter = EM_ITER_CHEAP,

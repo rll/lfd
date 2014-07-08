@@ -14,6 +14,8 @@ void fillMat(float* dest_ptr[], float* val_ptr[], int* dims, int N);
 
 void sqDiffMat(float* x_ptr[], float* y_ptr[], float* z, int N, bool overwrite);
 
+void gramMatDist(float* x_ptr[], float* y_ptr[], int* dims, float sigma, float* z, int N);
+
 void closestPointCost(float* x_ptr[], float* y_ptr[], int* xdims, int* ydims, float* res, int N);
 
 void scalePoints(float* x_ptr[], int* xdims, float scale, float t0, float t1, float t2, int N);

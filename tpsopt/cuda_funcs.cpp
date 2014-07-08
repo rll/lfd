@@ -33,6 +33,16 @@ void pySqDiffMat(py::object x, py::object y, py::object z, int N, bool overwrite
   sqDiffMat(x_ptr, y_ptr, z_ptr, N, overwrite);
 }
 
+void pyGramMatDist(py::object x, py::object y, py::object dims, float sigma, py::object z, int N){
+  float** x_ptr = getGPUPointer<float*>(x);
+  float** y_ptr = getGPUPointer<float*>(y);
+
+  int* dims_ptr = getGPUPointer<int>(dims);
+  float* z_ptr  = getGPUPointer<float>(z);
+
+  gramMatDist(x_ptr, y_ptr, dims_ptr, sigma, z_ptr, N);
+}
+
 void pyClosestPointCost(py::object x, py::object y, py::object xdims, py::object ydims, py::object res, int N){
   float** x_ptr = getGPUPointer<float*>(x);
   float** y_ptr = getGPUPointer<float*>(y);
@@ -139,6 +149,9 @@ BOOST_PYTHON_MODULE(cuda_funcs) {
   py::def("fill_mat", &pyFillMat, (py::arg("dest"), py::arg("vals"), py::arg("dims"), py::arg("N")));
 
   py::def("sq_diffs", &pySqDiffMat, (py::arg("x"), py::arg("y"), py::arg("z"), py::arg("N"), py::arg("overwrite")));
+
+  py::def("gram_mat_dist", &pyGramMatDist, (py::arg("x"), py::arg("y"), py::arg("dims"), 
+					     py::arg("sigma"), py::arg("z"), py::arg("N")));
 
   py::def("closest_point_cost", &pyClosestPointCost, (py::arg("x"), py::arg("y"), py::arg("xdims"), py::arg("ydims"), py::arg("N")));
 
