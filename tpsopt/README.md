@@ -23,10 +23,9 @@ $ python setup.py install
 ```
 The last line may need to run as root.
 
-Check out the tps-opt repo and build the additional cuda functionality
+Build the additional cuda functionality
 ```
-$ git clone https://github.com/dhadfieldmenell/tps-opt.git
-$ cd tps-opt/tpsopt
+$ cd lfd/psopt
 $ cmake .
 $ make
 ```
