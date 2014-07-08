@@ -716,7 +716,7 @@ class SrcContext(GPUContext):
         trans = (-s/r)
         for i in range(self.N):
             traj_l = scaled_traj_l[i]
-            traj_r = scal3ed_traj_r[i]
+            traj_r = scaled_traj_r[i]
             unscaled_traj_l_cpu = traj_l * scaling + trans
             unscaled_traj_r_cpu = traj_r * scaling + trans
             assert np.allclose(unscaled_traj_l_cpu, unscaled_traj_l[i])
