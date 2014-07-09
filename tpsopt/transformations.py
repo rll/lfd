@@ -4,10 +4,99 @@ import numpy as np
 import pycuda.gpuarray as gpuarray
 import pycuda.driver as drv
 import pycuda.autoinit
-
+ 
 from culinalg_exts import gemm, get_gpu_ptrs, dot_batch_nocheck
 from cuda_funcs import check_cuda_err
 import scipy.linalg
+
+class NoGPUTPSSolver(object):
+    """
+    class to fit a thin plate spline to data using precomputed
+    matrix products
+    """
+    def __init__(self, bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef = np.r_[1e-4, 1e-4, 1e-1]):
+        for b in bend_coefs:
+            assert b in NON, 'no solver found for bending coefficient {}'.format(b)
+        self.rot_coef = rot_coef
+        self.n, self.d  = x_nd.shape
+        self.bend_coefs = bend_coefs
+        self.N          = N
+        self.QN         = QN        
+        self.NON        = NON
+        self.NR         = NR
+        self.x_nd       = x_nd
+        self.K_nn       = K_nn
+        self.valid = True
+    # @profile
+    def solve(self, wt_n, y_nd, bend_coef, rot_coef,f_res):
+        assert y_nd.shape == (self.n, self.d)
+        assert bend_coef in self.bend_coefs
+        assert np.allclose(rot_coef, self.rot_coef)
+        assert self.valid
+        WQN = wt_n[:, None] * self.QN
+        lhs = self.NON[b] + self.QN.T.dot(WQN)
+        wy_nd = wt_n[:, None] * y_nd
+        rhs = self.NR + self.QN.T.dot(wy_nd)
+        z = scipy.linalg.solve(lhs, rhs)
+        theta = self.N.dot(z)
+        set_ThinPlateSpline(f_res, self.x_nd, theta)
+
+    @staticmethod
+    def get_solvers(h5file):
+        solvers = {}
+        for seg_name, seg_info in h5file.iteritems():
+            solver_info = seg_info['solver']
+            N    = solver_info['N'][:]
+            QN   = solver_info['QN'][:]
+            NR   = solver_info['NR'][:]
+            x_nd = solver_info['x_nd'][:]
+            K_nn = solver_info['K_nn'][:]
+            bend_coefs = [float(x) for x in solver_info['NON'].keys()]
+            NON = {}
+            for b in bend_coefs:
+                NON[b] = solver_info['NON'][str(b)][:]
+            solvers[seg_name] = NoGPUTPSSolver(bend_coefs, N, QN, NON, NR, x_nd, K_nn)
+        return solvers
+
+class NoGPUEmptySolver(object):
+    """
+    computes solution params and returns a NoGPUTPSSolver
+    """
+    def __init__(self, max_N, bend_coefs):
+        d = 3
+        self.max_N = max_N
+        self.bend_coefs = bend_coefs
+        self.cur_solver = None
+    # @profile
+    def get_solver(self, x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+        n,d = x_na.shape
+        assert len(bend_coefs) <= len(self.bend_coefs)
+        assert n <= self.max_N
+
+        if not self.cur_solver is None:
+            self.cur_solver.valid = False
+
+        Q = np.c_[np.ones((n, 1)), x_na, K_nn]
+        A = np.r_[np.zeros((d+1, d+1)), np.c_[np.ones((n, 1)), x_na]].T
+        
+        R = np.zeros((n+d+1, d))
+        R[1:d+1, :d] = np.diag(rot_coef)
+    
+        n_cnts = A.shape[0]    
+        _u,_s,_vh = np.linalg.svd(A.T)
+        N = _u[:,n_cnts:]
+        QN = Q.dot(N)
+        NR = N.T.dot(R)
+        
+        NON = {}
+        for i, b in enumerate(bend_coefs):
+            O_b = np.zeros((n+d+1, n+d+1), np.float64)
+            O_b[d+1:, d+1:] += b * K_nn
+            O_b[1:d+1, 1:d+1] += np.diag(rot_coef)
+            NON[b] = N.T.dot(O_b.dot(N))
+       
+        self.cur_solver = NoGPUTPSSolver(bend_coefs, N, QN, NON, NR, x_na, K_nn, rot_coef)
+        return self.cur_solver
 
 class TPSSolver(object):
     """
@@ -163,31 +252,6 @@ class EmptySolver(object):
         self.cur_solver = TPSSolver(bend_coefs, N, QN, NON, NR, x_na, K_nn, rot_coef,
                                     QN_gpu, WQN_gpu, NON_gpu, NHN_gpu)
         return self.cur_solver
-
-def unit_boxify(x_na):    
-    ranges = x_na.ptp(axis=0)
-    dlarge = ranges.argmax()
-    unscaled_translation = - (x_na.min(axis=0) + x_na.max(axis=0))/2
-    scaling = 1./ranges[dlarge]
-    scaled_translation = unscaled_translation * scaling
-    return x_na*scaling + scaled_translation, (scaling, scaled_translation)
-    
-def unscale_tps(f, src_params, targ_params):
-    """Only works in 3d!!"""
-    p,q = src_params
-    r,s = targ_params
-    
-    d = len(q)
-    
-    lin_in = np.eye(d)*p
-    trans_in = q
-    aff_in = Affine(lin_in, trans_in)
-    
-    lin_out = np.eye(d)/r
-    trans_out = -s/r
-    aff_out = Affine(lin_out, trans_out)
-
-    return Composition([aff_in, f, aff_out])
 
 class Transformation(object):
     """

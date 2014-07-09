@@ -12,12 +12,11 @@ from scikits.cuda import linalg
 linalg.init()
 
 from tps import tps_kernel_matrix, tps_eval, tps_kernel_matrix2
-from transformations import unit_boxify
 from culinalg_exts import dot_batch_nocheck, get_gpu_ptrs, m_dot_batch
 from precompute import downsample_cloud, batch_get_sol_params
 from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
     closest_point_cost, scale_points, gram_mat_dist
-from registration import registration_cost as cpu_registration_cost
+from registration import registration_cost as cpu_registration_cost, unit_boxify, loglinspace
 from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
     DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
 
@@ -38,10 +37,6 @@ def get_stream(i):
 def sync(override = False):
     if Globals.sync or override:
         check_cuda_err()
-
-def loglinspace(a,b,n):
-    "n numbers between a to b (inclusive) with constant ratio between consecutive numbers"
-    return np.exp(np.linspace(np.log(a),np.log(b),n))    
 
 def gpu_pad(x, shape, dtype=np.float32):
     (m, n) = x.shape
@@ -716,7 +711,7 @@ class SrcContext(GPUContext):
         trans = (-s/r)
         for i in range(self.N):
             traj_l = scaled_traj_l[i]
-            traj_r = scal3ed_traj_r[i]
+            traj_r = scaled_traj_r[i]
             unscaled_traj_l_cpu = traj_l * scaling + trans
             unscaled_traj_r_cpu = traj_r * scaling + trans
             assert np.allclose(unscaled_traj_l_cpu, unscaled_traj_l[i])

@@ -3,7 +3,6 @@ from __future__ import division
 import sim_util
 import h5py
 import numpy as np
-from tpsopt.transformations import TPSSolver
 from constants import ROPE_RADIUS, DS_SIZE, JOINT_LENGTH_PER_STEP, FINGER_CLOSE_RATE
 from rapprentice import ropesim, resampling, clouds
 from rapprentice import tps_registration, planning

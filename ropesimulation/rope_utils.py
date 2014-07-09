@@ -3,7 +3,7 @@ Utility functions for manipulation rope data and features
 """
 
 import numpy as np
-from defaults import GRIPPER_OPEN_CLOSE_THRESH
+from constants import GRIPPER_OPEN_CLOSE_THRESH
 
 def get_closing_pts(seg_info, as_dict = False):
     closing_inds = get_closing_inds(seg_info)
