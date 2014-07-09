@@ -10,13 +10,15 @@ from rope_utils import get_closing_pts, get_closing_inds
 from rapprentice.util import redprint, yellowprint
 from numpy import asarray
 from rapprentice import math_utils as mu
+from tpsopt.transformations import fit_ThinPlateSpline
+
+from IPython import parallel
 
 import IPython as ipy
 
 class Transfer(object):
-    def __init__(self, args_eval, action_solvers, register_tps):
+    def __init__(self, args_eval, register_tps):
         self.args_eval = args_eval
-        self.action_solvers = action_solvers
         self.register_tps = register_tps
 
 class TrajectoryResult(object):
@@ -63,7 +65,7 @@ class BatchTransferSimulate(object):
         rope_nodes = self.actions[action]['cloud_xyz'][()]
         return ropesim.observe_cloud(rope_nodes, ROPE_RADIUS, upsample=args_eval.upsample)
     
-    def compute_trans_traj(self, sim_env, state, action, args_eval, next_state_id, transferopt=None, animate=False, interactive=False, simulate=True, replay_full_trajs=None):
+    def compute_trans_traj(self, sim_env, state, action, args_eval, next_state_id, transferopt=None, animate=False, interactive=False, simulate=True, use_collision_cost=False, replay_full_trajs=None):
         alpha = args_eval.alpha
         beta_pos = args_eval.beta_pos
         beta_rot = args_eval.beta_rot
@@ -170,7 +172,7 @@ class BatchTransferSimulate(object):
                                 break
                             redprint("TPS fitting: The error of the interest points is above the tolerance. Increasing penalty for these weights.")
                             wt_n[interest_pts_inds] *= penalty_factor
-                            self.transfer.action_solvers[action].solve(wt_n, y_ng, bend_coef, rot_coef, f)
+                            fit_ThinPlateSpline(x_na, y_ng, bend_coef=bend_coef, rot_coef=rot_coef, wt_n=wt_n)
                             
             
                     old_ee_traj = asarray(seg_info["%s_gripper_tool_frame"%lr]['hmat'][i_start - int(i_start > 0):i_end+1])
@@ -190,7 +192,7 @@ class BatchTransferSimulate(object):
                     init_arm_traj[:,dof_inds.index(joint_ind)] = sim_env.robot.GetDOFLimits([joint_ind])[0][0]
                     new_arm_traj, obj_value, pose_errs = planning.plan_follow_traj(sim_env.robot, manip_name, sim_env.robot.GetLink(ee_link_name), transformed_ee_traj_rs, init_arm_traj, 
                                                                                    start_fixed=i_miniseg_lr!=0,
-                                                                                   use_collision_cost=False,
+                                                                                   use_collision_cost=use_collision_cost,
                                                                                    beta_pos=beta_pos, beta_rot=beta_rot)
                     
                     if transferopt == 'finger' or transferopt == 'joint':
@@ -242,10 +244,11 @@ class BatchTransferSimulate(object):
                             init_traj = new_arm_traj
                             # init_traj = init_arm_traj
                         
+                        print "planning finger trajectory following"
                         new_traj, obj_value, pose_errs = planning.plan_follow_finger_pts_traj(sim_env.robot, manip_name, 
                                                                                               flr2finger_link, flr2finger_rel_pts, 
                                                                                               flr2transformed_finger_pts_traj_rs, init_traj, 
-                                                                                              use_collision_cost=False,
+                                                                                              use_collision_cost=use_collision_cost,
                                                                                               start_fixed=i_miniseg_lr!=0,
                                                                                               beta_pos=beta_pos, gamma=gamma)
     
@@ -255,6 +258,7 @@ class BatchTransferSimulate(object):
                             new_traj, f, new_N_z, \
                             obj_value, rel_pts_costs, tps_cost = planning.joint_fit_tps_follow_finger_pts_traj(sim_env.robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2old_finger_pts_traj_rs, new_traj, 
                                                                                                                x_na, y_ng, bend_coef, rot_coef, wt_n, old_N_z=None,
+                                                                                                               use_collision_cost=use_collision_cost,
                                                                                                                start_fixed=i_miniseg_lr!=0,
                                                                                                                alpha=alpha, beta_pos=beta_pos, gamma=gamma)
                             if np.any(interest_pts_inds):
@@ -267,6 +271,7 @@ class BatchTransferSimulate(object):
                                     new_traj, f, new_N_z, \
                                     obj_value, rel_pts_costs, tps_cost = planning.joint_fit_tps_follow_finger_pts_traj(sim_env.robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2old_finger_pts_traj_rs, new_traj, 
                                                                                                                        x_na, y_ng, bend_coef, rot_coef, wt_n, old_N_z=new_N_z,
+                                                                                                                       use_collision_cost=use_collision_cost,
                                                                                                                        start_fixed=i_miniseg_lr!=0,
                                                                                                                        alpha=alpha, beta_pos=beta_pos, gamma=gamma)
                         # else:
