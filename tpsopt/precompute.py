@@ -5,7 +5,8 @@ import scipy.spatial.distance as ssd
 import argparse
 
 from tps import tps_kernel_matrix, tps_kernel_matrix2
-from transformations import unit_boxify
+from registration import unit_boxify, loglinspace
+
 from rapprentice import clouds, plotting_plt
 
 from culinalg_exts import dot_batch, get_gpu_ptrs, dot_batch_nocheck, m_dot_batch
@@ -20,10 +21,6 @@ from constants import N_ITER_CHEAP, DEFAULT_LAMBDA, DS_SIZE, BEND_COEF_DIGITS, E
 import sys
 
 import IPython as ipy
-
-def loglinspace(a,b,n):
-    "n numbers between a to b (inclusive) with constant ratio between consecutive numbers"
-    return np.exp(np.linspace(np.log(a),np.log(b),n))    
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
