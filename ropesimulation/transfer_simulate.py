@@ -43,7 +43,7 @@ class BatchTransferSimulate(object):
             state, action, next_state_id = self.job_inputs.pop(0)
             success, feasible, misgrasp, full_trajs, next_state = self.compute_trans_traj(self.sim_env, state, action, self.transfer.args_eval, next_state_id, animate=animate)
             trajectory_result = TrajectoryResult(success, feasible, misgrasp, full_trajs)
-            results.append((trajectory_result, next_state))
+            results.append((trajectory_result, next_state, next_state_id))
         return results
     ## END interface
 
