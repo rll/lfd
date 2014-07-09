@@ -38,11 +38,11 @@ class BatchTransferSimulate(object):
     def add_transfer_simulate_job(self, state, action, next_state_id):
         self.job_inputs.append((state, action, next_state_id))
     
-    def get_results(self):
+    def get_results(self, animate=False):
         results = []
         while len(self.job_inputs) > 0:
             state, action, next_state_id = self.job_inputs.pop(0)
-            success, feasible, misgrasp, full_trajs, next_state = self.compute_trans_traj(self.sim_env, state, action, self.transfer.args_eval, next_state_id)
+            success, feasible, misgrasp, full_trajs, next_state = self.compute_trans_traj(self.sim_env, state, action, self.transfer.args_eval, next_state_id, animate=animate)
             trajectory_result = TrajectoryResult(success, feasible, misgrasp, full_trajs)
             results.append((trajectory_result, next_state))
         return results
@@ -116,6 +116,8 @@ class BatchTransferSimulate(object):
             if not curr_gripper_open and not next_gripper_open and curr_lr != next_lr and curr_i_start < next_i_end and next_i_start < curr_i_end:
                 miniseg_interval_group.append(next_miniseg_interval)
             miniseg_interval_groups.append(miniseg_interval_group)
+
+        f, corr = self.transfer.register_tps(sim_env, state, action, args_eval, reg_type='bij')
         
         success = True
         feasible = True
@@ -141,9 +143,6 @@ class BatchTransferSimulate(object):
                 
                     ### Generate fullbody traj
                     old_arm_traj_rs = mu.interp2d(timesteps_rs, np.arange(len(old_arm_traj)), old_arm_traj)
-    
-                    f, corr = self.transfer.register_tps(sim_env, state, action, args_eval, reg_type='bij')
-                    if f is None: break
     
                     if animate:
                         handles.append(sim_env.env.plot3(f.transform_points(old_cloud[:,:3]), 2, old_cloud[:,3:] if args_eval.use_color else (1,1,0)))
