@@ -40,7 +40,7 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
         "costs" : [
         {
             "type" : "joint_vel",
-            "params": {"coeffs" : [gamma/n_steps]}
+            "params": {"coeffs" : [gamma/(n_steps-1)]}
         },            
         ],
         "constraints" : [
@@ -83,8 +83,8 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
                 "wxyz":pose[0:4].tolist(),
                 "link":ee_linkname,
                 "timestep":i_step,
-                "pos_coeffs":[beta_pos/n_steps]*3,
-                "rot_coeffs":[beta_rot/n_steps]*3
+                "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*3,
+                "rot_coeffs":[np.sqrt(beta_rot/n_steps)]*3
              }
             })
 
@@ -106,11 +106,11 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
             new_hmat = ee_link.GetTransform()
             pose_err.append(openravepy.poseFromMatrix(mu.invertHmat(hmat).dot(new_hmat)))
     pose_err = np.asarray(pose_err)
-    pose_costs2 = np.square( (beta_rot/n_steps) * pose_err[:,1:4] ).sum() + np.square( (beta_pos/n_steps) * pose_err[:,4:7] ).sum()
+    pose_costs2 = (beta_rot/n_steps) * np.square(pose_err[:,1:4]).sum() + (beta_pos/n_steps) * np.square(pose_err[:,4:7]).sum()
 
     joint_vel_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "joint_vel"])
     joint_vel_err = np.diff(traj, axis=0)
-    joint_vel_cost2 = (gamma/n_steps) * np.square(joint_vel_err).sum()
+    joint_vel_cost2 = (gamma/(n_steps-1)) * np.square(joint_vel_err).sum()
     sim_util.unwrap_in_place(traj, dof_inds)
     joint_vel_err = np.diff(traj, axis=0)
     
@@ -177,7 +177,7 @@ def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_r
         "costs" : [
         {
             "type" : "joint_vel",
-            "params": {"coeffs" : [gamma/n_steps]}
+            "params": {"coeffs" : [gamma/(n_steps-1)]}
         },            
         ],
         "constraints" : [
@@ -223,7 +223,7 @@ def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_r
                     "rel_xyzs":finger_rel_pts.tolist(),
                     "link":finger_linkname,
                     "timestep":i_step,
-                    "pos_coeffs":[beta_pos/n_steps]*4, # there is a coefficient for each of the 4 points
+                    "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4, # there is a coefficient for each of the 4 points
                  }
                 })
 
@@ -250,11 +250,11 @@ def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_r
                 new_hmat = finger_link.GetTransform()
                 rel_pts_err.append(finger_pts - (new_hmat[:3,3][None,:] + finger_rel_pts.dot(new_hmat[:3,:3].T)))
     rel_pts_err = np.concatenate(rel_pts_err, axis=0)
-    rel_pts_costs2 = np.square( (beta_pos/n_steps) * rel_pts_err ).sum() # TODO don't square n_steps
+    rel_pts_costs2 = (beta_pos/n_steps) * np.square(rel_pts_err).sum() # TODO don't square n_steps
 
     joint_vel_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "joint_vel"])
     joint_vel_err = np.diff(traj, axis=0)
-    joint_vel_cost2 = (gamma/n_steps) * np.square(joint_vel_err).sum()
+    joint_vel_cost2 = (gamma/(n_steps-1)) * np.square(joint_vel_err).sum()
     sim_util.unwrap_in_place(traj, dof_inds)
     joint_vel_err = np.diff(traj, axis=0)
 
@@ -413,7 +413,7 @@ def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr
         "costs" : [
         {
             "type" : "joint_vel",
-            "params": {"coeffs" : [gamma/n_steps]}
+            "params": {"coeffs" : [gamma/(n_steps-1)]}
         },
         {
             "type" : "tps",
@@ -484,7 +484,7 @@ def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr
                     "rel_xyzs":finger_rel_pts.tolist(),
                     "link":finger_linkname,
                     "timestep":i_step,
-                    "pos_coeffs":[beta_pos/n_steps]*4,
+                    "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
                  }
                 })
 
@@ -516,7 +516,7 @@ def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr
                 new_hmat = finger_link.GetTransform()
                 tps_rel_pts_err.append(f.transform_points(old_finger_pts) - (new_hmat[:3,3][None,:] + finger_rel_pts.dot(new_hmat[:3,:3].T)))
     tps_rel_pts_err = np.concatenate(tps_rel_pts_err, axis=0)
-    tps_rel_pts_costs2 = np.square( (beta_pos/n_steps) * tps_rel_pts_err ).sum() # TODO don't square n_steps
+    tps_rel_pts_costs2 = (beta_pos/n_steps) * np.square(tps_rel_pts_err).sum() # TODO don't square n_steps
 
     tps_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "tps"])
     tps_cost2 = alpha * tps_obj(f, x_na, y_ng, bend_coefs, rot_coefs, wt_n)
@@ -524,7 +524,7 @@ def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr
     
     joint_vel_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "joint_vel"])
     joint_vel_err = np.diff(traj, axis=0)
-    joint_vel_cost2 = (gamma/n_steps) * np.square(joint_vel_err).sum()
+    joint_vel_cost2 = (gamma/(n_steps-1)) * np.square(joint_vel_err).sum()
     sim_util.unwrap_in_place(traj, dof_inds)
     joint_vel_err = np.diff(traj, axis=0)
 
