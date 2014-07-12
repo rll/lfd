@@ -3,12 +3,14 @@
 # instantiations of do_task_eval.py
 import argparse
 from ropesimulation import sim_util
+from ropesimulation.sim_util import SceneState, RopeState, RopeParams # these need to be imported this way in order to load instances of these
+from argparse import Namespace
 import util
 import openravepy, trajoptpy
 import h5py, numpy as np
 from rapprentice import math_utils as mu
 
-class EvalStats:
+class EvalStats(object):
     def __init__(self, **kwargs):
         self.success = False
         self.feasible = False
@@ -38,46 +40,55 @@ def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
     else:
         return [(unicode(t), holdoutfile[unicode(t)]) for t in tasks]
 
-def add_dict_to_group(group, d):
-    for (k,v) in d.iteritems():
-        if type(k) != str:
-            k = str(k)
-        if v is None:
-            group[k] = 'None'
-        elif (type(v) == dict or type(v) == list or type(v) == tuple) and len(v) == 0:
-            group[k] = 'empty'
-            group[k].attrs.create('value_type', type(v).__name__)
-        elif type(v) == dict:
-            add_dict_to_group(group.create_group(k), v)
+def add_obj_to_group(group, k, v):
+    if v is None:
+        group[k] = 'None'
+    elif (type(v) == dict or type(v) == list or type(v) == tuple) and len(v) == 0:
+        group[k] = 'empty'
+        group[k].attrs.create('value_type', type(v).__name__)
+    elif type(v) == dict or type(v) == list or type(v) == tuple or hasattr(v, '__dict__'):
+        vgroup = group.create_group(k)
+        if type(v) == dict:
+            d = v
         elif type(v) == list or type(v) == tuple:
-            g = group.create_group(k)
-            g.attrs.create('value_type', type(v).__name__)
-            add_dict_to_group(g, dict(enumerate(v)))
-        else:
-            group[k] = v
+            vgroup.attrs.create('value_type', type(v).__name__)
+            d = dict((str(i),vi) for (i,vi) in enumerate(v))
+        elif hasattr(v, '__dict__'):
+            vgroup.attrs.create('value_type', type(v).__name__)
+            d = vars(v)
+        for (vk,vv) in d.iteritems():
+            add_obj_to_group(vgroup, vk, vv)
+    else:
+        group[k] = v
     return group
 
-def group_to_dict(group):
-    d = {}
-    for (k,v) in group.iteritems():
-        if isinstance(v, h5py.Group):
-            seq = group_to_dict(v)
-            if 'value_type' in v.attrs.keys():
-                seq_type = eval(v.attrs['value_type'])
-                if seq_type == tuple or seq_type == list:
-                    seq = seq_type(zip(*sorted(seq.items(), key=lambda (seq_k, seq_v): int(seq_k)))[1])
-            d[k] = seq
-        elif v[()] == 'None':
-            d[k] = None
-        elif v[()] == 'empty':
-            if 'value_type' in v.attrs.keys():
-                seq_type = eval(v.attrs['value_type'])
-                d[k] = seq_type([])
-            else:
-                d[k] = []
+def group_or_dataset_to_obj(group_or_dataset):
+    if isinstance(group_or_dataset, h5py.Group):
+        group = group_or_dataset
+        v_dict = {}
+        for (gk,gv) in group.iteritems():
+            v_dict[gk] = group_or_dataset_to_obj(gv)
+        if 'value_type' in group.attrs.keys():
+            v_type = eval(group.attrs['value_type'])
+            if v_type == tuple or v_type == list:
+                v = v_type(zip(*sorted(v_dict.items(), key=lambda (vk, vv): int(vk)))[1])
+            elif hasattr(v_type, '__dict__'):
+                v = v_type.__new__(v_type)
+                v.__dict__ = v_dict
         else:
-            d[k] = v[()]
-    return d
+            v = v_dict
+    else:
+        dataset = group_or_dataset
+        if dataset[()] == 'None':
+            v = None
+        elif dataset[()] == 'empty':
+            v = []
+            if 'value_type' in dataset.attrs.keys():
+                v_type = eval(dataset.attrs['value_type'])
+                v = v_type(v)
+        else:
+            v = dataset[()]
+    return v
 
 def add_full_trajs_to_group(full_trajs_g, full_trajs):
     for (i_traj, (traj, dof_inds)) in enumerate(full_trajs):
@@ -99,51 +110,35 @@ def group_to_full_trajs(full_trajs_g):
         full_trajs.append(full_traj)
     return full_trajs
 
-def namespace2dict(args):
-    args_dict = vars(args).copy()
-    for (k,v) in args_dict.iteritems():
-        try:
-            args_dict[k] = namespace2dict(v)
-        except TypeError:
-            continue
-    return args_dict
-
-def dict2namespace(args_dict):
-    args_dict = args_dict.copy()
-    for (k,v) in args_dict.iteritems():
-        if type(v) is dict:
-            args_dict[k] = dict2namespace(v)
-    args = argparse.Namespace(**args_dict)
-    return args
-
 def save_results_args(fname, args):
     # if args is already in the results file, make sure that the eval arguments are the same
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
 
-    args_dict = namespace2dict(args)
     if 'args' in result_file:
-        loaded_args_dict = group_to_dict(result_file['args'])
-        if 'eval' not in loaded_args_dict:
+        loaded_args = group_or_dataset_to_obj(result_file['args'])
+        if 'eval' not in vars(loaded_args):
             raise RuntimeError("The file doesn't have eval arguments")
-        if 'eval' not in args_dict:
+        if 'eval' not in vars(args):
             raise RuntimeError("The current arguments doesn't have eval arguments")
-        if set(loaded_args_dict['eval'].keys()) != set(args_dict['eval'].keys()):
+        loaded_args_eval_dict = vars(loaded_args.eval)
+        args_eval_dict = vars(args.eval)
+        if set(loaded_args_eval_dict.keys()) != set(args_eval_dict.keys()):
             raise RuntimeError("The arguments of the file and the current arguments have different eval arguments")
-        for (k, args_eval_val) in args_dict['eval'].iteritems():
-            loaded_args_eval_val = loaded_args_dict['eval'][k]
+        for (k, args_eval_val) in args_eval_dict.iteritems():
+            loaded_args_eval_val = loaded_args_eval_dict[k]
             if np.any(args_eval_val != loaded_args_eval_val):
                 raise RuntimeError("The arguments of the file and the current arguments have different eval arguments: %s, %s"%(loaded_args_eval_val, args_eval_val))
     else:
-        add_dict_to_group(result_file.create_group('args'), args_dict)
+        add_obj_to_group(result_file, 'args', args)
     result_file.close()
 
 def load_results_args(fname):
     if fname is None:
         raise RuntimeError("Cannot load task results with an unspecified file name")
     result_file = h5py.File(fname, 'r')
-    args = dict2namespace(group_to_dict(result_file['args']))
+    args = group_or_dataset_to_obj(result_file['args'])
     result_file.close()
     return args
 
@@ -162,13 +157,13 @@ def save_task_results_step(fname, task_index, step_index, state, best_root_actio
         step_group = result_file[task_index].create_group(step_index)
     else:
         step_group = result_file[task_index][step_index]
-    add_dict_to_group(step_group.create_group('state'), vars(state))
+    add_obj_to_group(step_group, 'state', state)
     step_group['best_action'] = str(best_root_action)
     step_group['values'] = q_values_root
     add_full_trajs_to_group(step_group.create_group('full_trajs'), full_trajs)
-    add_dict_to_group(step_group.create_group('next_state'), vars(next_state))
-    add_dict_to_group(step_group.create_group('eval_stats'), vars(eval_stats))
-    add_dict_to_group(step_group.create_group('kwargs'), kwargs)
+    add_obj_to_group(step_group, 'next_state', next_state)
+    add_obj_to_group(step_group, 'eval_stats', eval_stats)
+    add_obj_to_group(step_group, 'kwargs', kwargs)
     result_file.close()
 
 def load_task_results_step(fname, task_index, step_index):
@@ -178,15 +173,13 @@ def load_task_results_step(fname, task_index, step_index):
     task_index = str(task_index)
     step_index = str(step_index)
     step_group = result_file[task_index][step_index]
-    state_dict = group_to_dict(step_group['state'])
-    state = sim_util.RopeState(state_dict['id'], state_dict['cloud'], state_dict['rope_nodes'], state_dict['init_rope_nodes'], state_dict['rope_params'], state_dict['tfs'])
+    state = group_or_dataset_to_obj(step_group['state'])
     best_action = step_group['best_action'][()]
     q_values = step_group['values'][()]
     full_trajs = group_to_full_trajs(step_group['full_trajs'])
-    next_state_dict = group_to_dict(step_group['next_state'])
-    next_state = sim_util.RopeState(next_state_dict['id'], next_state_dict['cloud'], next_state_dict['rope_nodes'], next_state_dict['init_rope_nodes'], next_state_dict['rope_params'], next_state_dict['tfs'])
-    eval_stats = EvalStats(**group_to_dict(step_group['eval_stats']))
-    kwargs = group_to_dict(step_group['kwargs'])
+    next_state = group_or_dataset_to_obj(step_group['next_state'])
+    eval_stats = group_or_dataset_to_obj(step_group['eval_stats'])
+    kwargs = group_or_dataset_to_obj(step_group['kwargs'])
     result_file.close()
     return state, best_action, q_values, full_trajs, next_state, eval_stats, kwargs
 

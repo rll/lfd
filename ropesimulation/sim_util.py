@@ -12,7 +12,7 @@ import re
 from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu, plotting_openrave
 from rapprentice.util import yellowprint
 from constants import GRIPPER_OPEN_CLOSE_THRESH, ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LIN_DAMPING, \
-    ROPE_ANG_LIMIT, ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK
+    ROPE_ANG_LIMIT, ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE
 PR2_L_POSTURES = dict(
     untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
     tucked = [0.06, 1.25, 1.79, -1.68, -1.73, -0.10, -0.09],
@@ -21,13 +21,38 @@ PR2_L_POSTURES = dict(
 )
 
 class RopeState(object):
-    def __init__(self, id, cloud, rope_nodes, init_rope_nodes, rope_params, tfs):
-        self.id = id
-        self.cloud = cloud
-        self.rope_nodes = rope_nodes
+    def __init__(self, init_rope_nodes, rope_params, tfs=None):
         self.init_rope_nodes = init_rope_nodes
         self.rope_params = rope_params
         self.tfs = tfs
+
+class RopeParams(object):
+    def __init__(self):
+        self.radius       = ROPE_RADIUS
+        self.angStiffness = ROPE_ANG_STIFFNESS
+        self.angDamping   = ROPE_ANG_DAMPING
+        self.linDamping   = ROPE_LIN_DAMPING
+        self.angLimit     = ROPE_ANG_LIMIT
+        self.linStopErp   = ROPE_LIN_STOP_ERP
+        self.mass         = ROPE_MASS
+
+class SceneState(object):
+    ids = set()
+    def __init__(self, cloud, rope_nodes, rope_state, id=None):
+        self.cloud = cloud
+        self.rope_nodes = rope_nodes
+        self.rope_state = rope_state
+        if id is None:
+            self.id = SceneState.get_unique_id()
+        else:
+            self.id = id
+    
+    @staticmethod
+    def get_unique_id():
+        id = len(SceneState.ids)
+        assert id not in SceneState.ids
+        SceneState.ids.add(id)
+        return id
 
 class SimulationEnv:
     def __init__(self, table_height, init_joint_names, init_joint_values, obstacles, dof_limits_factor):
@@ -40,6 +65,13 @@ class SimulationEnv:
         self.env = None
         self.sim = None
         self.viewer = None
+    
+    def __getstate__(self):
+        sim_env = SimulationEnv(self.table_height, self.init_joint_names, self.init_joint_values, self.obstacles, self.dof_limits_factor)
+        return sim_env.__dict__
+
+    def __setstate__(self, d):
+        self.__dict__ = d
     
     def initialize(self):
         self.env = openravepy.Environment()
@@ -88,34 +120,35 @@ class SimulationEnv:
                     active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
             self.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
 
-    def set_rope_state(self, *args):
-        """
-        set_rope_state(state)
-        set_rope_state(init_rope_nodes, rope_params)
-        set_rope_state(init_rope_nodes, rope_params, tfs)
-        """
-        if len(args) == 1:
-            state = args[0]
-            rope_params = state.rope_params
-            init_rope_nodes = state.init_rope_nodes
-            tfs = state.tfs
-        elif len(args) == 2:
-            init_rope_nodes, rope_params = args
-            tfs = None
-        elif len(args) == 3:
-            init_rope_nodes, rope_params, tfs = args
-        else:
-            raise TypeError("set_rope_state() takes exactly 1, 2 or 3 arguments (%d given)"%len(args))
-
-        if rope_params is None:
-            ### set the defaults
-            rope_params = get_rope_params('default')
-        else:
-            rope_params = get_rope_params(rope_params)
-        replace_rope(init_rope_nodes, self, rope_params, restore=False)
-        if tfs is not None:
-            set_rope_transforms(tfs, self)
+    def set_rope_state(self, rope_state):
+        replace_rope(rope_state.init_rope_nodes, self, rope_state.rope_params, restore=False)
+        if rope_state.tfs is not None:
+            set_rope_transforms(rope_state.tfs, self)
         self.sim.settle()
+    
+    def observe_scene(self, id=None, **kwargs):
+        if kwargs['raycast']:
+            new_cloud, endpoint_inds = self.sim.raycast_cloud(endpoints=3)
+            if new_cloud.shape[0] == 0: # rope is not visible (probably because it fall off the table)
+                return None
+        else:
+            new_cloud = self.sim.observe_cloud(upsample=kwargs['upsample'], upsample_rad=kwargs['upsample_rad'])
+            endpoint_inds = np.zeros(len(new_cloud), dtype=bool) # for now, kwargs['raycast']=False is not compatible with kwargs['use_color']=True
+        if kwargs['use_color']:
+            new_cloud = color_cloud(new_cloud, endpoint_inds)
+        if kwargs['downsample']:
+            from rapprentice import clouds
+            new_cloud_ds = clouds.downsample(new_cloud, DS_SIZE)
+        else:
+            new_cloud_ds = new_cloud
+        new_rope_nodes = self.sim.rope.GetControlPoints()
+        new_rope_nodes= ropesim.observe_cloud(new_rope_nodes, self.sim.rope_params.radius, upsample=kwargs['upsample'])
+        init_rope_nodes = self.sim.rope_pts
+        rope_params = self.sim.rope_params
+        tfs = get_rope_transforms(self)
+        rope_state = RopeState(init_rope_nodes, rope_params, tfs)
+        scene_state = SceneState(new_cloud_ds, new_rope_nodes, rope_state, id=id)
+        return scene_state
     
 def make_table_xml(translation, extents):
     xml = """
@@ -565,7 +598,7 @@ def unif_resample(traj, max_diff, wt = None):
 def get_rope_transforms(sim_env):
     return (sim_env.sim.rope.GetTranslations(), sim_env.sim.rope.GetRotations())    
 
-def replace_rope(new_rope, sim_env, rope_params=None, restore=False):
+def replace_rope(new_rope, sim_env, rope_params, restore=False):
     """
     restore indicates if this function is being called to restore an existing rope, in which case the color of the rope is saved and restored
     """
@@ -620,41 +653,6 @@ def get_rope_params(params_id):
     else:
         raise RuntimeError("Invalid rope parameter id")
     return rope_params
-
-class RopeSimTimeMachine(object):
-    """
-    Sets and tracks the state of the rope in a consistent manner.
-    Keeps track of the state of the rope at user-defined checkpoints and allows 
-    for restoring from that checkpoint in a deterministic manner (i.e. calling
-    time_machine.restore_from_checkpoint(id) should restore the same simulation
-    state everytime it is called)
-    """
-    def __init__(self, new_rope, sim_env, rope_params=None):
-        """
-        new_rope is the initial rope_nodes of the machine for a particular task
-        """
-        self.rope_nodes = new_rope
-        self.checkpoints = {}
-        if rope_params is None:
-            ### set the defaults
-            rope_params = get_rope_params('default')
-        replace_rope(self.rope_nodes, sim_env, rope_params, restore=False)
-        sim_env.sim.settle()
-        
-    def set_checkpoint(self, id, sim_env, tfs=None):
-        if id in self.checkpoints:
-            raise RuntimeError("Can not set checkpoint with id %s since it has already been set"%id)
-        if tfs:
-            self.checkpoints[id] = tfs
-        else:
-            self.checkpoints[id] = get_rope_transforms(sim_env)
-
-    def restore_from_checkpoint(self, id, sim_env, rope_params=None):
-        if id not in self.checkpoints:
-            raise RuntimeError("Can not restore checkpoint with id %s since it has not been set"%id)
-        replace_rope(self.rope_nodes, sim_env, rope_params, restore=True)
-        set_rope_transforms(self.checkpoints[id], sim_env)
-        sim_env.sim.settle()
 
 def tpsrpm_plot_cb(sim_env, x_nd, y_md, targ_Nd, corr_nm, wt_n, f):
     ypred_nd = f.transform_points(x_nd)

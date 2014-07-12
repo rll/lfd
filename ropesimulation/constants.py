@@ -1,4 +1,4 @@
-# from tpsopt.defaults import *
+from tpsopt.constants import *
 import numpy as np
 
 GRIPPER_OPEN_CLOSE_THRESH = 0.04

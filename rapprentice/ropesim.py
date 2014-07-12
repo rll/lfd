@@ -87,33 +87,30 @@ def observe_cloud(pts, radius, upsample=0, upsample_rad=1):
     return pts
 
 class Simulation(object):
-    def __init__(self, env, robot, rope_params=None):
+    def __init__(self, env, robot, rope_params):
         self.env = env
         self.robot = robot
         self.bt_env = None
         self.bt_robot = None
         self.rope = None
         self.rope_pts = None
+        self.rope_params = rope_params
         self.constraints = {"l": [], "r": []}
         self.constraints_inds = {"l": [], "r": []}
-
-        if rope_params:
-            self.rope_params = rope_params
-        else:
-            self.rope_params = bulletsimpy.CapsuleRopeParams()
-            self.rope_params.radius = 0.005
-            self.rope_params.angStiffness = .1
-            self.rope_params.angDamping = 1
-            self.rope_params.linDamping = .75
-            self.rope_params.angLimit = .4
-            self.rope_params.linStopErp = .2
-            self.rope_params.mass = 1.0
-
+    
     def create(self, rope_pts):
         self.bt_env = bulletsimpy.BulletEnvironment(self.env, [])
         self.bt_env.SetGravity([0, 0, -9.8])
         self.bt_robot = self.bt_env.GetObjectByName(self.robot.GetName())
-        self.rope = bulletsimpy.CapsuleRope(self.bt_env, 'rope', rope_pts, self.rope_params)
+        capsule_rope_params = bulletsimpy.CapsuleRopeParams()
+        capsule_rope_params.radius       = self.rope_params.radius
+        capsule_rope_params.angStiffness = self.rope_params.angStiffness
+        capsule_rope_params.angDamping   = self.rope_params.angDamping
+        capsule_rope_params.linDamping   = self.rope_params.linDamping
+        capsule_rope_params.angLimit     = self.rope_params.angLimit
+        capsule_rope_params.linStopErp   = self.rope_params.linStopErp
+        capsule_rope_params.mass         = self.rope_params.mass
+        self.rope = bulletsimpy.CapsuleRope(self.bt_env, 'rope', rope_pts, capsule_rope_params)
         self.rope_pts = rope_pts
 
         cc = trajoptpy.GetCollisionChecker(self.env)
