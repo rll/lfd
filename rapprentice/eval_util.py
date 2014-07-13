@@ -134,7 +134,7 @@ def save_results_args(fname, args):
                 if lower(user_resp) == 'y':
                     result_file.close()
                     result_file = h5py.File(fname, 'w')
-                    add_dict_to_group(result_file.create_group('args'), args_dict)
+                    add_obj_to_group(result_file, 'args', args)
                     break
                 else:
                     raise RuntimeError
