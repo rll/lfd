@@ -31,14 +31,13 @@ class TransferSimulate(object):
         self.transfer = transfer
         self.sim_env = sim_env
     
-    def transfer_simulate(self, state, action, next_state_id, transferopt=None, animate=False, interactive=False, simulate=True, use_collision_cost=False, replay_full_trajs=None):
+    def transfer_simulate(self, state, action, next_state_id, animate=False, interactive=False, simulate=True, use_collision_cost=False, replay_full_trajs=None):
         args_eval = self.transfer.args_eval
         alpha = args_eval.alpha
         beta_pos = args_eval.beta_pos
         beta_rot = args_eval.beta_rot
         gamma = args_eval.gamma
-        if transferopt is None:
-            transferopt = args_eval.transferopt
+        transferopt = args_eval.transferopt
         
         seg_info = self.transfer.actions[action]
         if simulate:
@@ -354,20 +353,20 @@ class BatchTransferSimulate(object):
         
         self.pending = set()
         
-    def queue_transfer_simulate(self, state, action, next_state_id, transferopt=None): # TODO optional arguments
+    def queue_transfer_simulate(self, state, action, next_state_id): # TODO optional arguments
         self.wait_while_queue_is_full()
         
         @interactive
-        def engine_transfer_simulate(state, action, next_state_id, transferopt):
+        def engine_transfer_simulate(state, action, next_state_id):
             global transfer_simulate
-            return transfer_simulate.transfer_simulate(state, action, next_state_id, transferopt=transferopt)
+            return transfer_simulate.transfer_simulate(state, action, next_state_id)
         
-        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [state, action, next_state_id, transferopt]])
+        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [state, action, next_state_id]])
         self.pending.update(amr.msg_ids)
 
-    def wait_while_queue_is_full(self):
+    def wait_while_queue_size_above_size(self, queue_size):
         pending = self.pending.copy()
-        while len(pending) > self.max_queue_size:
+        while len(pending) > queue_size:
             try:
                 self.rc.wait(pending, 1e-3)
             except parallel.TimeoutError:
@@ -377,6 +376,12 @@ class BatchTransferSimulate(object):
             finished = pending.difference(self.rc.outstanding)
             # update pending to exclude those that just finished
             pending = pending.difference(finished)
+
+    def wait_while_queue_is_full(self):
+        self.wait_while_queue_size_above_size(self.max_queue_size)
+
+    def wait_while_queue_is_nonempty(self):
+        self.wait_while_queue_size_above_size(0)
 
     def get_results(self):
         results = []
