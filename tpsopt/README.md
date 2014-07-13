@@ -25,7 +25,7 @@ The last line may need to run as root.
 
 Build the additional cuda functionality
 ```
-$ cd lfd/psopt
+$ cd lfd/tpsopt
 $ cmake .
 $ make
 ```
@@ -34,7 +34,7 @@ It has been tested with the RLL overhand-knot tying demonstration dataset. Obtai
 To check the build, cd to tps-opt/tpsopt and run the appropriate version of the following
 ```
 dhm@primus:~$ cd src/tps-opt/tpsopt/
-dhm@primus:~/src/tps-opt/tpsopt$ python precompute.py path/to/actions.h5 --replace --verbose
+dhm@primus:~/src/tps-opt/tpsopt$ python precompute.py path/to/actions.h5 --replace --verbose --fill_traj
 precomputed tps solver for segment failuretwo_5-seg02
 dhm@primus:~/src/tps-opt/tpsopt$ python batchtps.py --input_file path/to/actions.h5 --test_full
 running basic unit tests

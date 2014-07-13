@@ -22,5 +22,5 @@ ROPE_RADIUS_THICK  = .008
 ##################
 # Planning Params
 ##################
-JOINT_LENGTH_PER_STEP = .3
-FINGER_CLOSE_RATE     = .06
+JOINT_LENGTH_PER_STEP = .1
+FINGER_CLOSE_RATE     = .02

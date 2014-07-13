@@ -9,6 +9,7 @@ import util
 import openravepy, trajoptpy
 import h5py, numpy as np
 from rapprentice import math_utils as mu
+from string import lower
 
 class EvalStats(object):
     def __init__(self, **kwargs):
@@ -129,7 +130,14 @@ def save_results_args(fname, args):
         for (k, args_eval_val) in args_eval_dict.iteritems():
             loaded_args_eval_val = loaded_args_eval_dict[k]
             if np.any(args_eval_val != loaded_args_eval_val):
-                raise RuntimeError("The arguments of the file and the current arguments have different eval arguments: %s, %s"%(loaded_args_eval_val, args_eval_val))
+                user_resp = raw_input("The arguments of the file and the current arguments have different eval arguments: %s, %s, overwrite?[y/N]"%(loaded_args_eval_val, args_eval_val))
+                if lower(user_resp) == 'y':
+                    result_file.close()
+                    result_file = h5py.File(fname, 'w')
+                    add_dict_to_group(result_file.create_group('args'), args_dict)
+                    break
+                else:
+                    raise RuntimeError
     else:
         add_obj_to_group(result_file, 'args', args)
     result_file.close()
