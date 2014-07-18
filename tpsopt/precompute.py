@@ -35,6 +35,7 @@ def parse_arguments():
     parser.add_argument('--replace', action='store_true')
     parser.add_argument('--cloud_name', type=str, default='cloud_xyz')
     parser.add_argument('--fill_traj', action='store_true')
+    parser.add_argument('--test', action='store_true')
     return parser.parse_args()
 # @profile
 def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
@@ -44,7 +45,7 @@ def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1
 
     H_arr_gpu = []
     for b in bend_coefs:
-        cur_offset = np.zeros((1 + d + n, 1 + d + n), np.float32)
+        cur_offset = np.zeros((1 + d + n, 1 + d + n), np.float64)
         cur_offset[d+1:, d+1:] = b * K_nn
         cur_offset[1:d+1, 1:d+1] = np.diag(rot_coef)
         H_arr_gpu.append(gpuarray.to_gpu(cur_offset))
@@ -54,12 +55,12 @@ def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1
     n_cnts = A.shape[0]
     _u,_s,_vh = np.linalg.svd(A.T)
     N = _u[:,n_cnts:]
-    F = np.zeros((n + d + 1, d), np.float32)
+    F = np.zeros((n + d + 1, d), np.float64)
     F[1:d+1, :d] += np.diag(rot_coef)
     
-    Q = np.c_[np.ones((n,1)), x_nd, K_nn].astype(np.float32)
-    F = F.astype(np.float32)
-    N = N.astype(np.float32)
+    Q = np.c_[np.ones((n,1)), x_nd, K_nn].astype(np.float64)
+    F = F.astype(np.float64)
+    N = N.astype(np.float64)
 
     Q_gpu     = gpuarray.to_gpu(Q)
     Q_arr_gpu = [Q_gpu for _ in range(len(bend_coefs))]
@@ -97,6 +98,95 @@ def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1
                               (F_arr_gpu,  F_ptr_gpu,   'N'))
 
     return proj_mats, offset_mats
+
+def test_batch_get_sol_params(f, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1], atol=1e-7, index=0):
+    seg_info = f.items()[index][1]
+    inv_group =  seg_info['inv']
+    ds_key = 'DS_SIZE_{}'.format(DS_SIZE)
+    x_nd = inv_group[ds_key]['scaled_cloud_xyz'][:]
+    K_nn = inv_group[ds_key]['scaled_K_nn'][:]
+
+    n, d = x_nd.shape
+
+    x_gpu = gpuarray.to_gpu(x_nd)
+
+    H_arr_gpu = []
+    for b in bend_coefs:
+        cur_offset = np.zeros((1 + d + n, 1 + d + n), np.float64)
+        cur_offset[d+1:, d+1:] = b * K_nn
+        cur_offset[1:d+1, 1:d+1] = np.diag(rot_coef)
+        H_arr_gpu.append(gpuarray.to_gpu(cur_offset))
+    H_ptr_gpu = get_gpu_ptrs(H_arr_gpu)
+
+    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_nd]].T
+    n_cnts = A.shape[0]
+    _u,_s,_vh = np.linalg.svd(A.T)
+    N = _u[:,n_cnts:]
+    F = np.zeros((n + d + 1, d), np.float64)
+    F[1:d+1, :d] += np.diag(rot_coef)
+    
+    Q = np.c_[np.ones((n,1)), x_nd, K_nn].astype(np.float64)
+    F = F.astype(np.float64)
+    N = N.astype(np.float64)
+
+    Q_gpu     = gpuarray.to_gpu(Q)
+    Q_arr_gpu = [Q_gpu for _ in range(len(bend_coefs))]
+    Q_ptr_gpu = get_gpu_ptrs(Q_arr_gpu)
+
+    F_gpu     = gpuarray.to_gpu(F)
+    F_arr_gpu = [F_gpu for _ in range(len(bend_coefs))]
+    F_ptr_gpu = get_gpu_ptrs(F_arr_gpu)
+
+    N_gpu = gpuarray.to_gpu(N)
+    N_arr_gpu = [N_gpu for _ in range(len(bend_coefs))]
+    N_ptr_gpu = get_gpu_ptrs(N_arr_gpu)
+    
+    dot_batch_nocheck(Q_arr_gpu, Q_arr_gpu, H_arr_gpu,
+                      Q_ptr_gpu, Q_ptr_gpu, H_ptr_gpu,
+                      transa = 'T')
+    QTQ = Q.T.dot(Q)
+    H_list = []
+    for i, bend_coef in enumerate(bend_coefs):
+        H = QTQ
+        H[d+1:,d+1:] += bend_coef * K_nn
+        rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
+        H[1:d+1, 1:d+1] += np.diag(rot_coefs)
+        # ipdb.set_trace()
+        H_list.append(H)
+
+    # N'HN
+    NHN_arr_gpu, NHN_ptr_gpu = m_dot_batch((N_arr_gpu, N_ptr_gpu, 'T'),
+                                           (H_arr_gpu, H_ptr_gpu, 'N'),
+                                           (N_arr_gpu, N_ptr_gpu, 'N'))
+
+    NHN_list = [N.T.dot(H.dot(N)) for H in H_list]
+    for i, NHN in enumerate(NHN_list):
+        assert(np.allclose(NHN, NHN_arr_gpu[i].get(), atol=atol))
+
+    iH_arr = []
+    for NHN in NHN_arr_gpu:
+        iH_arr.append(scipy.linalg.inv(NHN.get()).copy())
+
+    h_inv_list = [scipy.linalg.inv(NHN) for NHN in NHN_list]
+    assert(np.allclose(iH_arr, h_inv_list, atol=atol))
+
+    iH_arr_gpu = [gpuarray.to_gpu_async(iH) for iH in iH_arr]
+    iH_ptr_gpu = get_gpu_ptrs(iH_arr_gpu)
+
+    proj_mats   = m_dot_batch((N_arr_gpu,  N_ptr_gpu,   'N'),
+                              (iH_arr_gpu, iH_ptr_gpu, 'N'),
+                              (N_arr_gpu,  N_ptr_gpu,   'T'),
+                              (Q_arr_gpu,  Q_ptr_gpu,   'T'))
+    
+    proj_mats_list = [N.dot(h_inv.dot(N.T.dot(Q.T))) for h_inv in h_inv_list]
+    assert(np.allclose(proj_mats_list, proj_mats[0][index].get(), atol=atol))
+
+    offset_mats = m_dot_batch((N_arr_gpu,  N_ptr_gpu,   'N'),
+                              (iH_arr_gpu, iH_ptr_gpu, 'N'),
+                              (N_arr_gpu,  N_ptr_gpu,   'T'),
+                              (F_arr_gpu,  F_ptr_gpu,   'N'))
+    offset_mats_list = [N.dot(h_inv.dot(N.T.dot(F))) for h_inv in h_inv_list]
+    assert(np.allclose(offset_mats_list, offset_mats[0][index].get(), atol=atol))
 
 def get_exact_solver(x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
     """
@@ -185,6 +275,7 @@ def downsample_cloud(cloud_xyz):
     return clouds.downsample(cloud_xyz, DS_SIZE)
 
 def main():
+    scikits.cuda.linalg.init()
     args = parse_arguments()
 
     f = h5py.File(args.datafile, 'r+')
@@ -240,6 +331,13 @@ def main():
         if args.verbose:
             sys.stdout.write('\rprecomputed tps solver for segment {}'.format(seg_name))
             sys.stdout.flush()
+    print ""
+
+    if args.test:
+        atol = 1e-7
+        print 'Running batch get sol params test with atol = ', atol
+        test_batch_get_sol_params(f, [bend_coef], atol=atol)
+        print 'batch sol params test succeeded'
     print ""
 
     bend_coefs = np.around(loglinspace(args.exact_bend_coef_init, args.exact_bend_coef_final,
