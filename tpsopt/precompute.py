@@ -55,7 +55,7 @@ def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1
     _u,_s,_vh = np.linalg.svd(A.T)
     N = _u[:,n_cnts:]
     F = np.zeros((n + d + 1, d), np.float32)
-    F[1:d+1, :d] -= np.diag(rot_coef)
+    F[1:d+1, :d] += np.diag(rot_coef)
     
     Q = np.c_[np.ones((n,1)), x_nd, K_nn].astype(np.float32)
     F = F.astype(np.float32)
@@ -169,7 +169,7 @@ def get_sol_params(x_na, K_nn, bend_coef, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
     ## so it is better to invert N' * H * N, which is square and full rank
     proj_mat = N.dot(h_inv.dot(N.T.dot(Q.T)))
     F = np.zeros(Q.T.dot(x_na).shape)
-    F[1:d+1,0:d] -= np.diag(rot_coefs)
+    F[1:d+1,0:d] += np.diag(rot_coefs)
     offset_mat = N.dot(h_inv.dot(N.T.dot(F)))
 
     res_dict = {'proj_mat': proj_mat, 
