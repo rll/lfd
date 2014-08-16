@@ -118,29 +118,59 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
 #         # TODO Dylan
 #         raise NotImplementedError
 
+class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
+    # TODO Dylan
+    def __init__(self, demos):
+        raise NotImplementedError
+    
+    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+        raise NotImplementedError
+    
+    def batch_register(self, test_scene_state):
+        raise NotImplementedError
+    
+    def cost(self, demo, test_scene_state):
+        raise NotImplementedError
+    
+    def batch_cost(self, test_scene_state):
+        raise NotImplementedError
+
 class TpsRpmRegistrationFactory(RegistrationFactory):
     """
     As in:
         H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
     """
+    # TODO Dylan
     def __init__(self, demos):
-        # TODO
         raise NotImplementedError
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
-        # TODO
         raise NotImplementedError
     
     def batch_register(self, test_scene_state):
-        # TODO Dylan
         raise NotImplementedError
     
     def cost(self, demo, test_scene_state):
-        # TODO Dylan
         raise NotImplementedError
     
     def batch_cost(self, test_scene_state):
-        # TODO Dylan
+        raise NotImplementedError
+
+class GpuTpsRpmRegistrationFactory(RegistrationFactory):
+    # TODO Dylan
+    def __init__(self, demos):
+        raise NotImplementedError
+    
+    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+        raise NotImplementedError
+    
+    def batch_register(self, test_scene_state):
+        raise NotImplementedError
+    
+    def cost(self, demo, test_scene_state):
+        raise NotImplementedError
+    
+    def batch_cost(self, test_scene_state):
         raise NotImplementedError
 
 class TpsSegmentRegistrationFactory(RegistrationFactory):
