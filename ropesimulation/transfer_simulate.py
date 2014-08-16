@@ -9,6 +9,7 @@ from rapprentice import tps_registration, registration, planning
 from rope_utils import get_closing_pts, get_closing_inds
 from rapprentice.util import redprint, yellowprint
 from numpy import asarray
+import trajoptpy
 from rapprentice import math_utils as mu
 from rapprentice.registration import fit_ThinPlateSpline
 import sys, os
@@ -164,7 +165,7 @@ class TransferSimulate(object):
                     if transferopt == 'finger' or transferopt == 'joint':
                         old_ee_traj_rs = np.asarray(resampling.interp_hmats(timesteps_rs, np.arange(len(old_ee_traj)), old_ee_traj))
                         old_finger_traj_rs = mu.interp2d(timesteps_rs, np.arange(len(old_finger_traj)), old_finger_traj)
-                        flr2old_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.sim_env, lr, (old_ee_traj_rs, old_finger_traj_rs))
+                        flr2old_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.sim_env.robot, lr, (old_ee_traj_rs, old_finger_traj_rs))
                         
                         flr2transformed_finger_pts_traj_rs = {}
                         flr2finger_link = {}
@@ -189,7 +190,7 @@ class TransferSimulate(object):
                             old_finger_closing_traj_rs = np.linspace(old_finger_closing_traj_start, old_finger_closing_traj_target, np.ceil(abs(old_finger_closing_traj_target - old_finger_closing_traj_start) / FINGER_CLOSE_RATE))[:,None]
                             closing_n_steps = len(old_finger_closing_traj_rs)
                             old_ee_closing_traj_rs = np.tile(old_ee_traj_rs[-1], (closing_n_steps,1,1))
-                            flr2old_finger_pts_closing_traj_rs = sim_util.get_finger_pts_traj(self.sim_env, lr, (old_ee_closing_traj_rs, old_finger_closing_traj_rs))
+                            flr2old_finger_pts_closing_traj_rs = sim_util.get_finger_pts_traj(self.sim_env.robot, lr, (old_ee_closing_traj_rs, old_finger_closing_traj_rs))
                               
                             init_traj = np.r_[np.c_[new_arm_traj,                                   old_finger_traj_rs],
                                                 np.c_[np.tile(new_arm_traj[-1], (closing_n_steps,1)), old_finger_closing_traj_rs]]
@@ -262,8 +263,8 @@ class TransferSimulate(object):
                     group_full_trajs.append(full_traj)
         
                     if animate:
-                        handles.append(self.sim_env.env.drawlinestrip(sim_util.get_ee_traj(self.sim_env, lr, full_traj)[:,:3,3], 2, (0,0,1)))
-                        flr2new_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim_env, lr, full_traj)
+                        handles.append(self.sim_env.env.drawlinestrip(sim_util.get_ee_traj(self.sim_env.robot, lr, full_traj)[:,:3,3], 2, (0,0,1)))
+                        flr2new_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim_env.robot, lr, full_traj)
                         handles.extend(sim_util.draw_finger_pts_traj(self.sim_env, flr2new_finger_pts_traj, (0,0,1)))
                         self.sim_env.viewer.Step()
                 full_traj = sim_util.merge_full_trajs(group_full_trajs)
@@ -306,6 +307,78 @@ class TransferSimulate(object):
     
         if not simulate:
             return np.sum(obj_values)
+    
+        self.sim_env.sim.settle(animate=animate)
+        self.sim_env.sim.release_rope('l')
+        self.sim_env.sim.release_rope('r')
+        sim_util.reset_arms_to_side(self.sim_env)
+        if animate:
+            self.sim_env.viewer.Step()
+        
+        return TransferSimulateResult(success, feasible, misgrasp, full_trajs, self.sim_env.observe_scene(id=next_state_id, **vars(args_eval)))
+    
+    def simulate(self, state, next_state_id, full_trajs, animate=False, interactive=False):
+        if simulate:
+            sim_util.reset_arms_to_side(self.sim_env)
+        
+        self.sim_env.set_rope_state(state.rope_state)
+    
+        if animate:
+            self.sim_env.viewer.Step()
+        
+        miniseg_intervals = []
+        for lr in 'lr':
+            miniseg_intervals.extend([(i_miniseg_lr, lr, i_start, i_end) for (i_miniseg_lr, (i_start, i_end)) in enumerate(zip(*sim_util.split_trajectory_by_lr_gripper(seg_info, lr)))])
+        # sort by the start of the trajectory, then by the length (if both trajectories start at the same time, the shorter one should go first), and then break ties by executing the right trajectory first
+        miniseg_intervals = sorted(miniseg_intervals, key=lambda (i_miniseg_lr, lr, i_start, i_end): (i_start, i_end-i_start, {'l':'r', 'r':'l'}[lr]))
+        
+        miniseg_interval_groups = []
+        for (curr_miniseg_interval, next_miniseg_interval) in zip(miniseg_intervals[:-1], miniseg_intervals[1:]):
+            curr_i_miniseg_lr, curr_lr, curr_i_start, curr_i_end = curr_miniseg_interval
+            next_i_miniseg_lr, next_lr, next_i_start, next_i_end = next_miniseg_interval
+            if len(miniseg_interval_groups) > 0 and curr_miniseg_interval in miniseg_interval_groups[-1]:
+                continue
+            curr_gripper_open = sim_util.binarize_gripper(seg_info["%s_gripper_joint"%curr_lr][curr_i_end])
+            next_gripper_open = sim_util.binarize_gripper(seg_info["%s_gripper_joint"%next_lr][next_i_end])
+            miniseg_interval_group = [curr_miniseg_interval]
+            if not curr_gripper_open and not next_gripper_open and curr_lr != next_lr and curr_i_start < next_i_end and next_i_start < curr_i_end:
+                miniseg_interval_group.append(next_miniseg_interval)
+            miniseg_interval_groups.append(miniseg_interval_group)
+
+        success = True
+        feasible = True
+        misgrasp = False
+        obj_values = []
+        for i_miniseg_group, miniseg_interval_group in enumerate(miniseg_interval_groups):
+            full_traj = full_trajs[i_miniseg_group]
+            full_trajs.append(full_traj)
+            
+            for (i_miniseg_lr, lr, _, _) in miniseg_interval_group:
+                redprint("Executing %s arm joint trajectory for part %i"%(lr, i_miniseg_lr))
+            
+            if len(full_traj[0]) > 0:
+                # if not eval_util.traj_is_safe(self.sim_env, full_traj, COLLISION_DIST_THRESHOLD, upsample=100):
+                #     redprint("Trajectory not feasible")
+                #     feasible = False
+                #     success = False
+                # else:  # Only execute feasible trajectories
+                first_miniseg = True
+                for (i_miniseg_lr, _, _, _) in miniseg_interval_group:
+                    first_miniseg &= i_miniseg_lr == 0
+                if len(full_traj[0]) > 0:
+                    success &= sim_util.sim_full_traj_maybesim(self.sim_env, full_traj, animate=animate, interactive=interactive, max_cart_vel_trans_traj=.05 if first_miniseg else .02)
+    
+            if not success: break
+            
+            for (i_miniseg_lr, lr, i_start, i_end) in miniseg_interval_group:
+                next_gripper_open = sim_util.binarize_gripper(seg_info["%s_gripper_joint"%lr][i_end+1]) if i_end+1 < len(seg_info["%s_gripper_joint"%lr]) else True
+                curr_gripper_open = sim_util.binarize_gripper(seg_info["%s_gripper_joint"%lr][i_end])
+                if not sim_util.set_gripper_maybesim(self.sim_env, lr, next_gripper_open, curr_gripper_open, animate=animate):
+                    redprint("Grab %s failed" % lr)
+                    misgrasp = True
+                    success = False
+    
+            if not success: break
     
         self.sim_env.sim.settle(animate=animate)
         self.sim_env.sim.release_rope('l')

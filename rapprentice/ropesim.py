@@ -96,7 +96,7 @@ class Simulation(object):
         self.rope_pts = None
         self.rope_params = rope_params
         self.constraints = {"l": [], "r": []}
-        self.constraints_inds = {"l": [], "r": []}
+        self.constraints_links = {"l": [], "r": []}
     
     def create(self, rope_pts):
         self.bt_env = bulletsimpy.BulletEnvironment(self.env, [])
@@ -244,7 +244,7 @@ class Simulation(object):
                 }
             })
             self.constraints[lr].append(cnt)
-            self.constraints_inds[lr].append(i_cnt)
+            self.constraints_links[lr].append(rope_links[i_cnt])
 
         return True
 
@@ -253,11 +253,11 @@ class Simulation(object):
         for c in self.constraints[lr]:
             self.bt_env.RemoveConstraint(c)
         rope_links = self.rope.GetKinBody().GetLinks()
-        for i_cnt in self.constraints_inds[lr]:
-            for geom in rope_links[i_cnt].GetGeometries():
+        for link in self.constraints_links[lr]:
+            for geom in link.GetGeometries():
                 geom.SetDiffuseColor([1.,1.,1.])
         self.constraints[lr] = []
-        self.constraints_inds[lr] = []
+        self.constraints_links[lr] = []
     
     def is_grabbing_rope(self, lr):
         return bool(self.constraints[lr])

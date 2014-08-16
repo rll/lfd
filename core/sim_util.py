@@ -8,6 +8,7 @@ import openravepy, trajoptpy
 import numpy as np
 from numpy import asarray
 import re
+import IPython as ipy
 
 from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu, plotting_openrave
 from rapprentice.util import yellowprint
@@ -38,8 +39,9 @@ class RopeParams(object):
 
 class SceneState(object):
     ids = set()
-    def __init__(self, cloud, rope_nodes, rope_state, id=None):
+    def __init__(self, cloud, rope_nodes, rope_state, id=None, color=None):
         self.cloud = cloud
+        self.color = color
         self.rope_nodes = rope_nodes
         self.rope_state = rope_state
         if id is None:
@@ -119,6 +121,120 @@ class SimulationEnv:
                     active_dof_limits[0][active_dof_indices.tolist().index(ind)] = new_limits[0,i]
                     active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
             self.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
+    
+#     def open_gripper(self, lr, animate=False):
+#         """
+#         TODO: generalize
+#         """
+#         self.sim.release_rope(lr)
+# 
+#         target_val = get_binary_gripper_angle(True)
+#         
+#         # execute gripper open/close trajectory
+#         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
+#         start_val = self.robot.GetDOFValues([joint_ind])[0]
+#         joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / .02))
+#         for val in joint_traj:
+#             self.robot.SetDOFValues([val], [joint_ind])
+#             self.sim.step()
+#         if animate:
+#             self.viewer.Step()
+# 
+#     def close_gripper(self, lr, animate=False):
+#         """
+#         TODO: generalize
+#         """
+#         cc = trajoptpy.GetCollisionChecker(self.env)
+#         for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
+#             for rope_link in self.sim.rope.GetKinBody().GetLinks():
+#                 cc.IncludeCollisionPair(gripper_link, rope_link)
+# 
+#         target_val = 0.0
+#         
+#         # execute gripper open/close trajectory
+#         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
+#         start_val = self.robot.GetDOFValues([joint_ind])[0]
+#         joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / .01))
+#         for val in joint_traj:
+#             self.robot.SetDOFValues([val], [joint_ind])
+#             self.sim.step()
+#             if animate:
+#                 self.viewer.Step()
+# 
+#             col_now = cc.BodyVsAll(self.robot)
+#             col_all_link_name2body_link_name = {}
+#             for cn in col_now:
+#                 if cn.GetDistance() < 0.002:
+#                     if cn.GetLinkAName() not in col_all_link_name2body_link_name:
+#                         col_all_link_name2body_link_name[cn.GetLinkAName()] = []
+#                     col_all_link_name2body_link_name[cn.GetLinkAName()].append(cn.GetLinkBName())
+#             
+#             grab_link_names = []
+#             for all_link_name in col_all_link_name2body_link_name:
+#                 if '%s_gripper_l_finger_tip_link'%lr in col_all_link_name2body_link_name[all_link_name] and '%s_gripper_r_finger_tip_link'%lr in col_all_link_name2body_link_name[all_link_name]:
+#                     grab_link_names.append(all_link_name)
+#             
+#             if grab_link_names:
+#                 break
+#         
+#         if grab_link_names:
+#             link_name2link = {}
+#             for body in self.env.GetBodies():
+#                 for link in body.GetLinks():
+#                     assert link.GetName() not in link_name2link
+#                     link_name2link[link.GetName()] = link
+# 
+#             for grab_link_name in grab_link_names:
+#                 robot_link = link_name2link["%s_gripper_l_finger_tip_link"%lr]
+#                 grab_link = link_name2link[grab_link_name]
+#                 for geom in grab_link.GetGeometries():
+#                     geom.SetDiffuseColor([1.,0.,0.])
+#                 cnt = self.sim.bt_env.AddConstraint({
+#                     "type": "generic6dof",
+#                     "params": {
+#                         "link_a": robot_link,
+#                         "link_b": grab_link,
+#                         "frame_in_a": np.linalg.inv(robot_link.GetTransform()).dot(grab_link.GetTransform()),
+#                         "frame_in_b": np.eye(4),
+#                         "use_linear_reference_frame_a": False,
+#                         "stop_erp": .8,
+#                         "stop_cfm": .1,
+#                         "disable_collision_between_linked_bodies": True,
+#                     }
+#                 })
+#                 self.sim.constraints[lr].append(cnt)
+#                 self.sim.constraints_links[lr].append(grab_link)
+#             
+#         for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
+#             for rope_link in self.sim.rope.GetKinBody().GetLinks():
+#                 cc.ExcludeCollisionPair(gripper_link, rope_link)
+#                 
+#         if animate:
+#             self.viewer.Step()
+# 
+#     def execute_trajectory(self, traj, animate=False, interactive=False):
+#         open_or_close_finger_traj = np.zeros(traj.n_steps, dtype=bool)
+#         if traj.lr2open_finger_traj is not None:
+#             for lr in traj.lr2open_finger_traj.keys():
+#                 open_or_close_finger_traj = np.logical_or(open_or_close_finger_traj, traj.lr2open_finger_traj[lr])
+#         if traj.lr2close_finger_traj is not None:
+#             for lr in traj.lr2close_finger_traj.keys():
+#                 open_or_close_finger_traj = np.logical_or(open_or_close_finger_traj, traj.lr2close_finger_traj[lr])
+#         open_or_close_inds = np.where(open_or_close_finger_traj)[0]
+#         
+#         full_traj = traj.get_full_traj(self.robot)
+#         ret = True
+#         for (start_ind, end_ind) in zip(np.r_[0, open_or_close_inds], np.r_[open_or_close_inds+1, traj.n_steps]):
+#             if traj.lr2open_finger_traj is not None:
+#                 for lr in traj.lr2open_finger_traj.keys():
+#                     if traj.lr2open_finger_traj[lr][start_ind]:
+#                         self.open_gripper(lr, animate=animate)
+#             if traj.lr2close_finger_traj is not None:
+#                 for lr in traj.lr2close_finger_traj.keys():
+#                     if traj.lr2close_finger_traj[lr][start_ind]:
+#                         self.close_gripper(lr, animate=animate)
+#             ret &= sim_full_traj_maybesim(self, (full_traj[0][start_ind:end_ind,:], full_traj[1]), animate=animate, interactive=interactive)
+#         return ret
 
     def set_rope_state(self, rope_state):
         replace_rope(rope_state.init_rope_nodes, self, rope_state.rope_params, restore=False)
@@ -152,7 +268,7 @@ class SimulationEnv:
     
 def make_table_xml(translation, extents):
     xml = """
-<Environment>
+<LfdEnvironment>
   <KinBody name="table">
     <Body type="static" name="table_link">
       <Geom type="box">
@@ -162,13 +278,13 @@ def make_table_xml(translation, extents):
       </Geom>
     </Body>
   </KinBody>
-</Environment>
+</LfdEnvironment>
 """ % (translation[0], translation[1], translation[2], extents[0], extents[1], extents[2])
     return xml
 
 def make_box_xml(name, translation, extents):
     xml = """
-<Environment>
+<LfdEnvironment>
   <KinBody name="%s">
     <Body type="dynamic" name="%s_link">
       <Translation>%f %f %f</Translation>
@@ -177,13 +293,13 @@ def make_box_xml(name, translation, extents):
       </Geom>
     </Body>
   </KinBody>
-</Environment>
+</LfdEnvironment>
 """ % (name, name, translation[0], translation[1], translation[2], extents[0], extents[1], extents[2])
     return xml
 
 def make_cylinder_xml(name, translation, radius, height):
     xml = """
-<Environment>
+<LfdEnvironment>
   <KinBody name="%s">
     <Body type="dynamic" name="%s_link">
       <Translation>%f %f %f</Translation>
@@ -194,7 +310,7 @@ def make_cylinder_xml(name, translation, radius, height):
       </Geom>
     </Body>
   </KinBody>
-</Environment>
+</LfdEnvironment>
 """ % (name, name, translation[0], translation[1], translation[2], radius, height)
     return xml
 
@@ -248,6 +364,18 @@ def split_trajectory_by_lr_gripper(seg_info, lr):
     seg_ends = np.unique(np.r_[before_transitions, n_steps-1])
 
     return seg_starts, seg_ends
+
+def get_opening_closing_inds(finger_traj):
+    GRIPPER_OPEN_CLOSE_THRESH = 0.01 # TODO in constants
+    
+    mult = 5.0
+    GRIPPER_L_FINGER_OPEN_CLOSE_THRESH = mult * GRIPPER_OPEN_CLOSE_THRESH
+
+    # indices BEFORE transition occurs
+    opening_inds = np.flatnonzero((finger_traj[1:] >= GRIPPER_L_FINGER_OPEN_CLOSE_THRESH) & (finger_traj[:-1] < GRIPPER_L_FINGER_OPEN_CLOSE_THRESH))
+    closing_inds = np.flatnonzero((finger_traj[1:] < GRIPPER_L_FINGER_OPEN_CLOSE_THRESH) & (finger_traj[:-1] >= GRIPPER_L_FINGER_OPEN_CLOSE_THRESH))
+    
+    return opening_inds, closing_inds
 
 def gripper_joint2gripper_l_finger_joint_values(gripper_joint_vals):
     """
@@ -318,18 +446,6 @@ def unwrap_in_place(t, dof_inds=None):
             unwrap_arm_traj_in_place(t[:,7:])
         else:
             raise NotImplementedError
-
-def exclude_gripper_collisions(sim_env):
-    cc = trajoptpy.GetCollisionChecker(sim_env.env)
-    for gripper_link in [link for link in sim_env.robot.GetLinks() if 'gripper' in link.GetName()]:
-        for rope_link in sim_env.sim.rope.GetKinBody().GetLinks():
-            cc.ExcludeCollisionPair(gripper_link, rope_link)
-
-def include_gripper_collisions(sim_env):
-    cc = trajoptpy.GetCollisionChecker(sim_env.env)
-    for gripper_link in [link for link in sim_env.robot.GetLinks() if 'gripper' in link.GetName()]:
-        for rope_link in sim_env.sim.rope.GetKinBody().GetLinks():
-            cc.IncludeCollisionPair(gripper_link, rope_link)
 
 def dof_inds_from_name(robot, name):
     dof_inds = []
@@ -405,7 +521,7 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False,
         sim_env.viewer.Step()
     return True
 
-def get_full_traj(sim_env, lr2arm_traj, lr2finger_traj = {}):
+def get_full_traj(robot, lr2arm_traj, lr2finger_traj = {}):
     """
     A full trajectory is a tuple of a trajectory (np matrix) and dof indices (list)
     """
@@ -415,11 +531,11 @@ def get_full_traj(sim_env, lr2arm_traj, lr2finger_traj = {}):
         for (lr, arm_traj) in lr2arm_traj.items():
             manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
             trajs.append(arm_traj)
-            dof_inds.extend(sim_env.robot.GetManipulator(manip_name).GetArmIndices())
+            dof_inds.extend(robot.GetManipulator(manip_name).GetArmIndices())
     if len(lr2finger_traj) > 0:
         for (lr, finger_traj) in lr2finger_traj.items():
             trajs.append(finger_traj)
-            dof_inds.append(sim_env.robot.GetJointIndex("%s_gripper_l_finger_joint"%lr))
+            dof_inds.append(robot.GetJointIndex("%s_gripper_l_finger_joint"%lr))
     if len(trajs) > 0:
         full_traj = (np.concatenate(trajs, axis=1), dof_inds)
     else:
@@ -442,10 +558,10 @@ def merge_full_trajs(full_trajs):
         full_traj = (np.zeros((0,0)), [])
     return full_traj
 
-def get_ee_traj(sim_env, lr, arm_traj_or_full_traj, ee_link_name_fmt="%s_gripper_tool_frame"):
+def get_ee_traj(robot, lr, arm_traj_or_full_traj, ee_link_name_fmt="%s_gripper_tool_frame"):
     manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
     ee_link_name = ee_link_name_fmt%lr
-    ee_link = sim_env.robot.GetLink(ee_link_name)
+    ee_link = robot.GetLink(ee_link_name)
     if type(arm_traj_or_full_traj) == tuple: # it is a full_traj
         full_traj = arm_traj_or_full_traj
         traj = full_traj[0]
@@ -453,11 +569,11 @@ def get_ee_traj(sim_env, lr, arm_traj_or_full_traj, ee_link_name_fmt="%s_gripper
     else:
         arm_traj = arm_traj_or_full_traj
         traj = arm_traj
-        dof_inds = sim_env.robot.GetManipulator(manip_name).GetArmIndices()
+        dof_inds = robot.GetManipulator(manip_name).GetArmIndices()
     ee_traj = []
-    with openravepy.RobotStateSaver(sim_env.robot):
+    with openravepy.RobotStateSaver(robot):
         for i_step in range(traj.shape[0]):
-            sim_env.robot.SetDOFValues(traj[i_step], dof_inds)
+            robot.SetDOFValues(traj[i_step], dof_inds)
             ee_traj.append(ee_link.GetTransform())
     return np.array(ee_traj)
 
@@ -470,13 +586,13 @@ def get_finger_rel_pts(finger_lr):
         rot_x_180 = np.diag([1,-1,-1])
         return left_rel_pts.dot(rot_x_180.T)
 
-def get_finger_pts_traj(sim_env, lr, full_traj_or_ee_finger_traj):
+def get_finger_pts_traj(robot, lr, full_traj_or_ee_finger_traj):
     """
-    ee_traj = sim_util.get_ee_traj(sim_env, lr, arm_traj)
-    flr2finger_pts_traj1 = get_finger_pts_traj(sim_env, lr, (ee_traj, finger_traj))
+    ee_traj = sim_util.get_ee_traj(robot, lr, arm_traj)
+    flr2finger_pts_traj1 = get_finger_pts_traj(robot, lr, (ee_traj, finger_traj))
     
-    full_traj = sim_util.get_full_traj(sim_env, {lr:arm_traj}, {lr:finger_traj})
-    flr2finger_pts_traj2 = get_finger_pts_traj(sim_env, lr, full_traj)
+    full_traj = sim_util.get_full_traj(robot, {lr:arm_traj}, {lr:finger_traj})
+    flr2finger_pts_traj2 = get_finger_pts_traj(robot, lr, full_traj)
     """
     flr2finger_pts_traj = {}
     assert type(full_traj_or_ee_finger_traj) == tuple
@@ -484,9 +600,9 @@ def get_finger_pts_traj(sim_env, lr, full_traj_or_ee_finger_traj):
         ee_traj, finger_traj = full_traj_or_ee_finger_traj
         assert len(ee_traj) == len(finger_traj)
         for finger_lr in 'lr':
-            gripper_full_traj = get_full_traj(sim_env, {}, {lr:finger_traj})
-            rel_ee_traj = get_ee_traj(sim_env, lr, gripper_full_traj)
-            rel_finger_traj = get_ee_traj(sim_env, lr, gripper_full_traj, ee_link_name_fmt="%s"+"_gripper_%s_finger_tip_link"%finger_lr)
+            gripper_full_traj = get_full_traj(robot, {}, {lr:finger_traj})
+            rel_ee_traj = get_ee_traj(robot, lr, gripper_full_traj)
+            rel_finger_traj = get_ee_traj(robot, lr, gripper_full_traj, ee_link_name_fmt="%s"+"_gripper_%s_finger_tip_link"%finger_lr)
             
             flr2finger_pts_traj[finger_lr] = []
             for (world_from_ee, world_from_rel_ee, world_from_rel_finger) in zip(ee_traj, rel_ee_traj, rel_finger_traj):
@@ -498,7 +614,7 @@ def get_finger_pts_traj(sim_env, lr, full_traj_or_ee_finger_traj):
     else:
         full_traj = full_traj_or_ee_finger_traj
         for finger_lr in 'lr':
-            finger_traj = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s"+"_gripper_%s_finger_tip_link"%finger_lr)
+            finger_traj = get_ee_traj(robot, lr, full_traj, ee_link_name_fmt="%s"+"_gripper_%s_finger_tip_link"%finger_lr)
             flr2finger_pts_traj[finger_lr] = []
             for world_from_finger in finger_traj:
                 flr2finger_pts_traj[finger_lr].append(world_from_finger[:3,3] + get_finger_rel_pts(finger_lr).dot(world_from_finger[:3,:3].T))
@@ -514,13 +630,18 @@ def grippers_exceed_rope_length(sim_env, full_traj, thresh):
     if sim_env.sim.constraints['l'] and sim_env.sim.constraints['r']:
         ee_trajs = {}
         for lr in 'lr':
-            ee_trajs[lr] = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
+            ee_trajs[lr] = get_ee_traj(sim_env.robot, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
         min_length = np.inf
         hs = sim_env.sim.rope.GetHalfHeights()
-        for i_end in [0,-1]:
-            for j_end in [0,-1]:
-                i_cnt_l = sim_env.sim.constraints_inds['l'][i_end]
-                i_cnt_r = sim_env.sim.constraints_inds['r'][j_end]
+        rope_links = sim_env.sim.rope.GetKinBody().GetLinks()
+        for l_rope_link in sim_env.sim.constraints_links['l']:
+            if l_rope_link not in rope_links:
+                continue
+            for r_rope_link in sim_env.sim.constraints_links['r']:
+                if r_rope_link not in rope_links:
+                    continue
+                i_cnt_l = rope_links.index(l_rope_link)
+                i_cnt_r = rope_links.index(r_rope_link)
                 if i_cnt_l > i_cnt_r:
                     i_cnt_l, i_cnt_r = i_cnt_r, i_cnt_l
                 min_length = min(min_length, 2*hs[i_cnt_l+1:i_cnt_r].sum() + hs[i_cnt_l] + hs[i_cnt_r])
@@ -536,10 +657,15 @@ def remove_tight_rope_pull(sim_env, full_traj):
             ee_trajs[lr] = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
         min_length = np.inf
         hs = sim_env.sim.rope.GetHalfHeights()
-        for i_end in [0,-1]:
-            for j_end in [0,-1]:
-                i_cnt_l = sim_env.sim.constraints_inds['l'][i_end]
-                i_cnt_r = sim_env.sim.constraints_inds['r'][j_end]
+        rope_links = sim_env.sim.rope.GetKinBody().GetLinks()
+        for l_rope_link in sim_env.sim.constraints_links['l']:
+            if l_rope_link not in rope_links:
+                continue
+            for r_rope_link in sim_env.sim.constraints_links['r']:
+                if r_rope_link not in rope_links:
+                    continue
+                i_cnt_l = rope_links.index(l_rope_link)
+                i_cnt_r = rope_links.index(r_rope_link)
                 if i_cnt_l > i_cnt_r:
                     i_cnt_l, i_cnt_r = i_cnt_r, i_cnt_l
                 min_length = min(min_length, 2*hs[i_cnt_l+1:i_cnt_r].sum() + hs[i_cnt_l] + hs[i_cnt_r])
