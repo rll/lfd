@@ -55,12 +55,13 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
     As in:
         J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research (ISRR), 2013.
     """
-    def __init__(self, demos, n_iter=N_ITER_EXACT, reg_init=EXACT_LAMBDA[0], reg_final=EXACT_LAMBDA[1], rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
+    def __init__(self, demos, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], reg_final=EXACT_LAMBDA[1], rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
         """
         TODO: do something better for default parameters and write comment
         """
         super(TpsRpmBijRegistrationFactory, self).__init__(demos)
         self.n_iter = n_iter
+        self.em_iter = em_iter
         self.reg_init = reg_init
         self.reg_final = reg_final
         self.rad_init = rad_init
@@ -72,6 +73,9 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.prior_fn = prior_fn
         
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+        """
+        TODO: use em_iter
+        """
         if self.prior_fn is not None:
             vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
         else:
