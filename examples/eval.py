@@ -330,7 +330,7 @@ def parse_input_args():
 
     parser_eval.add_argument("--alpha", type=float, default=1000000.0)
     parser_eval.add_argument("--beta_pos", type=float, default=1000000.0)
-    parser_eval.add_argument("--beta_rot", type=float, default=1.0) #TODO (maybe 100.0?)
+    parser_eval.add_argument("--beta_rot", type=float, default=100.0)
     parser_eval.add_argument("--gamma", type=float, default=1000.0)
     parser_eval.add_argument("--use_collision_cost", type=int, default=1)
 
