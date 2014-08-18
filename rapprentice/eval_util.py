@@ -2,8 +2,8 @@
 # The purpose of this class is to eventually consolidate the various
 # instantiations of do_task_eval.py
 import argparse
-from ropesimulation import sim_util
-from ropesimulation.sim_util import SceneState, RopeState, RopeParams # these need to be imported this way in order to load instances of these
+from core import sim_util
+from core.sim_util import SceneState, RopeState, RopeParams # these need to be imported this way in order to load instances of these
 from argparse import Namespace
 import util
 import openravepy, trajoptpy
