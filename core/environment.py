@@ -172,7 +172,6 @@ class SimulationEnvironment(LfdEnvironment):
                 break
         
         if grab_links:
-            ipy.embed()
             for grab_link in grab_links:
                 self._add_constraints(lr, grab_link)
                 
