@@ -159,15 +159,16 @@ class SimulationEnvironment(LfdEnvironment):
                 self.viewer.Step()
 
             # identify (near) collisions
-            col_all_link_name2body_link_name = self._get_link_names_near_collision(0.0025)
+            dyn_link_name2link_name_normals = self._get_dyn_link_names_near_collision(0.005)
             
             # identify dynamic links that are (near) colliding with both fingers and stop closing if this is the case
-            for (all_link_name, body_link_name) in col_all_link_name2body_link_name.iteritems():
-                if np.all(['%s_gripper_%s_finger_tip_link'%(lr,flr) in body_link_name for flr in 'lr']):
-                    all_link = [link for link in dyn_links if link.GetName() == all_link_name]
-                    if all_link: # all_link is a dynamic link
-                        assert len(all_link) == 1
-                        grab_links.append(all_link[0])
+            for (dyn_link_name, link_name_normals) in dyn_link_name2link_name_normals.iteritems():
+                link_names = [link_name for (link_name, normal) in link_name_normals]
+                if np.all(['%s_gripper_%s_finger_tip_link'%(lr,flr) in link_names for flr in 'lr']):
+                    dyn_link = [link for link in dyn_links if link.GetName() == dyn_link_name]
+                    if dyn_link: # dyn_link is a dynamic link
+                        assert len(dyn_link) == 1
+                        grab_links.append(dyn_link[0])
             if grab_links:
                 break
         
@@ -178,22 +179,28 @@ class SimulationEnvironment(LfdEnvironment):
         if step_viewer:
             self.viewer.Step()
     
-    def _get_link_names_near_collision(self, distance_threshold):
-        self._include_gripper_finger_collisions()
-
-        cc = trajoptpy.GetCollisionChecker(self.env)
-        dyn_links = [link for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects() for link in bt_obj.GetKinBody().GetLinks()]
-
-        col_now = cc.BodyVsAll(self.robot)
-        col_all_link_name2body_link_name = {}
-        for cn in col_now:
-            if cn.GetDistance() < distance_threshold:
-                if cn.GetLinkAName() not in col_all_link_name2body_link_name:
-                    col_all_link_name2body_link_name[cn.GetLinkAName()] = []
-                col_all_link_name2body_link_name[cn.GetLinkAName()].append(cn.GetLinkBName())
-
-        self._exclude_gripper_finger_collisions()
-        return col_all_link_name2body_link_name
+    def _get_dyn_link_names_near_collision(self, distance_threshold):
+            self._include_gripper_finger_collisions()
+            
+            cc = trajoptpy.GetCollisionChecker(self.env)
+            dyn_links = [link for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects() for link in bt_obj.GetKinBody().GetLinks()]
+            dyn_link_names = [link.GetName() for link in dyn_links]
+    
+            col_now = cc.BodyVsAll(self.robot)
+            dyn_link_name2link_name_normals = {}
+            for cn in col_now:
+                if cn.GetDistance() < distance_threshold:
+                    if cn.GetLinkAName() in dyn_link_names:
+                        if cn.GetLinkAName() not in dyn_link_name2link_name_normals:
+                            dyn_link_name2link_name_normals[cn.GetLinkAName()] = []
+                        dyn_link_name2link_name_normals[cn.GetLinkAName()].append((cn.GetLinkBName(), cn.GetNormalB2A()))
+                    if cn.GetLinkBName() in dyn_link_names:
+                        if cn.GetLinkBName() not in dyn_link_name2link_name_normals:
+                            dyn_link_name2link_name_normals[cn.GetLinkBName()] = []
+                        dyn_link_name2link_name_normals[cn.GetLinkBName()].append((cn.GetLinkAName(), -cn.GetNormalB2A()))
+            
+            self._exclude_gripper_finger_collisions()
+            return dyn_link_name2link_name_normals
     
     def _remove_constraints(self, lr, grab_link=None):
         """
