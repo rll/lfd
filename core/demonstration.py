@@ -70,6 +70,22 @@ class GroundTruthRopeSceneState(SceneState):
         self.rope_nodes = rope_nodes
         self.crossing_info = None #TODO: optionally compute/load cached crossing_info
 
+class RecordingRopePositionsSceneState(SceneState):
+    def __init__(self, rope_nodes, rope_history, radius, upsample=0, upsample_rad=1, downsample_size=0):
+        full_cloud = ropesim.observe_cloud(rope_nodes, radius, upsample=upsample, upsample_rad=upsample_rad)
+        super(RecordingRopePositionsSceneState, self).__init__(full_cloud, downsample_size=downsample_size)
+        self.rope_nodes = rope_nodes
+        self.crossing_info = None #TODO: optionally compute/load cached crossing_info
+        self.rope_history = rope_history #rope states at every timestep of most recent trajectory execution
+
+
+class TimestepState(object):
+    def __init__(self, rope_nodes, robot, step=None):
+        self.rope_nodes = rope_nodes
+        self.step = step
+        self.manip_trajs = {}
+        for manip in robot.GetManipulators():
+            self.manip_trajs[manip.GetName()] = (manip.GetArmDOFValues(), manip.GetArmIndices())
 
 class AugmentedTrajectory(object):
     def __init__(self, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):

@@ -41,7 +41,7 @@ class Transformation(): # ParallelPython can only handle old-style classes (i.e.
     def compute_jacobian(self, x_ma):
         raise NotImplementedError        
 
-        
+
     def transform_bases(self, x_ma, rot_mad, orthogonalize=True, orth_method = "cross"):
         """
         orthogonalize: none, svd, qr
@@ -49,7 +49,7 @@ class Transformation(): # ParallelPython can only handle old-style classes (i.e.
 
         grad_mga = self.compute_jacobian(x_ma)
         newrot_mgd = np.array([grad_ga.dot(rot_ad) for (grad_ga, rot_ad) in zip(grad_mga, rot_mad)])
-        
+
 
         if orthogonalize:
             if orth_method == "qr": 
@@ -60,7 +60,7 @@ class Transformation(): # ParallelPython can only handle old-style classes (i.e.
                 newrot_mgd = orthogonalize3_cross(newrot_mgd)
             else: raise Exception("unknown orthogonalization method %s"%orthogonalize)
         return newrot_mgd
-        
+
     def transform_hmats(self, hmat_mAD):
         """
         Transform (D+1) x (D+1) homogenius matrices
@@ -205,8 +205,8 @@ def unscale_tps(f, src_params, targ_params):
     
     
 
-def tps_rpm(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg=1e-4,
-            plotting = False, f_init = None, plot_cb = None):
+def tps_rpm(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, 
+    rot_reg=1e-4, plotting = False, f_init = None, plot_cb = None, return_corr=False):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
@@ -237,6 +237,8 @@ def tps_rpm(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init =
         
         f = fit_ThinPlateSpline(x_nd, targ_nd, bend_coef = regs[i], wt_n=wt_n, rot_coef = rot_reg)
 
+    if return_corr:
+        return f, corr
     return f
 
 def fit_rotation(tps_fn, src_pts, tgt_pts):
@@ -275,8 +277,9 @@ def fit_rotation(tps_fn, src_pts, tgt_pts):
                              + tps_local.trans_g[None,:]
     tps_fn.trans_g = np.asarray(tps_fn.trans_g)[0,:]
 # @profile
-def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg = 1e-3, 
-            plotting = False, plot_cb = None, x_weights = None, y_weights = None, outlierprior = .1, outlierfrac = 2e-1, vis_cost_xy = None, return_corr=False):
+def tps_rpm_bij(x_nd, y_md, n_iter=20, reg_init=.1, reg_final=.001, rad_init=.1, rad_final=.005,
+             rot_reg = 1e-3, plotting = False, plot_cb = None, x_weights = None, y_weights = None, 
+             outlierprior = .1, outlierfrac = 2e-1, vis_cost_xy = None, return_corr=False):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
@@ -318,7 +321,8 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*r) )
         if vis_cost_xy != None:
             pi = np.exp( -vis_cost_xy )
-            pi /= pi.max() # rescale the maximum probability to be 1. effectively, the outlier priors are multiplied by a visual prior of 1 (since the outlier points have a visual prior of 1 with any point)
+            pi /= pi.max() # rescale the maximum probability to be 1. effectively, the outlier priors are multiplied by a 
+                           # visual prior of 1 (since the outlier points have a visual prior of 1 with any point)
             prob_nm *= pi
 
         corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, x_priors, y_priors, outlierfrac) # edit final value to change outlier percentage

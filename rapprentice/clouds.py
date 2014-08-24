@@ -36,6 +36,7 @@ def downsample(xyz, v):
     else:
         # rgb fields needs to be packed and upacked as described in here
         # http://docs.pointclouds.org/1.7.0/structpcl_1_1_point_x_y_z_r_g_b.html
+
         xyzrgb = xyz
         n = xyzrgb.shape[0]
         cloud = cloudprocpy.CloudXYZRGB()

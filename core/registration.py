@@ -53,9 +53,13 @@ class RegistrationFactory(object):
 class TpsRpmBijRegistrationFactory(RegistrationFactory):
     """
     As in:
-        J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research (ISRR), 2013.
+        J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-
+        Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research 
+        (ISRR), 2013.
     """
-    def __init__(self, demos, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], reg_final=EXACT_LAMBDA[1], rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
+    def __init__(self, demos, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], 
+        reg_final=EXACT_LAMBDA[1], rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+        outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
         """
         TODO: do something better for default parameters and write comment
         """
@@ -106,9 +110,9 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         f._bending_cost = bending_cost # TODO: do this properly
         return Registration(demo, test_scene_state, f, corr, g=g)
 
-    def batch_register(self, test_scene_state):
-        # TODO Dylan
-        raise NotImplementedError
+    # def batch_register(self, test_scene_state):
+    #     # TODO Dylan
+    #     raise NotImplementedError
 
     def cost(self, demo, test_scene_state):
         # TODO Dylan
@@ -145,20 +149,50 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
     """
     # TODO Dylan
-    def __init__(self, demos):
-        raise NotImplementedError
-    
+    def __init__(self, demos, n_iter=N_ITER_EXACT, reg_init=EXACT_LAMBDA[0], reg_final=EXACT_LAMBDA[1],
+        rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], cost_type='bending'):
+        super(TpsRpmRegistrationFactory,self).__init__(demos)
+        self.n_iter = n_iter
+        self.reg_init = reg_init
+        self.reg_final = reg_final
+        self.rad_init = rad_init
+        self.rad_final = rad_final
+        self.rot_reg = rot_reg
+        self.cost_type = cost_type
+
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
-        raise NotImplementedError
-    
-    def batch_register(self, test_scene_state):
-        raise NotImplementedError
+        """
+        TODO: use em_iter?
+        """
+        old_cloud = demo.scene_state.cloud
+        new_cloud = test_scene_state.cloud
+        x_nd = old_cloud[:,:3]
+        y_md = new_cloud[:,:3]
+        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
+        scaled_y_md, targ_params = registration.unit_boxify(y_md)
+        f, corr = registration.tps_rpm(scaled_x_nd, scaled_y_md,
+                                    n_iter = self.n_iter,
+                                    reg_init = self.reg_init,
+                                    reg_final = self.reg_final,
+                                    rad_init = self.rad_init,
+                                    rad_final = self.rad_final,
+                                    rot_reg = self.rot_reg,
+                                    return_corr = True,
+                                    plotting = plotting,
+                                    plot_cb = plot_cb)
+        bending_cost = registration.tps_reg_cost(f)
+        f = registration.unscale_tps(f, src_params, targ_params)
+        f._bending_cost = bending_cost # TODO: do this properly
+        return Registration(demo, test_scene_state, f, corr)
+
+    # def batch_register(self, test_scene_state):
+    #     raise NotImplementedError
     
     def cost(self, demo, test_scene_state):
-        raise NotImplementedError
+        raise NotImplementedError #same as others? should this be higher-level?
     
-    def batch_cost(self, test_scene_state):
-        raise NotImplementedError
+    # def batch_cost(self, test_scene_state):
+    #     raise NotImplementedError
 
 class GpuTpsRpmRegistrationFactory(RegistrationFactory):
     # TODO Dylan

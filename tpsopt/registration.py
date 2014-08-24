@@ -63,9 +63,9 @@ def unscale_tps(f, src_params, targ_params):
     return Composition([aff_in, f, aff_out])
         
 # @profile
-def tps_rpm_bij(x_nd, y_md, fsolve, gsolve,n_iter = 20, reg_init = .1, 
-                reg_final = .001, rad_init = .1, rad_final = .005, 
-                rot_reg = 1e-3, outlierprior=1e-1, outlierfrac=2e-1, vis_cost_xy=None, return_corr=False, check_solver=False):
+def tps_rpm_bij(x_nd, y_md, fsolve, gsolve,n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1,
+                rad_final = .005, rot_reg = 1e-3, outlierprior=1e-1, outlierfrac=2e-1, vis_cost_xy=None,
+                return_corr=False, check_solver=False):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
