@@ -13,6 +13,7 @@ from core.environment import SimulationEnvironment, GroundTruthRopeSimulationEnv
 from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
+from core.action_selection import GreedyActionSelection
 
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
@@ -41,7 +42,7 @@ class GlobalVars:
     actions_cache = None
     demos = None
 
-def eval_on_holdout(args, reg_and_traj_transferer, lfd_env):
+def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -74,9 +75,8 @@ def eval_on_holdout(args, reg_and_traj_transferer, lfd_env):
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
-
-            action2q_value = reg_and_traj_transferer.registration_factory.batch_cost(next_state)
-            q_values_root, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
+            
+            agenda, q_values_root = action_selection.plan_agenda(next_state)
 
             unable_to_generalize = False
             for i_choice in range(num_actions_to_try):
@@ -124,7 +124,7 @@ def eval_on_holdout(args, reg_and_traj_transferer, lfd_env):
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-def eval_on_holdout_parallel(args, transfer, lfd_env):
+def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env):
     raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
@@ -230,7 +230,7 @@ def eval_on_holdout_parallel(args, transfer, lfd_env):
         num_total = len(successes)
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-def replay_on_holdout(args, transfer, lfd_env):
+def replay_on_holdout(args, action_selection, transfer, lfd_env):
     raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
@@ -512,16 +512,17 @@ def main():
     trajoptpy.SetInteractive(args.interactive)
     lfd_env = setup_lfd_environment(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
+    action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
 
     if args.subparser_name == "eval":
         start = time.time()
         if args.eval.parallel:
-            eval_on_holdout_parallel(args, reg_and_traj_transferer, lfd_env)
+            eval_on_holdout_parallel(args, action_selection, reg_and_traj_transferer, lfd_env)
         else:
-            eval_on_holdout(args, reg_and_traj_transferer, lfd_env)
+            eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env)
         print "eval time is:\t{}".format(time.time() - start)
     elif args.subparser_name == "replay":
-        replay_on_holdout(args, reg_and_traj_transferer, lfd_env)
+        replay_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env)
     else:
         raise RuntimeError("Invalid subparser name")
 
