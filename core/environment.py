@@ -142,7 +142,7 @@ class SimulationEnvironment(LfdEnvironment):
         if step_viewer:
             self.viewer.Step()
 
-    def close_gripper(self, lr, step_viewer=1):
+    def close_gripper(self, lr, step_viewer=1, close_dist_thresh=0.0025, grab_dist_thresh=0.005):
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = self.robot.GetDOFValues([joint_ind])[0]
@@ -150,57 +150,61 @@ class SimulationEnvironment(LfdEnvironment):
         joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / .02))
 
         # execute gripper finger trajectory
-        dyn_links = [link for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects() for link in bt_obj.GetKinBody().GetLinks()]
-        grab_links = []
+        dyn_bt_objs = [bt_obj for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects()]
+        stop_closing = False
         for val in joint_traj:
             self.robot.SetDOFValues([val], [joint_ind])
             self.step()
             if step_viewer:
                 self.viewer.Step()
-
-            # identify (near) collisions
-            dyn_link_name2link_name_normals = self._get_dyn_link_names_near_collision(0.005)
             
-            # identify dynamic links that are (near) colliding with both fingers and stop closing if this is the case
-            for (dyn_link_name, link_name_normals) in dyn_link_name2link_name_normals.iteritems():
-                link_names = [link_name for (link_name, normal) in link_name_normals]
-                if np.all(['%s_gripper_%s_finger_tip_link'%(lr,flr) in link_names for flr in 'lr']):
-                    dyn_link = [link for link in dyn_links if link.GetName() == dyn_link_name]
-                    if dyn_link: # dyn_link is a dynamic link
-                        assert len(dyn_link) == 1
-                        grab_links.append(dyn_link[0])
-            if grab_links:
+            flr2finger_pts_grid = self._get_finger_pts_grid(lr)
+            ray_froms, ray_tos = flr2finger_pts_grid['l'], flr2finger_pts_grid['r']
+
+            # stop closing if any ray hits a dynamic object within a distance of close_dist_thresh from both sides
+            for bt_obj in dyn_bt_objs:
+                from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
+                for from_to_rc in from_to_ray_collisions:
+                    if np.linalg.norm(from_to_rc.pt - from_to_rc.rayFrom) < close_dist_thresh:
+                        to_from_ray_collisions = self.bt_env.RayTest(from_to_rc.rayTo[None,:], from_to_rc.rayFrom[None,:], bt_obj)
+                        for to_from_rc in to_from_ray_collisions:
+                            if np.linalg.norm(to_from_rc.pt - to_from_rc.rayFrom) < close_dist_thresh:
+                                stop_closing = True
+                                break
+                if stop_closing:
+                    break
+            if stop_closing:
                 break
         
-        if grab_links:
-            for grab_link in grab_links:
-                self._add_constraints(lr, grab_link)
+        # add constraints at the points where a ray hits a dynamic link within a distance of grab_dist_thresh
+        for bt_obj in dyn_bt_objs:
+            from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
+            to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
+            ray_collisions = [rc for rcs in [from_to_ray_collisions, to_from_ray_collisions] for rc in rcs]
+            for rc in ray_collisions:
+                if np.linalg.norm(rc.pt - rc.rayFrom) < grab_dist_thresh:
+                    link_tf = rc.link.GetTransform()
+                    link_tf[:3,3] = rc.pt
+                    self._add_constraints(lr, rc.link, link_tf)
                 
         if step_viewer:
             self.viewer.Step()
     
-    def _get_dyn_link_names_near_collision(self, distance_threshold):
-            self._include_gripper_finger_collisions()
-            
-            cc = trajoptpy.GetCollisionChecker(self.env)
-            dyn_links = [link for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects() for link in bt_obj.GetKinBody().GetLinks()]
-            dyn_link_names = [link.GetName() for link in dyn_links]
-    
-            col_now = cc.BodyVsAll(self.robot)
-            dyn_link_name2link_name_normals = {}
-            for cn in col_now:
-                if cn.GetDistance() < distance_threshold:
-                    if cn.GetLinkAName() in dyn_link_names:
-                        if cn.GetLinkAName() not in dyn_link_name2link_name_normals:
-                            dyn_link_name2link_name_normals[cn.GetLinkAName()] = []
-                        dyn_link_name2link_name_normals[cn.GetLinkAName()].append((cn.GetLinkBName(), cn.GetNormalB2A()))
-                    if cn.GetLinkBName() in dyn_link_names:
-                        if cn.GetLinkBName() not in dyn_link_name2link_name_normals:
-                            dyn_link_name2link_name_normals[cn.GetLinkBName()] = []
-                        dyn_link_name2link_name_normals[cn.GetLinkBName()].append((cn.GetLinkAName(), -cn.GetNormalB2A()))
-            
-            self._exclude_gripper_finger_collisions()
-            return dyn_link_name2link_name_normals
+    def _get_finger_pts_grid(self, lr, min_sample_dist=0.005):
+        sample_grid = None
+        flr2finger_pts_grid = {}
+        for finger_lr in 'lr':
+            world_from_finger = self.robot.GetLink("%s_gripper_%s_finger_tip_link"%(lr,finger_lr)).GetTransform()
+            finger_pts = world_from_finger[:3,3] + sim_util.get_finger_rel_pts(finger_lr).dot(world_from_finger[:3,:3].T)
+            pt0 = finger_pts[0 if finger_lr == 'l' else 3][None,:]
+            pt1 = finger_pts[1 if finger_lr == 'l' else 2][None,:]
+            pt3 = finger_pts[3 if finger_lr == 'l' else 0][None,:]
+            if sample_grid is None:
+                num_sample_01 = np.round(np.linalg.norm(pt1 - pt0)/min_sample_dist)
+                num_sample_03 = np.round(np.linalg.norm(pt3 - pt0)/min_sample_dist)
+                sample_grid = np.array(np.meshgrid(np.linspace(0,1,num_sample_01), np.linspace(0,1,num_sample_03))).T.reshape((-1,2))
+            flr2finger_pts_grid[finger_lr] = pt0 + sample_grid[:,0][:,None].dot(pt1 - pt0) + sample_grid[:,1][:,None].dot(pt3 - pt0)
+        return flr2finger_pts_grid
     
     def _remove_constraints(self, lr, grab_link=None):
         """
@@ -232,7 +236,9 @@ class SimulationEnvironment(LfdEnvironment):
                     self.constraints[lr] = []
                     self.constraints_links[lr] = []
     
-    def _add_constraints(self, lr, grab_link):
+    def _add_constraints(self, lr, grab_link, grab_tf=None):
+        if grab_tf is None:
+            grab_tf = grab_link.GetTransform()
         # TODO: provide option to color the contrained links and save color before overriding it
         for geom in grab_link.GetGeometries():
             geom.SetDiffuseColor([1.,0.,0.])
@@ -243,8 +249,8 @@ class SimulationEnvironment(LfdEnvironment):
                 "params": {
                     "link_a": robot_link,
                     "link_b": grab_link,
-                    "frame_in_a": np.linalg.inv(robot_link.GetTransform()).dot(grab_link.GetTransform()),
-                    "frame_in_b": np.eye(4),
+                    "frame_in_a": np.linalg.inv(robot_link.GetTransform()).dot(grab_tf),
+                    "frame_in_b": np.linalg.inv(grab_link.GetTransform()).dot(grab_tf),
                     "use_linear_reference_frame_a": False,
                     "stop_erp": .8,
                     "stop_cfm": .1,
