@@ -107,16 +107,39 @@ def eval_on_holdout(args, reg_and_traj_transferer, lfd_env):
             if not eval_stats.feasible:  # If not feasible, restore state
                 next_state = state
             
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, test_aug_traj, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes) # TODO
-            
+            try:
+                rope_nodes = rope.get_bullet_objects()[0].GetNodes()
+                full_traj = [test_aug_traj.get_full_traj(lfd_env.robot)]# only returns one traj but has to be a list because eval_util.add_full_trajs_to_group
+                                                                        # assumes you will have multiple trajectories per step for some reason?
+                eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, 
+                            full_traj, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes) 
+                
+                #eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, 
+                #            test_aug_traj, next_state, eval_stats)#, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes) 
+                # TODO: figure out wtf this is
+                """
+                state doesn't have rope nodes
+                It would if ground truth was 1, but can't do that because the action file doesn't have rope nodes either
+                save_task_results_step doesn't take an AugmentedTrajectory, it takes a list of (joint values, DOF inds) tuples
+                how did this ever work
+                """
+            except:
+                print"\n\n FAILED \n\n"
+            ipy.embed()
+
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if is_knot(next_state.rope_nodes):
-                num_successes += 1
-                break;
+            if args.eval.ground_truth:
+                if is_knot(next_state.rope_nodes): #next_state is a GroundTruthRopeSceneState so it has rope_nodes
+                    num_successes += 1
+                    break;
+            else:
+                if is_knot(rope.get_bullet_objects()[0].GetNodes()): # have to observe rope state independently
+                    num_successes += 1
+                    break;
 
         lfd_env.remove_object(rope)
         
@@ -316,7 +339,7 @@ def parse_input_args():
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
     parser_eval.add_argument("--unified", type=int, default=0)
     
-    parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
+    parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelves', 'boxes', 'cylinders'], default=[])
     parser_eval.add_argument("--downsample_size", type=int, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
@@ -405,7 +428,7 @@ def setup_lfd_environment(args):
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
-    if 'bookshelve' in args.eval.obstacles:
+    if 'bookshelves' in args.eval.obstacles:
         sim_objs.append(XmlSimulationObject("../data/bookshelves.env.xml", dynamic=False))
     if 'boxes' in args.eval.obstacles:
         sim_objs.append(BoxSimulationObject("box0", [.7,.43,table_height+(.01+.12)], [.12,.12,.12], dynamic=False))
@@ -474,7 +497,7 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
     elif args.eval.reg_type == 'rpm':
         reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
     elif args.eval.reg_type == 'bij':
-        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=20) # TODO remove n_iter
+        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter
     else:
         raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 

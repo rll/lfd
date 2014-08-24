@@ -435,3 +435,92 @@ class GroundTruthRopeSimulationEnvironment(SimulationEnvironment):
                 rope_sim_obj = sim_obj
                 break
         return demonstration.GroundTruthRopeSceneState(rope_sim_obj.rope.GetControlPoints(), rope_sim_obj.rope_params.radius, upsample=self.upsample, upsample_rad=self.upsample_rad, downsample_size=self.downsample_size)
+
+class RecordingSimulationEnvironment(SimulationEnvironment):
+    def __init__(self, sim_objs, upsample=0, upsample_rad=1, downsample_size=0):
+        super(RecordingSimulationEnvironment, self).__init__(sim_objs, downsample_size=downsample_size)
+        self.upsample = upsample
+        self.upsample_rad = upsample_rad
+        self.cur_step_states = []
+
+    def execute_augmented_trajectory(self, aug_traj, step_viewer=1, interactive=False):
+        self.cur_step_states = []
+        open_or_close_finger_traj = np.zeros(aug_traj.n_steps, dtype=bool)
+        if aug_traj.lr2open_finger_traj is not None:
+            for lr in aug_traj.lr2open_finger_traj.keys():
+                open_or_close_finger_traj = np.logical_or(open_or_close_finger_traj, aug_traj.lr2open_finger_traj[lr])
+        if aug_traj.lr2close_finger_traj is not None:
+            for lr in aug_traj.lr2close_finger_traj.keys():
+                open_or_close_finger_traj = np.logical_or(open_or_close_finger_traj, aug_traj.lr2close_finger_traj[lr])
+        open_or_close_inds = np.where(open_or_close_finger_traj)[0]
+        
+        traj, dof_inds = aug_traj.get_full_traj(self.robot)
+        ret = True
+        lr2gripper_open = {'l':True, 'r':True}
+        for (start_ind, end_ind) in zip(np.r_[0, open_or_close_inds], np.r_[open_or_close_inds+1, aug_traj.n_steps]):
+            if aug_traj.lr2open_finger_traj is not None:
+                for lr in aug_traj.lr2open_finger_traj.keys():
+                    if aug_traj.lr2open_finger_traj[lr][start_ind]:
+                        target_val = None
+                        joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
+                        if joint_ind in dof_inds:
+                            target_val = traj[start_ind, dof_inds.index(joint_ind)]
+                        self.open_gripper(lr, target_val=target_val, step_viewer=step_viewer)
+                        lr2gripper_open[lr] = True
+            if aug_traj.lr2close_finger_traj is not None:
+                for lr in aug_traj.lr2close_finger_traj.keys():
+                    if aug_traj.lr2close_finger_traj[lr][start_ind]:
+                        self.close_gripper(lr, step_viewer=step_viewer)
+                        lr2gripper_open[lr] = False
+            # don't execute trajectory for finger joint if the corresponding gripper is closed
+            active_inds = np.ones(len(dof_inds), dtype=bool)
+            for lr in 'lr':
+                if not lr2gripper_open[lr]:
+                    joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
+                    if joint_ind in dof_inds:
+                        active_inds[dof_inds.index(joint_ind)] = False
+            miniseg_traj = traj[start_ind:end_ind, active_inds]
+            miniseg_dof_inds = list(np.asarray(dof_inds)[active_inds])
+            ret &= self.execute_trajectory((miniseg_traj, miniseg_dof_inds), step_viewer=step_viewer, interactive=interactive)
+        return ret
+
+    def execute_trajectory(self, full_traj, step_viewer=1, interactive=False, max_cart_vel_trans_traj=.05):
+        """
+        TODO: incorporate other parts of sim_full_traj_maybesim
+        """
+        def sim_callback(i):
+            for sim_obj in self.sim_objs:
+                if isinstance(sim_obj, simulation_object.RopeSimulationObject):
+                    rope_sim_obj = sim_obj
+                    break
+            cur_state = demonstration.TimestepState(rope_sim_obj.rope.GetControlPoints(), self.robot, step=i)
+            self.cur_step_states.append(cur_state)
+            self.step()
+        
+        traj, dof_inds = full_traj
+
+        # in simulation mode, we must make sure to gradually move to the new starting position
+        self.robot.SetActiveDOFs(dof_inds)
+        curr_vals = self.robot.GetActiveDOFValues()
+        transition_traj = np.r_[[curr_vals], [traj[0]]]
+        sim_util.unwrap_in_place(transition_traj, dof_inds=dof_inds)
+        transition_traj = ropesim.retime_traj(self.robot, dof_inds, transition_traj, max_cart_vel=max_cart_vel_trans_traj)
+        animate_traj.animate_traj(transition_traj, self.robot, restore=False, pause=interactive,
+            callback=sim_callback, step_viewer=step_viewer)
+        
+        traj[0] = transition_traj[-1]
+        sim_util.unwrap_in_place(traj, dof_inds=dof_inds)
+        traj = ropesim.retime_traj(self.robot, dof_inds, traj) # make the trajectory slow enough for the simulation
+    
+        animate_traj.animate_traj(traj, self.robot, restore=False, pause=interactive,
+            callback=sim_callback, step_viewer=step_viewer)
+        if step_viewer:
+            self.viewer.Step()
+        return True
+
+    def observe_scene(self):
+        for sim_obj in self.sim_objs:
+            if isinstance(sim_obj, simulation_object.RopeSimulationObject):
+                rope_sim_obj = sim_obj
+                break
+        return demonstration.RecordingRopePositionsSceneState(rope_sim_obj.rope.GetControlPoints(), self.cur_step_states, rope_sim_obj.rope_params.radius, upsample=self.upsample, upsample_rad=self.upsample_rad, downsample_size=self.downsample_size)
