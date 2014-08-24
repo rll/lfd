@@ -387,9 +387,9 @@ def set_global_vars(args):
             lr2open_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
             lr2close_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
             opening_inds, closing_inds = sim_util.get_opening_closing_inds(lr2finger_traj[lr])
-            # opening_inds/closing_inds are indices before the opening/closing happens, so increment those indices (if they are not out of bound)
-            opening_inds = np.clip(opening_inds+1, 0, len(lr2finger_traj[lr])-1) # TODO figure out if +1 is necessary
-            closing_inds = np.clip(closing_inds+1, 0, len(lr2finger_traj[lr])-1)
+#             # opening_inds/closing_inds are indices before the opening/closing happens, so increment those indices (if they are not out of bound)
+#             opening_inds = np.clip(opening_inds+1, 0, len(lr2finger_traj[lr])-1) # TODO figure out if +1 is necessary
+#             closing_inds = np.clip(closing_inds+1, 0, len(lr2finger_traj[lr])-1)
             lr2open_finger_traj[lr][opening_inds] = True
             lr2close_finger_traj[lr][closing_inds] = True
         aug_traj = AugmentedTrajectory(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
