@@ -60,6 +60,7 @@ def eval_on_holdout(args, reg_and_traj_transferer, lfd_env):
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         rope = RopeSimulationObject("rope", init_rope_nodes, rope_params)
         lfd_env.add_object(rope)
+        lfd_env.settle()
         
         next_state = lfd_env.observe_scene()
         
