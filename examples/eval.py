@@ -125,6 +125,7 @@ def eval_on_holdout(args, reg_and_traj_transferer, lfd_env):
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def eval_on_holdout_parallel(args, transfer, lfd_env):
+    raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -230,6 +231,7 @@ def eval_on_holdout_parallel(args, transfer, lfd_env):
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def replay_on_holdout(args, transfer, lfd_env):
+    raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
     loadresult_items = eval_util.get_holdout_items(loadresultfile, args.tasks, args.taskfile, args.i_start, args.i_end)
