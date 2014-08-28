@@ -161,10 +161,12 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
             vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
         else:
             vis_cost_xy = None
-        old_cloud = demo.scene_state.cloud
-        new_cloud = test_scene_state.cloud
-        x_nd = old_cloud[:,:3] #TODO: downsample to ensure cloud size is not greater than MAX_CLD_SIZE?
+        old_cloud = np.random.permutation(demo.scene_state.cloud)[:150]
+        new_cloud = np.random.permutation(test_scene_state.cloud)[:150]
+        x_nd = old_cloud[:,:3]
         y_md = new_cloud[:,:3]
+        if len(x_nd) > MAX_CLD_SIZE or len(y_md) > MAX_CLD_SIZE:
+            ipy.embed()
         scaled_x_nd, src_params = registration.unit_boxify(x_nd)
         scaled_y_md, targ_params = registration.unit_boxify(y_md)
 
@@ -192,7 +194,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         return Registration(demo, test_scene_state, f, corr, g=g)
 
 #    def batch_register(self, test_scene_state):
-        #given a test_scene_state, register it to all demos and return all registrations as dict
+        #given a test_scene_state, register it to all demos and return all registrations as dict (?)
         #unfortunately, batch_tps_rpm_bij doesn't provide the actual transforms
 
     def cost(self, demo, test_scene_state):
@@ -204,22 +206,16 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
             raise NotImplementedError
 
     def batch_cost(self, test_scene_state):
-        # costs = {}
-        # for name, demo in self.demos.iteritems():
-        #     costs[name] = self.cost(demo, test_scene_state)
-        # return costs
-
         tgt_ctx = TgtContext(self.src_ctx)
-        tgt_ctx.set_cld(test_scene_state.cloud)
+        cloud = test_scene_state.cloud
+        if len(cloud) > MAX_CLD_SIZE:
+            cloud = np.random.permutation(cloud)[:150]  #randomly sample cloud below max size in case leaf size was slightly too big
+        tgt_ctx.set_cld(cloud)
         cost_array = batch_tps_rpm_bij(self.src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, #same as reg init and reg final?
                       outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, component_cost=False)
-
-        costs2 = {}
         if self.cost_type == 'bending':
-            for i,name in enumerate(self.demos.keys()): #is this the right order? we just don't know
-                costs2[name] = cost_array[i]
-            # ipy.embed()
-            return costs2
+            costs = dict(zip(self.src_ctx.seg_names, cost_array))
+            return costs
         else:
             raise NotImplementedError
 
