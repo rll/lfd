@@ -9,8 +9,6 @@ from culinalg_exts import gemm, get_gpu_ptrs, dot_batch_nocheck
 from cuda_funcs import check_cuda_err
 import scipy.linalg
 
-import IPython as ipy
-
 class NoGPUTPSSolver(object):
     """
     class to fit a thin plate spline to data using precomputed

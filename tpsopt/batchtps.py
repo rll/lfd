@@ -294,23 +294,6 @@ class GPUContext(object):
                      self.pt_t_ptrs, other.pt_t_ptrs)
         sync()
 
-    def just_init_norm(self, other, outlierprior=1e-1, outlierfrac=1e-2, outliercutoff=1e-2, 
-                          T = 5e-3, norm_iters = DEFAULT_NORM_ITERS):
-        """
-        computes the target points for self and other
-        using the current warped points for both                
-        """
-        init_prob_nm(self.pt_ptrs, other.pt_ptrs, 
-                     self.pt_w_ptrs, other.pt_w_ptrs, 
-                     self.dims_gpu, other.dims_gpu,
-                     self.N, outlierprior, outlierfrac, T, 
-                     self.corr_cm_ptrs, self.corr_rm_ptrs)
-        sync()
-        norm_prob_nm(self.corr_cm_ptrs, self.corr_rm_ptrs, 
-                     self.dims_gpu, other.dims_gpu, self.N, outlierfrac, norm_iters,
-                     self.r_coef_ptrs, self.c_coef_rn_ptrs, self.c_coef_cn_ptrs)        
-        sync()
-
     # @profile
     def update_transform(self, b):
         """
@@ -731,13 +714,9 @@ class SrcContext(GPUContext):
             traj_r = scaled_traj_r[i]
             unscaled_traj_l_cpu = traj_l * scaling + trans
             unscaled_traj_r_cpu = traj_r * scaling + trans
-            try:
-                assert np.allclose(unscaled_traj_l_cpu, unscaled_traj_l[i], atol=1e-6)
-                assert np.allclose(unscaled_traj_r_cpu, unscaled_traj_r[i], atol=1e-6)
-            except:
-                print "error in test_get_unscaled_trajs"
-                ipy.embed()
-
+            assert np.allclose(unscaled_traj_l_cpu, unscaled_traj_l[i])
+            assert np.allclose(unscaled_traj_r_cpu, unscaled_traj_r[i])
+        
         
     def traj_cost(self, tgt_seg, other):
         i = self.names2inds[tgt_seg]
@@ -947,8 +926,6 @@ def batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
 def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, 
                            outlierfrac = 1e-2, outlierprior = 1e-1, outliercutoff = .5, em_iter = EM_ITER_CHEAP,
                            test_ind = 0):
-    print ""
-
     from transformations import ThinPlateSpline, set_ThinPlateSpline
     import tps
     n_iter = len(src_ctx.bend_coefs)
@@ -966,8 +943,7 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
     tgt_ctx.reset_tps_params()
     for i, b in enumerate(src_ctx.bend_coefs):
         T = T_vals[i]
-        for iter_num in range(em_iter):
-
+        for _ in range(em_iter):
             src_ctx.transform_points()
             tgt_ctx.transform_points()
 
@@ -976,17 +952,13 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             gpu_xw = src_ctx.pts_w[test_ind].get()[:n, :]
             gpu_yw = tgt_ctx.pts_w[test_ind].get()[:m, :]
             assert np.allclose(xwarped_nd, gpu_xw, atol=1e-5)
-            assert np.allclose(ywarped_md, gpu_yw, atol=1e-5) #perfectly identical
-            save_xwarped_nd = np.array(xwarped_nd)
-            save_ywarped_md = np.array(ywarped_md)
-            save_gpu_xw = np.array(gpu_xw)
-            save_gpu_yw = np.array(gpu_yw)
-            
+            assert np.allclose(ywarped_md, gpu_yw, atol=1e-5)
+
             xwarped_nd = gpu_xw
             ywarped_md = gpu_yw
 
             src_ctx.get_target_points(tgt_ctx, outlierprior, outlierfrac, outliercutoff, T)
-
+            
             fwddist_nm = ssd.cdist(xwarped_nd, y_md,'euclidean')
             invdist_nm = ssd.cdist(x_nd, ywarped_md,'euclidean')
             prob_nm = outlierprior * np.ones((n+1, m+1), np.float32)
@@ -998,11 +970,6 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             gpu_corr = gpu_corr[:(n + 1) * (m + 1)].reshape(n+1, m+1).astype(np.float32)
 
             assert np.allclose(prob_nm[:n, :m], gpu_corr[:n, :m], atol=1e-5)
-            save_prob_nm = np.array(prob_nm)
-            save_gpu_corr = np.array(gpu_corr)
-            #1st iter: max error is only 1e-7, sum over 13924 entries is 6e-5
-            #1st failure: max err 5.9e-8, sum 1.7e-5
-
             prob_nm[:n, :m] = gpu_corr[:n, :m]
 
             r_coefs = np.ones(n+1, np.float32)
@@ -1011,36 +978,17 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             a_N[n] = m*outlierfrac
             b_M = np.ones((m+1), dtype = np.float32)
             b_M[m] = n*outlierfrac
-
-            if test_ind==10:
-                import pdb; pdb.set_trace()
-
-            for blah in range(DEFAULT_NORM_ITERS):
+            for _ in range(DEFAULT_NORM_ITERS):
                 r_coefs = a_N/prob_nm.dot(c_coefs)
                 rn_c_coefs = c_coefs
                 c_coefs = b_M/r_coefs.dot(prob_nm)
-
-                src_ctx.get_target_points(tgt_ctx, outlierprior, outlierfrac, outliercutoff, T, norm_iters=blah+1)
-                gpu_r_coefs = src_ctx.r_coefs[test_ind].get()[:n+1].reshape(n+1)
-                gpu_c_coefs_cn = src_ctx.c_coefs_cn[test_ind].get()[:m+1].reshape(m+1)
-                gpu_c_coefs_rn = src_ctx.c_coefs_rn[test_ind].get()[:m+1].reshape(m+1)
-
-                r_diff = np.abs(r_coefs - gpu_r_coefs)
-                rn_diff = np.abs(rn_c_coefs - gpu_c_coefs_rn)
-                cn_diff = np.abs(c_coefs - gpu_c_coefs_cn)
-
-                if test_ind==10 and i==9 and iter_num==0:
-                    print np.max(r_diff), np.max(cn_diff), np.max(rn_diff)
-                    ipy.embed()
-
-            try:
-                assert np.allclose(r_coefs, gpu_r_coefs, atol=1e-5)
-                assert np.allclose(c_coefs, gpu_c_coefs_cn, atol=1e-5)
-                assert np.allclose(rn_c_coefs, gpu_c_coefs_rn, atol=1e-5)
-            except AssertionError as ae:
-                print "\nerror with r_coefs, c_coefs, and/or rn_c_coefs" #first failure: test_ind==10 and i==9 and iter_num==0
-                ipy.embed()
-
+            gpu_r_coefs = src_ctx.r_coefs[test_ind].get()[:n+1].reshape(n+1)
+            gpu_c_coefs_cn = src_ctx.c_coefs_cn[test_ind].get()[:m+1].reshape(m+1)
+            gpu_c_coefs_rn = src_ctx.c_coefs_rn[test_ind].get()[:m+1].reshape(m+1)
+            assert np.allclose(r_coefs, gpu_r_coefs, atol=1e-5)
+            assert np.allclose(c_coefs, gpu_c_coefs_cn, atol=1e-5)
+            assert np.allclose(rn_c_coefs, gpu_c_coefs_rn, atol=1e-5)
+            
             prob_nm = prob_nm[:n, :m]
             prob_nm *= gpu_r_coefs[:n, None]
             rn_p_nm = prob_nm * gpu_c_coefs_rn[None, :m]
@@ -1051,6 +999,7 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             gpu_corr_cm = gpu_corr_cm.reshape(m+1, n+1)## b/c it is column major
             assert np.allclose(wt_n, gpu_corr_cm[m, :n], atol=1e-4)
 
+            
             inlier = wt_n > outliercutoff
             xtarg_nd = np.empty((n, DATA_DIM), np.float32)
             xtarg_nd[inlier, :] = rn_p_nm.dot(y_md)[inlier, :]
@@ -1063,7 +1012,7 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             ytarg_md = np.empty((m, DATA_DIM), np.float32)
             ytarg_md[inlier, :] = cn_p_nm.T.dot(x_nd)[inlier, :]
             ytarg_md[~inlier, :] = ywarped_md[~inlier, :]
-
+            
             xt_gpu = src_ctx.pts_t[test_ind].get()[:n, :]
             yt_gpu = tgt_ctx.pts_t[test_ind].get()[:m, :]
             assert np.allclose(xtarg_nd, xt_gpu, atol=1e-4)

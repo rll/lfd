@@ -11,7 +11,6 @@ from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedT
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core.environment import SimulationEnvironment, GroundTruthRopeSimulationEnvironment
 from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from core.registration import GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
@@ -127,6 +126,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
                 """
             except:
                 print"\n\n FAILED \n\n"
+            ipy.embed()
 
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
@@ -366,7 +366,6 @@ def parse_input_args():
     parser_eval.add_argument("--rope_param_angStiffness", type=str, default=None)
     
     parser_eval.add_argument("--parallel", action="store_true")
-    parser_eval.add_argument("--gpu", action="store_true", default=False)
 
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
@@ -496,22 +495,14 @@ def setup_lfd_environment(args):
     return lfd_env
 
 def setup_registration_and_trajectory_transferer(args, lfd_env):
-    if args.eval.gpu:
-        if args.eval.reg_type == 'rpm':
-            reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
-        elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
-        else:
-            raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
+    if args.eval.reg_type == 'segment':
+        reg_factory = TpsSegmentRegistrationFactory(GlobalVars.demos)
+    elif args.eval.reg_type == 'rpm':
+        reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
+    elif args.eval.reg_type == 'bij':
+        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter
     else:
-        if args.eval.reg_type == 'segment':
-            reg_factory = TpsSegmentRegistrationFactory(GlobalVars.demos)
-        elif args.eval.reg_type == 'rpm':
-            reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
-        elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter
-        else:
-            raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
+        raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
     if args.eval.transferopt == 'pose' or args.eval.transferopt == 'finger':
         traj_transferer = PoseTrajectoryTransferer(lfd_env, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)

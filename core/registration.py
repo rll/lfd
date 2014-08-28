@@ -1,15 +1,8 @@
 from __future__ import division
 
-from constants import EXACT_LAMBDA, DEFAULT_LAMBDA, N_ITER_EXACT, N_ITER_CHEAP
+from constants import EXACT_LAMBDA, N_ITER_EXACT
 import numpy as np
 from rapprentice import registration
-
-import tpsopt
-from constants import BEND_COEF_DIGITS, MAX_CLD_SIZE
-from tpsopt.tps import tps_kernel_matrix
-from tpsopt.registration import loglinspace
-from tpsopt.batchtps import GPUContext, TgtContext, SrcContext, batch_tps_rpm_bij
-from tpsopt.transformations import EmptySolver, TPSSolver
 
 import IPython as ipy
 
@@ -134,94 +127,21 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
 #         raise NotImplementedError
 
 class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
-    def __init__(self, demos, filename, em_iter=1, rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
-        outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
-        
-        super(GpuTpsRpmBijRegistrationFactory, self).__init__(demos)
-        self.em_iter = em_iter
-        self.rad_init = rad_init
-        self.rad_final = rad_final
-        self.rot_reg = rot_reg
-        self.outlierprior = outlierprior
-        self.outlierfrac = outlierfrac
-        self.cost_type = cost_type
-        self.prior_fn = prior_fn
-        self.bend_coefs = np.around(loglinspace(DEFAULT_LAMBDA[0], DEFAULT_LAMBDA[1], N_ITER_CHEAP), BEND_COEF_DIGITS)
-        self.exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
-        self.f_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
-        self.g_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
-        self.src_ctx = GPUContext(self.bend_coefs)
-        self.src_ctx.read_h5(filename)
-
+    # TODO Dylan
+    def __init__(self, demos):
+        raise NotImplementedError
+    
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
-        """
-        TODO: use em_iter (?)
-        """
-        if self.prior_fn is not None:
-            vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
-        else:
-            vis_cost_xy = None
-        old_cloud = demo.scene_state.cloud
-        new_cloud = test_scene_state.cloud
-        x_nd = old_cloud[:,:3] #TODO: downsample to ensure cloud size is not greater than MAX_CLD_SIZE?
-        y_md = new_cloud[:,:3]
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
-        scaled_y_md, targ_params = registration.unit_boxify(y_md)
-
-        x_K_nn = tps_kernel_matrix(scaled_x_nd)
-        fsolve = self.f_empty_solver.get_solver(scaled_x_nd, x_K_nn, self.exact_bend_coefs)
-        y_K_nn = tps_kernel_matrix(scaled_y_md)
-        gsolve = self.g_empty_solver.get_solver(scaled_y_md, y_K_nn, self.exact_bend_coefs)
-
-        x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
-        (f,g), corr = tpsopt.registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, fsolve, gsolve,
-                                    n_iter = N_ITER_EXACT,
-                                    reg_init = EXACT_LAMBDA[0],
-                                    reg_final = EXACT_LAMBDA[1],
-                                    rad_init = self.rad_init,
-                                    rad_final = self.rad_final,
-                                    rot_reg = self.rot_reg,
-                                    outlierprior = self.outlierprior,
-                                    outlierfrac = self.outlierfrac,
-                                    vis_cost_xy = vis_cost_xy,
-                                    return_corr = True,
-                                    check_solver = False)
-        bending_cost = registration.tps_reg_cost(f)
-        f = registration.unscale_tps(f, src_params, targ_params)
-        f._bending_cost = bending_cost # TODO: do this properly
-        return Registration(demo, test_scene_state, f, corr, g=g)
-
-#    def batch_register(self, test_scene_state):
-        #given a test_scene_state, register it to all demos and return all registrations as dict
-        #unfortunately, batch_tps_rpm_bij doesn't provide the actual transforms
-
+        raise NotImplementedError
+    
+    def batch_register(self, test_scene_state):
+        raise NotImplementedError
+    
     def cost(self, demo, test_scene_state):
-        # TODO Dylan
-        if self.cost_type == 'bending':
-            reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
-            return reg.f._bending_cost
-        else:
-            raise NotImplementedError
-
+        raise NotImplementedError
+    
     def batch_cost(self, test_scene_state):
-        # costs = {}
-        # for name, demo in self.demos.iteritems():
-        #     costs[name] = self.cost(demo, test_scene_state)
-        # return costs
-
-        tgt_ctx = TgtContext(self.src_ctx)
-        tgt_ctx.set_cld(test_scene_state.cloud)
-        cost_array = batch_tps_rpm_bij(self.src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, #same as reg init and reg final?
-                      outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, component_cost=False)
-
-        costs2 = {}
-        if self.cost_type == 'bending':
-            for i,name in enumerate(self.demos.keys()): #is this the right order? we just don't know
-                costs2[name] = cost_array[i]
-            # ipy.embed()
-            return costs2
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
 class TpsRpmRegistrationFactory(RegistrationFactory):
     """
