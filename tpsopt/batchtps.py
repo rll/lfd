@@ -1098,6 +1098,7 @@ if __name__=='__main__':
         start = time.time()
         tgt_ctx.set_cld(tgt_cld)
         c = batch_tps_rpm_bij(src_ctx, tgt_ctx)
+        ipy.embed()
         time_taken = time.time() - start
         times.append(time_taken)
     print "\nTiming Tests Complete"
