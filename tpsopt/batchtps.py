@@ -520,17 +520,17 @@ class GPUContext(object):
         xtarg[inlier, :] = rn_corr.dot(y)[inlier, :]
         xtarg[~inlier, :] = xw[~inlier, :]
 
-        if not np.allclose(xtarg, xt):
+        if not np.allclose(xtarg, xt, atol=1e-6):
             print "xt values differ"
             ipy.embed()
             sys.exit(1)
 
         wt_m = cn_corr.sum(axis=0)
-        inliner = wt_m > outliercutoff
+        inlier = wt_m > outliercutoff
         ytarg = np.empty((m, DATA_DIM))
-        ytarg[inlier, :] = cn_corr.T.dot(x)[inliner, :]
+        ytarg[inlier, :] = cn_corr.T.dot(x)[inlier, :]
         ytarg[~inlier, :] = yw[~inlier, :]
-        if not np.allclose(ytarg, yt):
+        if not np.allclose(ytarg, yt, atol=1e-6):
             print "yt values differ"
             ipy.embed()
             sys.exit(1)                            
@@ -1065,8 +1065,11 @@ if __name__=='__main__':
     src_ctx = SrcContext()
     for _ in range(args.n_copies):
         src_ctx.read_h5(args.input_file)
-    f = h5py.File(args.input_file, 'r')    
-    tgt_cld = downsample_cloud(f['demo1-seg00']['cloud_xyz'][:])
+    # f = h5py.File(args.input_file, 'r')    
+    # tgt_cld = downsample_cloud(f['demo1-seg00']['cloud_xyz'][:])
+    # f.close()
+    f = h5py.File('/home/pabbeel/Desktop/broken_results', 'r')    
+    tgt_cld = f['1'][:]
     f.close()
     tgt_ctx = TgtContext(src_ctx)
     tgt_ctx.set_cld(tgt_cld)
