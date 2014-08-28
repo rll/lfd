@@ -102,7 +102,7 @@ def tps_rpm_bij(x_nd, y_md, fsolve, gsolve,n_iter = 20, reg_init = .1, reg_final
         wt_m = corr_nm.sum(axis=0)
 
         xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
-        ytarg_md = (corr_nm/wt_m[None,:]).T.dot(x_nd)                
+        ytarg_md = (corr_nm/wt_m[None,:]).T.dot(x_nd)
 
         fsolve.solve(wt_n, xtarg_nd, regs[i], rot_reg, f)        
         gsolve.solve(wt_m, ytarg_md, regs[i], rot_reg, g)

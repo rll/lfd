@@ -330,7 +330,8 @@ class SimulationEnvironment(LfdEnvironment):
             self.bt_env.Step(.01, 200, .005)
             if step_viewer!=0 and i%step_viewer==0:
                 self._update_rave()
-                self.viewer.Step()
+                if self.viewer:
+                    self.viewer.Step()
             if i % 10 == 0 and i != 0:
                 curr_trans = np.concatenate([np.asarray([link.GetTransform() for link in bt_obj.GetKinBody().GetLinks()])[:,:3,3] for bt_obj in self.dyn_bt_objs])
                 diff = np.sqrt(((curr_trans - prev_trans)**2).sum(axis=1))
@@ -338,7 +339,7 @@ class SimulationEnvironment(LfdEnvironment):
                     break
                 prev_trans = curr_trans
         self._update_rave()
-        if step_viewer!=0:
+        if step_viewer!=0 and self.viewer:
             self.viewer.Step()
 
     def get_state(self):
