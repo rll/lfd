@@ -342,7 +342,7 @@ def parse_input_args():
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
     parser_eval.add_argument("--unified", type=int, default=0)
     
-    parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelves', 'boxes', 'cylinders'], default=[])
+    parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
     parser_eval.add_argument("--downsample_size", type=int, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
@@ -431,8 +431,8 @@ def setup_lfd_environment(args):
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
-    if 'bookshelves' in args.eval.obstacles:
-        sim_objs.append(XmlSimulationObject("../data/bookshelves.env.xml", dynamic=False))
+    if 'bookshelve' in args.eval.obstacles:
+        sim_objs.append(XmlSimulationObject("../data/bookshelve.env.xml", dynamic=False))
     if 'boxes' in args.eval.obstacles:
         sim_objs.append(BoxSimulationObject("box0", [.7,.43,table_height+(.01+.12)], [.12,.12,.12], dynamic=False))
         sim_objs.append(BoxSimulationObject("box1", [.74,.47,table_height+(.01+.12*2+.08)], [.08,.08,.08], dynamic=False))
