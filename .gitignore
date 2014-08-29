@@ -41,6 +41,9 @@ gurobi.log
 # Data files
 data
 *.pkl
+# ignore all files in bigdata except for .py files
+bigdata/*
+!bigdata/*.py
 
 # Temporary files
 *~
