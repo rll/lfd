@@ -126,21 +126,15 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
                 """
             except:
                 print"\n\n FAILED \n\n"
-            ipy.embed()
 
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if args.eval.ground_truth:
-                if is_knot(next_state.rope_nodes): #next_state is a GroundTruthRopeSceneState so it has rope_nodes
-                    num_successes += 1
-                    break;
-            else:
-                if is_knot(rope.get_bullet_objects()[0].GetNodes()): # have to observe rope state independently
-                    num_successes += 1
-                    break;
+            if is_knot(rope.rope.GetControlPoints()):
+                num_successes += 1
+                break;
 
         lfd_env.remove_object(rope)
         
