@@ -970,6 +970,9 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             gpu_corr = gpu_corr[:(n + 1) * (m + 1)].reshape(n+1, m+1).astype(np.float32)
 
             assert np.allclose(prob_nm[:n, :m], gpu_corr[:n, :m], atol=1e-5)
+            save_prob_nm = np.array(prob_nm)
+            save_gpu_corr = np.array(gpu_corr)
+
             prob_nm[:n, :m] = gpu_corr[:n, :m]
 
             r_coefs = np.ones(n+1, np.float32)
@@ -978,17 +981,24 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
             a_N[n] = m*outlierfrac
             b_M = np.ones((m+1), dtype = np.float32)
             b_M[m] = n*outlierfrac
-            for _ in range(DEFAULT_NORM_ITERS):
+
+            for norm_iter_i in range(DEFAULT_NORM_ITERS):
                 r_coefs = a_N/prob_nm.dot(c_coefs)
                 rn_c_coefs = c_coefs
                 c_coefs = b_M/r_coefs.dot(prob_nm)
+
             gpu_r_coefs = src_ctx.r_coefs[test_ind].get()[:n+1].reshape(n+1)
             gpu_c_coefs_cn = src_ctx.c_coefs_cn[test_ind].get()[:m+1].reshape(m+1)
             gpu_c_coefs_rn = src_ctx.c_coefs_rn[test_ind].get()[:m+1].reshape(m+1)
+
+            r_diff = np.abs(r_coefs - gpu_r_coefs)
+            rn_diff = np.abs(rn_c_coefs - gpu_c_coefs_rn)
+            cn_diff = np.abs(c_coefs - gpu_c_coefs_cn)
+
             assert np.allclose(r_coefs, gpu_r_coefs, atol=1e-5)
             assert np.allclose(c_coefs, gpu_c_coefs_cn, atol=1e-5)
             assert np.allclose(rn_c_coefs, gpu_c_coefs_rn, atol=1e-5)
-            
+
             prob_nm = prob_nm[:n, :m]
             prob_nm *= gpu_r_coefs[:n, None]
             rn_p_nm = prob_nm * gpu_c_coefs_rn[None, :m]
