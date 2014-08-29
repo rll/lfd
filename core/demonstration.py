@@ -38,6 +38,8 @@ class SceneState(object):
             full_color: colors for the respective points of full_cloud. Should have the same dimensions as full_cloud
             downsample_size: if downsample_size is positive, the full cloud and color are downsampled to a voxel size of downsample_size, else they are not downsampled
         """
+        self.full_cloud = full_cloud
+        self.full_color = full_color
         if downsample_size > 0:
             global clouds
             from rapprentice import clouds
