@@ -10,7 +10,7 @@ from core.constants import ROPE_RADIUS
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core.environment import SimulationEnvironment, GroundTruthRopeSimulationEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
@@ -60,6 +60,12 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
         sim_util.reset_arms_to_side(lfd_env)
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         rope = RopeSimulationObject("rope", init_rope_nodes, rope_params)
+
+        # f = h5py.File("cpu-gpu-compare")
+        # rope_points = f[str(int(i_task)+1)][:]
+        # rope = RopeSimulationObject("rope", rope_points, rope_params)
+        # f.close()
+
         lfd_env.add_object(rope)
         lfd_env.settle()
         
@@ -72,11 +78,15 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             redprint("task %s step %i" % (i_task, i_step))
             
             state = next_state
+            orig_rope_nodes = rope.get_bullet_objects()[0].GetNodes()
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
             
-            agenda, q_values_root = action_selection.plan_agenda(next_state)
+            try:
+                agenda, q_values_root = action_selection.plan_agenda(next_state)
+            except ValueError: #e.g. if cloud is empty - any action is hopeless
+                break
 
             unable_to_generalize = False
             for i_choice in range(num_actions_to_try):
@@ -86,6 +96,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
                 redprint("TRYING %s"%agenda[i_choice])
 
                 best_root_action = agenda[i_choice]
+
                 start_time = time.time()
                 test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], state, plotting=args.plotting)
                 lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
@@ -108,25 +119,17 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             if not eval_stats.feasible:  # If not feasible, restore state
                 next_state = state
             
-            try:
+            if args.resultfile != None:
                 rope_nodes = rope.get_bullet_objects()[0].GetNodes()
                 full_traj = [test_aug_traj.get_full_traj(lfd_env.robot)]# only returns one traj but has to be a list because eval_util.add_full_trajs_to_group
                                                                         # assumes you will have multiple trajectories per step for some reason?
                 eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, 
                             full_traj, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes) 
-                
-                #eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, 
-                #            test_aug_traj, next_state, eval_stats)#, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes) 
-                # TODO: figure out wtf this is
                 """
                 state doesn't have rope nodes
                 It would if ground truth was 1, but can't do that because the action file doesn't have rope nodes either
                 save_task_results_step doesn't take an AugmentedTrajectory, it takes a list of (joint values, DOF inds) tuples
-                how did this ever work
                 """
-            except:
-                print"\n\n FAILED \n\n"
-            ipy.embed()
 
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
@@ -366,6 +369,7 @@ def parse_input_args():
     parser_eval.add_argument("--rope_param_angStiffness", type=str, default=None)
     
     parser_eval.add_argument("--parallel", action="store_true")
+    parser_eval.add_argument("--gpu", action="store_true", default=False)
 
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
@@ -495,14 +499,22 @@ def setup_lfd_environment(args):
     return lfd_env
 
 def setup_registration_and_trajectory_transferer(args, lfd_env):
-    if args.eval.reg_type == 'segment':
-        reg_factory = TpsSegmentRegistrationFactory(GlobalVars.demos)
-    elif args.eval.reg_type == 'rpm':
-        reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
-    elif args.eval.reg_type == 'bij':
-        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter
+    if args.eval.gpu:
+        if args.eval.reg_type == 'rpm':
+            reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
+        elif args.eval.reg_type == 'bij':
+            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile) # TODO remove n_iter
+        else:
+            raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:
-        raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
+        if args.eval.reg_type == 'segment':
+            reg_factory = TpsSegmentRegistrationFactory(GlobalVars.demos)
+        elif args.eval.reg_type == 'rpm':
+            reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
+        elif args.eval.reg_type == 'bij':
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter        
+        else:
+            raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
     if args.eval.transferopt == 'pose' or args.eval.transferopt == 'finger':
         traj_transferer = PoseTrajectoryTransferer(lfd_env, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
