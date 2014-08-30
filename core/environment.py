@@ -334,7 +334,7 @@ class SimulationEnvironment(LfdEnvironment):
         prev_trans = np.concatenate([np.asarray([link.GetTransform() for link in bt_obj.GetKinBody().GetLinks()])[:,:3,3] for bt_obj in self.dyn_bt_objs]) # translation part of all links of all dynamic objects
         for i in range(max_steps):
             self.bt_env.Step(.01, 200, .005)
-            if step_viewer!=0 and i%step_viewer==0:
+            if self.viewer is not None and step_viewer!=0 and i%step_viewer==0:
                 self._update_rave()
                 if self.viewer:
                     self.viewer.Step()
@@ -345,16 +345,16 @@ class SimulationEnvironment(LfdEnvironment):
                     break
                 prev_trans = curr_trans
         self._update_rave()
-        if step_viewer!=0 and self.viewer:
+        if self.viewer is not None and step_viewer!=0:
             self.viewer.Step()
 
     def get_state(self):
-        body_tfs = []
-        for body in self.env.GetBodies():
-            body_tfs.append(np.asarray([link.GetTransform() for link in body.GetLinks()]))
+        sim_obj_states = []
+        for sim_obj in self.sim_objs:
+            sim_obj_states.append(sim_obj.get_state())
         dof_limits = self.robot.GetDOFLimits()
         dof_values = self.robot.GetDOFValues()
-        return (body_tfs, dof_limits, dof_values)
+        return (sim_obj_states, dof_limits, dof_values)
 
     def set_state(self, state):
         """
@@ -364,11 +364,11 @@ class SimulationEnvironment(LfdEnvironment):
         set_state(state)
         execution2()
         """
-        self._reset_bullet()
-        body_tfs, dof_limits, dof_values = state
-        for (body, body_tf) in zip(self.env.GetBodies(), body_tfs):
-            for (link, link_tf) in zip(body.GetLinks(), body_tf):
-                link.SetTransform(link_tf)
+        self._remove_bullet()
+        self._create_bullet()
+        sim_obj_states, dof_limits, dof_values = state
+        for (sim_obj, sim_obj_state) in zip(self.sim_objs, sim_obj_states):
+            sim_obj.set_state(sim_obj_state)
         self.robot.SetDOFLimits(*dof_limits)
         self.robot.SetDOFValues(dof_values)
         self._update_rave()

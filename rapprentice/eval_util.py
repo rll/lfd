@@ -3,8 +3,7 @@
 # instantiations of do_task_eval.py
 import argparse
 from core import sim_util
-from core.sim_util import SceneState, RopeState, RopeParams # these need to be imported this way in order to load instances of these
-from argparse import Namespace
+import importlib, __builtin__
 import util
 import openravepy, trajoptpy
 import h5py, numpy as np
@@ -56,6 +55,7 @@ def add_obj_to_group(group, k, v):
             d = dict((str(i),vi) for (i,vi) in enumerate(v))
         elif hasattr(v, '__dict__'):
             vgroup.attrs.create('value_type', type(v).__name__)
+            vgroup.attrs.create('value_type_module', type(v).__module__)
             d = vars(v)
         for (vk,vv) in d.iteritems():
             add_obj_to_group(vgroup, vk, vv)
@@ -64,13 +64,20 @@ def add_obj_to_group(group, k, v):
     return group
 
 def group_or_dataset_to_obj(group_or_dataset):
+    if 'value_type' in group_or_dataset.attrs.keys():
+        if 'value_type_module' in group_or_dataset.attrs.keys():
+            module = importlib.import_module(group_or_dataset.attrs['value_type_module'])
+        else:
+            module = __builtin__
+        v_type = getattr(module, group_or_dataset.attrs['value_type'])
+    else:
+        v_type = None
     if isinstance(group_or_dataset, h5py.Group):
         group = group_or_dataset
         v_dict = {}
         for (gk,gv) in group.iteritems():
             v_dict[gk] = group_or_dataset_to_obj(gv)
-        if 'value_type' in group.attrs.keys():
-            v_type = eval(group.attrs['value_type'])
+        if v_type is not None:
             if v_type == tuple or v_type == list:
                 v = v_type(zip(*sorted(v_dict.items(), key=lambda (vk, vv): int(vk)))[1])
             elif hasattr(v_type, '__dict__'):
@@ -84,32 +91,11 @@ def group_or_dataset_to_obj(group_or_dataset):
             v = None
         elif dataset[()] == 'empty':
             v = []
-            if 'value_type' in dataset.attrs.keys():
-                v_type = eval(dataset.attrs['value_type'])
+            if v_type is not None:
                 v = v_type(v)
         else:
             v = dataset[()]
     return v
-
-def add_full_trajs_to_group(full_trajs_g, full_trajs):
-    for (i_traj, (traj, dof_inds)) in enumerate(full_trajs):
-        full_traj_g = full_trajs_g.create_group(str(i_traj))
-        # current version of h5py can't handle empty arrays, so don't save them if they are empty
-        if np.all(traj.shape):
-            full_traj_g['traj'] = traj
-        if len(dof_inds) > 0:
-            full_traj_g['dof_inds'] = dof_inds
-
-def group_to_full_trajs(full_trajs_g):
-    full_trajs = []
-    for i_traj in range(len(full_trajs_g)):
-        full_traj_g = full_trajs_g[str(i_traj)]
-        if 'traj' in full_traj_g and 'dof_inds' in full_traj_g:
-            full_traj = (full_traj_g['traj'][()], list(full_traj_g['dof_inds'][()]))
-        else:
-            full_traj = (np.empty((0,0)), [])
-        full_trajs.append(full_traj)
-    return full_trajs
 
 def save_results_args(fname, args):
     # if args is already in the results file, make sure that the eval arguments are the same
@@ -150,7 +136,7 @@ def load_results_args(fname):
     result_file.close()
     return args
 
-def save_task_results_step(fname, task_index, step_index, state, best_root_action, q_values_root, full_trajs, next_state, eval_stats, **kwargs):
+def save_task_results_step(fname, task_index, step_index, results):
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
@@ -165,13 +151,7 @@ def save_task_results_step(fname, task_index, step_index, state, best_root_actio
         step_group = result_file[task_index].create_group(step_index)
     else:
         step_group = result_file[task_index][step_index]
-    add_obj_to_group(step_group, 'state', state)
-    step_group['best_action'] = str(best_root_action)
-    step_group['values'] = q_values_root
-    add_full_trajs_to_group(step_group.create_group('full_trajs'), full_trajs)
-    add_obj_to_group(step_group, 'next_state', next_state)
-    add_obj_to_group(step_group, 'eval_stats', eval_stats)
-    add_obj_to_group(step_group, 'kwargs', kwargs)
+    add_obj_to_group(step_group, 'results', results)
     result_file.close()
 
 def load_task_results_step(fname, task_index, step_index):
@@ -181,68 +161,9 @@ def load_task_results_step(fname, task_index, step_index):
     task_index = str(task_index)
     step_index = str(step_index)
     step_group = result_file[task_index][step_index]
-    state = group_or_dataset_to_obj(step_group['state'])
-    best_action = step_group['best_action'][()]
-    q_values = step_group['values'][()]
-    full_trajs = group_to_full_trajs(step_group['full_trajs'])
-    next_state = group_or_dataset_to_obj(step_group['next_state'])
-    eval_stats = group_or_dataset_to_obj(step_group['eval_stats'])
-    kwargs = group_or_dataset_to_obj(step_group['kwargs'])
+    results = group_or_dataset_to_obj(step_group['results'])
     result_file.close()
-    return state, best_action, q_values, full_trajs, next_state, eval_stats, kwargs
-
-def save_task_follow_traj_inputs(fname, sim_env, task_index, step_index, choice_index, miniseg_index, manip_name,
-                                 new_hmats, old_traj):
-    if fname is None:
-        return
-    result_file = h5py.File(fname, 'a')
-    task_index = str(task_index)
-    step_index = str(step_index)
-    choice_index = str(choice_index)
-    miniseg_index = str(miniseg_index)
-    assert task_index in result_file, "Must call save_task_results_int() before save_task_follow_traj_inputs()"
-
-    if step_index not in result_file[task_index]:
-        result_file[task_index].create_group(step_index)
-
-    if 'plan_traj' not in result_file[task_index][step_index]:
-        result_file[task_index][step_index].create_group('plan_traj')
-    if choice_index not in result_file[task_index][step_index]['plan_traj']:
-        result_file[task_index][step_index]['plan_traj'].create_group(choice_index)
-    if miniseg_index not in result_file[task_index][step_index]['plan_traj'][choice_index]:
-        result_file[task_index][step_index]['plan_traj'][choice_index].create_group(miniseg_index)
-    manip_g = result_file[task_index][step_index]['plan_traj'][choice_index][miniseg_index].create_group(manip_name)
-
-    manip_g['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
-    trans, rots = sim_util.get_rope_transforms(sim_env)
-    manip_g['trans'] = trans
-    manip_g['rots'] = rots
-    manip_g['dof_inds'] = sim_env.robot.GetActiveDOFIndices()
-    manip_g['dof_vals'] = sim_env.robot.GetDOFValues()
-    manip_g.create_group('new_hmats')
-    for (i_hmat, new_hmat) in enumerate(new_hmats):
-        manip_g['new_hmats'][str(i_hmat)] = new_hmat
-    manip_g['old_traj'] = old_traj
-    result_file.close()
-
-def save_task_follow_traj_output(fname, task_index, step_index, choice_index, miniseg_index, manip_name, new_joint_traj):
-    if fname is None:
-        return
-    result_file = h5py.File(fname, 'a')
-    task_index = str(task_index)
-    step_index = str(step_index)
-    choice_index = str(choice_index)
-    miniseg_index = str(miniseg_index)
-
-    assert task_index in result_file, "Must call save_task_follow_traj_inputs() before save_task_follow_traj_output()"
-    assert step_index in result_file[task_index]
-    assert 'plan_traj' in result_file[task_index][step_index]
-    assert choice_index in result_file[task_index][step_index]['plan_traj']
-    assert miniseg_index in result_file[task_index][step_index]['plan_traj'][choice_index]
-    assert manip_name in result_file[task_index][step_index]['plan_traj'][choice_index][miniseg_index]
-
-    result_file[task_index][step_index]['plan_traj'][choice_index][miniseg_index][manip_name]['output_traj'] = new_joint_traj
-    result_file.close()
+    return results
 
 def traj_collisions(sim_env, full_traj, collision_dist_threshold, upsample=0):
     """

@@ -67,7 +67,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
         # f.close()
 
         lfd_env.add_object(rope)
-        lfd_env.settle()
+        lfd_env.settle(step_viewer=args.animation)
         
         next_state = lfd_env.observe_scene()
         
@@ -119,17 +119,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             if not eval_stats.feasible:  # If not feasible, restore state
                 next_state = state
             
-            if args.resultfile != None:
-                rope_nodes = rope.get_bullet_objects()[0].GetNodes()
-                full_traj = [test_aug_traj.get_full_traj(lfd_env.robot)]# only returns one traj but has to be a list because eval_util.add_full_trajs_to_group
-                                                                        # assumes you will have multiple trajectories per step for some reason?
-                eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, 
-                            full_traj, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes) 
-                """
-                state doesn't have rope nodes
-                It would if ground truth was 1, but can't do that because the action file doesn't have rope nodes either
-                save_task_results_step doesn't take an AugmentedTrajectory, it takes a list of (joint values, DOF inds) tuples
-                """
+            results = {'state':state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'next_state':next_state, 'eval_stats':eval_stats, 'sim_state':lfd_env.get_state()}
+            eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
 
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
@@ -498,7 +489,7 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
         if args.eval.reg_type == 'rpm':
             reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile) # TODO remove n_iter
+            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:
@@ -507,7 +498,7 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter        
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 

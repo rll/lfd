@@ -27,6 +27,13 @@ class SimulationObject(object):
             bt_obj = self.sim_env.bt_env.GetObjectFromKinBody(body)
             bt_objs.append(bt_obj)
         return bt_objs
+    
+    def get_state(self):
+        return np.asarray([bt_obj.GetTransform() for bt_obj in self.get_bullet_objects()])
+    
+    def set_state(self, tfs):
+        for (bt_obj, tf) in zip(self.get_bullet_objects(), tfs):
+            bt_obj.SetTransform(tf)
 
 class XmlSimulationObject(SimulationObject):
     def __init__(self, xml, dynamic=False):
@@ -137,6 +144,18 @@ class RopeSimulationObject(SimulationObject):
         if self.sim_env is None:
             raise RuntimeError("get_bullet_objects should only be called when the object is in an environment")
         return [self.rope]
+    
+    def get_state(self):
+        trans, rots = self.rope.GetTranslations(), self.rope.GetRotations()
+        tfs = np.zeros((len(trans), 4, 4))
+        tfs[:,:3,3] = trans
+        tfs[:,:3,:3] = rots
+        tfs[:,3,3] = np.ones(len(trans))
+        return tfs
+    
+    def set_state(self, tfs):
+        self.rope.SetTranslations(tfs[:,:3,3])
+        self.rope.SetRotations(tfs[:,:3,:3])
     
     def __repr__(self):
         return "RopeSimulationObject(%s, numpy.array([[...]]), RopeParams(...), dynamic=%r, upsample=%i, upsample_rad=%i)" % (self.name, self.dynamic, self.upsample, self.upsample_rad)
