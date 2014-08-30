@@ -136,14 +136,9 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if args.eval.ground_truth:
-                if is_knot(next_state.rope_nodes): #next_state is a GroundTruthRopeSceneState so it has rope_nodes
-                    num_successes += 1
-                    break;
-            else:
-                if is_knot(rope.get_bullet_objects()[0].GetNodes()): # have to observe rope state independently
-                    num_successes += 1
-                    break;
+            if is_knot(rope.rope.GetControlPoints()):
+                num_successes += 1
+                break;
 
         lfd_env.remove_object(rope)
         
@@ -338,14 +333,14 @@ def parse_input_args():
 
     parser_eval = subparsers.add_parser('eval')
     
-    parser_eval.add_argument('actionfile', type=str, nargs='?', default='data/misc/actions.h5')
-    parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='data/misc/holdout_set.h5')
+    parser_eval.add_argument('actionfile', type=str, nargs='?', default='../bigdata/misc/overhand_actions.h5')
+    parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='../bigdata/misc/holdout_set_Jun20_0.10.h5')
 
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger'], default='finger')
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
     parser_eval.add_argument("--unified", type=int, default=0)
     
-    parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelves', 'boxes', 'cylinders'], default=[])
+    parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
     parser_eval.add_argument("--downsample_size", type=int, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
@@ -435,8 +430,8 @@ def setup_lfd_environment(args):
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
-    if 'bookshelves' in args.eval.obstacles:
-        sim_objs.append(XmlSimulationObject("../data/bookshelves.env.xml", dynamic=False))
+    if 'bookshelve' in args.eval.obstacles:
+        sim_objs.append(XmlSimulationObject("../data/bookshelve.env.xml", dynamic=False))
     if 'boxes' in args.eval.obstacles:
         sim_objs.append(BoxSimulationObject("box0", [.7,.43,table_height+(.01+.12)], [.12,.12,.12], dynamic=False))
         sim_objs.append(BoxSimulationObject("box1", [.74,.47,table_height+(.01+.12*2+.08)], [.08,.08,.08], dynamic=False))
