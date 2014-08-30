@@ -498,7 +498,7 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
         if args.eval.reg_type == 'rpm':
             reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile) # TODO remove n_iter
+            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:
@@ -507,7 +507,7 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter        
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
