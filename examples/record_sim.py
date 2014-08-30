@@ -8,9 +8,10 @@ from core.constants import ROPE_RADIUS
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core.environment import RecordingSimulationEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
+from core.action_selection import GreedyActionSelection
 
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
@@ -93,13 +94,14 @@ def parse_input_args():
     parser_eval.add_argument("--rope_param_angStiffness", type=str, default=None)
     
     parser_eval.add_argument("--parallel", action="store_true")
+    parser_eval.add_argument("--gpu", action="store_true")
 
     args = parser.parse_args()
     if not args.animation:
         args.plotting = 0
     return args
 
-def run_and_record(args, reg_and_traj_transferer, lfd_env):
+def run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -132,8 +134,10 @@ def run_and_record(args, reg_and_traj_transferer, lfd_env):
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
 
-            action2q_value = reg_and_traj_transferer.registration_factory.batch_cost(next_state)
-            q_values_root, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
+            try:
+                agenda, q_values_root = action_selection.plan_agenda(next_state)
+            except ValueError: #e.g. if cloud is empty - any action is hopeless
+                break
 
             unable_to_generalize = False
             for i_choice in range(num_actions_to_try):
@@ -165,8 +169,11 @@ def run_and_record(args, reg_and_traj_transferer, lfd_env):
             if not eval_stats.feasible:  # If not feasible, restore state
                 next_state = state
             
-            # ipy.embed()
-            save_recorded_traj(args, lfd_env.robot, state, next_state, int(i_task), i_step)
+            try:
+                save_recorded_traj(args, lfd_env.robot, state, next_state, int(i_task), i_step)
+            except:
+                ipy.embed()
+
 
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
@@ -317,14 +324,22 @@ def setup_lfd_environment(args):
     return lfd_env
 
 def setup_registration_and_trajectory_transferer(args, lfd_env):
-    if args.eval.reg_type == 'segment':
-        reg_factory = TpsSegmentRegistrationFactory(GlobalVars.demos)
-    elif args.eval.reg_type == 'rpm':
-        reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
-    elif args.eval.reg_type == 'bij':
-        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter
+    if args.eval.gpu:
+        if args.eval.reg_type == 'rpm':
+            reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
+        elif args.eval.reg_type == 'bij':
+            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile) # TODO remove n_iter
+        else:
+            raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:
-        raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
+        if args.eval.reg_type == 'segment':
+            reg_factory = TpsSegmentRegistrationFactory(GlobalVars.demos)
+        elif args.eval.reg_type == 'rpm':
+            reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
+        elif args.eval.reg_type == 'bij':
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos) # TODO remove n_iter        
+        else:
+            raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
     if args.eval.transferopt == 'pose' or args.eval.transferopt == 'finger':
         traj_transferer = PoseTrajectoryTransferer(lfd_env, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
@@ -346,10 +361,11 @@ def main():
     trajoptpy.SetInteractive(args.interactive)
     lfd_env = setup_lfd_environment(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
+    action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
 
     if args.subparser_name == "eval":
         start = time.time()
-        run_and_record(args, reg_and_traj_transferer, lfd_env)
+        run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env)
         print "run time is:\t{}".format(time.time() - start)
     else:
         raise RuntimeError("Invalid subparser name")

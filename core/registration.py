@@ -1,8 +1,15 @@
 from __future__ import division
 
-from constants import EXACT_LAMBDA, N_ITER_EXACT
+from constants import EXACT_LAMBDA, DEFAULT_LAMBDA, N_ITER_EXACT, N_ITER_CHEAP
 import numpy as np
 from rapprentice import registration
+
+import tpsopt
+from constants import BEND_COEF_DIGITS, MAX_CLD_SIZE
+from tpsopt.tps import tps_kernel_matrix
+from tpsopt.registration import loglinspace
+from tpsopt.batchtps import GPUContext, TgtContext, SrcContext, batch_tps_rpm_bij
+from tpsopt.transformations import EmptySolver, TPSSolver
 
 import IPython as ipy
 
@@ -128,9 +135,24 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
 
 class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
     # TODO Dylan
-    def __init__(self, demos):
-        raise NotImplementedError
-    
+    def __init__(self, demos, filename, em_iter=1, rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1],
+                    outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
+        super(GpuTpsRpmBijRegistrationFactory, self).__init__(demos)
+        self.em_iter = em_iter
+        self.rad_init = rad_init
+        self.rad_final = rad_final
+        self.rot_reg = rot_reg
+        self.outlierprior = outlierprior
+        self.outlierfrac = outlierfrac
+        self.cost_type = cost_type
+        self.prior_fn = prior_fn
+        self.bend_coefs = np.around(loglinspace(DEFAULT_LAMBDA[0], DEFAULT_LAMBDA[1], N_ITER_CHEAP), BEND_COEF_DIGITS)
+        self.exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
+        self.f_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
+        self.g_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
+        self.src_ctx = GPUContext(self.bend_coefs)
+        self.src_ctx.read_h5(filename)
+
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         """
         TODO: use em_iter (?)
@@ -139,12 +161,21 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
             vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
         else:
             vis_cost_xy = None
-        old_cloud = np.random.permutation(demo.scene_state.cloud)[:150]
-        new_cloud = np.random.permutation(test_scene_state.cloud)[:150]
-        x_nd = old_cloud[:,:3]
-        y_md = new_cloud[:,:3]
-        if len(x_nd) > MAX_CLD_SIZE or len(y_md) > MAX_CLD_SIZE:
-            ipy.embed()
+
+        old_cloud = demo.scene_state.cloud[:,:3]
+        new_cloud = test_scene_state.cloud[:,:3]
+        x_nd = np.array(old_cloud)
+        y_md = np.array(new_cloud)
+        if len(old_cloud) > MAX_CLD_SIZE:
+            x_nd = x_nd[np.random.choice(range(len(x_nd)), size=MAX_CLD_SIZE, replace=False)]
+            #x_nd = old_cloud[np.random.random_integers(len(old_cloud)-1, size=min(MAX_CLD_SIZE, len(old_cloud)))]
+        if len(new_cloud) > MAX_CLD_SIZE:
+            y_md = y_md[np.random.choice(range(len(y_md)), size=MAX_CLD_SIZE, replace=False)]
+            #y_md = new_cloud[np.random.random_integers(len(new_cloud)-1, size=min(MAX_CLD_SIZE, len(new_cloud)))]
+
+        # if len(x_nd) != len(old_cloud) or len(y_md) != len(new_cloud):
+        #     ipy.embed()
+
         scaled_x_nd, src_params = registration.unit_boxify(x_nd)
         scaled_y_md, targ_params = registration.unit_boxify(y_md)
 
@@ -153,7 +184,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         y_K_nn = tps_kernel_matrix(scaled_y_md)
         gsolve = self.g_empty_solver.get_solver(scaled_y_md, y_K_nn, self.exact_bend_coefs)
 
-        x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
+        x_weights = np.ones(len(x_nd)) * 1.0/len(x_nd)
         (f,g), corr = tpsopt.registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, fsolve, gsolve,
                                     n_iter = N_ITER_EXACT,
                                     reg_init = EXACT_LAMBDA[0],
@@ -182,7 +213,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         tgt_ctx = TgtContext(self.src_ctx)
         cloud = test_scene_state.cloud
         if len(cloud) > MAX_CLD_SIZE:
-            cloud = np.random.permutation(cloud)[:150]  #randomly sample cloud below max size in case leaf size was slightly too big
+            cloud = cloud[np.random.choice(range(len(cloud)), size=MAX_CLD_SIZE, replace=False)]
         tgt_ctx.set_cld(cloud)
         cost_array = batch_tps_rpm_bij(self.src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, #same as reg init and reg final?
                       outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, component_cost=False)

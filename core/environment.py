@@ -45,6 +45,8 @@ class SimulationEnvironment(LfdEnvironment):
         self.bt_robot = None   
         self.dyn_bt_objs = []
         self._create_bullet()
+        self.handles = []
+
 
     def execute_augmented_trajectory(self, aug_traj, step_viewer=1, interactive=False):
         open_or_close_finger_traj = np.zeros(aug_traj.n_steps, dtype=bool)
@@ -89,11 +91,15 @@ class SimulationEnvironment(LfdEnvironment):
     def observe_scene(self):
         T_w_k = self.robot.GetLink("wide_stereo_optical_frame").GetTransform() # TODO: use the actual kinect's frame
 
+        for h in self.handles: h.Close()
+
         pts = []
         for sim_obj in self.dyn_sim_objs:
             for bt_obj in sim_obj.get_bullet_objects():
                 pts.append(self.raycast_cloud(T_w_k, bt_obj))
         full_cloud = np.concatenate(pts)
+        if len(full_cloud) > 0:
+            self.handles.append(self.env.plot3(full_cloud, 5, np.array([(0,1,0,1) for pt in full_cloud])))
 
         return demonstration.SceneState(full_cloud, downsample_size=self.downsample_size)
 
