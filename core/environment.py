@@ -7,6 +7,7 @@ import numpy as np
 import demonstration, simulation_object, sim_util
 import IPython as ipy
 
+
 class LfdEnvironment(object):
     def __init__(self):
         self.ds_size = None
@@ -16,6 +17,7 @@ class LfdEnvironment(object):
 
     def observe_scene(self):
         raise NotImplementedError
+
 
 class SimulationEnvironment(LfdEnvironment):
     """
@@ -437,6 +439,7 @@ class SimulationEnvironment(LfdEnvironment):
                         for link in bt_obj.GetKinBody().GetLinks():
                             cc.IncludeCollisionPair(finger_link, link)
 
+
 class GroundTruthRopeSimulationEnvironment(SimulationEnvironment):
     def __init__(self, sim_objs, upsample=0, upsample_rad=1, downsample_size=0):
         super(GroundTruthRopeSimulationEnvironment, self).__init__(sim_objs, downsample_size=downsample_size)
@@ -448,7 +451,12 @@ class GroundTruthRopeSimulationEnvironment(SimulationEnvironment):
             if isinstance(sim_obj, simulation_object.RopeSimulationObject):
                 rope_sim_obj = sim_obj
                 break
-        return demonstration.GroundTruthRopeSceneState(rope_sim_obj.rope.GetControlPoints(), rope_sim_obj.rope_params.radius, upsample=self.upsample, upsample_rad=self.upsample_rad, downsample_size=self.downsample_size)
+        return demonstration.GroundTruthRopeSceneState(rope_sim_obj.rope.GetControlPoints(), 
+                                                        rope_sim_obj.rope_params.radius,
+                                                        upsample=self.upsample, 
+                                                        upsample_rad=self.upsample_rad, 
+                                                        downsample_size=self.downsample_size)
+
 
 class RecordingSimulationEnvironment(SimulationEnvironment):
     def __init__(self, sim_objs, upsample=0, upsample_rad=1, downsample_size=0):
@@ -472,11 +480,20 @@ class RecordingSimulationEnvironment(SimulationEnvironment):
                 self.cur_step_states.append(cur_state)
                 self.step()
             sim_callback = sim_cb
-        return super(RecordingSimulationEnvironment, self).execute_trajectory(full_traj, step_viewer=step_viewer, interactive=interactive, max_cart_vel_trans_traj=max_cart_vel_trans_traj, sim_callback=sim_callback)
+        return super(RecordingSimulationEnvironment, self).execute_trajectory(full_traj, 
+                                                                                step_viewer=step_viewer, 
+                                                                                interactive=interactive, 
+                                                                                max_cart_vel_trans_traj=max_cart_vel_trans_traj, 
+                                                                                sim_callback=sim_callback)
 
     def observe_scene(self):
         for sim_obj in self.sim_objs:
             if isinstance(sim_obj, simulation_object.RopeSimulationObject):
                 rope_sim_obj = sim_obj
                 break
-        return demonstration.RecordingRopePositionsSceneState(rope_sim_obj.rope.GetControlPoints(), self.cur_step_states, rope_sim_obj.rope_params.radius, upsample=self.upsample, upsample_rad=self.upsample_rad, downsample_size=self.downsample_size)
+        return demonstration.RecordingRopePositionsSceneState(rope_sim_obj.rope.GetControlPoints(), 
+                                                                self.cur_step_states, 
+                                                                rope_sim_obj.rope_params.radius, 
+                                                                upsample=self.upsample, 
+                                                                upsample_rad=self.upsample_rad, 
+                                                                downsample_size=self.downsample_size)

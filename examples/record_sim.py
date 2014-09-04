@@ -101,7 +101,11 @@ def parse_input_args():
         args.plotting = 0
     return args
 
+def run_pid(args, action_selection, reg_and_traj_transferer, lfd_env):
+    pass
+
 def run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env):
+
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -119,7 +123,9 @@ def run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env):
         sim_util.reset_arms_to_side(lfd_env)
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         rope = RopeSimulationObject("rope", init_rope_nodes, rope_params)
+
         lfd_env.add_object(rope)
+        lfd_env.settle(step_viewer=args.animation)
         
         next_state = lfd_env.observe_scene()
         
@@ -130,6 +136,7 @@ def run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env):
             redprint("task %s step %i" % (i_task, i_step))
             
             state = next_state
+            orig_rope_nodes = rope.get_bullet_objects()[0].GetNodes()
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
@@ -147,6 +154,7 @@ def run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env):
                 redprint("TRYING %s"%agenda[i_choice])
 
                 best_root_action = agenda[i_choice]
+
                 start_time = time.time()
                 test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], state, plotting=args.plotting)
                 lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
@@ -171,28 +179,24 @@ def run_and_record(args, action_selection, reg_and_traj_transferer, lfd_env):
             
             try:
                 save_recorded_traj(args, lfd_env.robot, state, next_state, int(i_task), i_step)
-            except:
+            except Exception as err:
+                print err
                 ipy.embed()
-
 
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if args.eval.ground_truth:
-                if is_knot(next_state.rope_nodes): #next_state is a GroundTruthRopeSceneState so it has rope_nodes
-                    num_successes += 1
-                    break;
-            else:
-                if is_knot(rope.get_bullet_objects()[0].GetNodes()): # have to observe rope state independently
-                    num_successes += 1
-                    break;
+            if is_knot(rope.rope.GetControlPoints()):
+                num_successes += 1
+                break;
 
         lfd_env.remove_object(rope)
         
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
+
 
 def setup_log_file(args):
     if args.log:
@@ -243,16 +247,36 @@ def save_recorded_traj(args, robot, start_state, end_state, demo_ind, seg_ind):
         hdf = h5py.File(args.eval.savefile, 'a')
     else:
         hdf = h5py.File(args.eval.savefile, 'w')
-    demo_name = "demo%03i-seg%02i"%(demo_ind, seg_ind)
+    demo_name = "demo%02i-seg%02i"%(demo_ind, seg_ind)
     hdf.create_group(demo_name)
     hdf[demo_name].create_dataset("rope_nodes", data=start_state.rope_nodes)
-    for manip in robot.GetManipulators():
-        manip_name = manip.GetName()
-        hdf[demo_name].create_group(manip_name)
-        joints = np.array([step.manip_trajs[manip_name][0] for step in end_state.rope_history])
-        dof_inds = np.array([step.manip_trajs[manip_name][1] for step in end_state.rope_history])
-        hdf[demo_name][manip_name].create_dataset("joints", data=joints)
-        hdf[demo_name][manip_name].create_dataset("dof_inds", data=dof_inds)
+    hdf[demo_name].create_dataset("cloud", data=start_state.rope_nodes)
+    
+    # hdf[demo_name].create_group("joint_states")
+    # joint_names = np.zeros(5) #in recording these come from the bag file; check out record_demo to see where it gets them
+    # traj = np.zeros(5) #ditto; how to format this?
+    # hdf[demo_name]["joint_states"].create_dataset("name", data=joint_names)
+    # hdf[demo_name]["joint_states"].create_dataset("position", data=traj)
+
+    for manip_name in ["leftarm", "rightarm"]:
+        manip = robot.GetManipulator(manip_name)
+        joints = np.array([step.manip_trajs[manip_name][0] for step in end_state.history])
+        hdf[demo_name].create_dataset(manip_name, data=joints)
+        linkname = {"leftarm":"l_gripper_tool_frame", "rightarm":"r_gripper_tool_frame"}[manip_name]
+        tf_link = robot.GetLink(linkname)
+        hmats = []
+        for step in end_state.history:
+            joint_vals, dof_inds = step.manip_trajs[manip_name]
+            robot.SetDOFValues(joint_vals, dof_inds)
+            hmats.append(tf_link.GetTransform())
+        hdf[demo_name].create_group(linkname)
+        hdf[demo_name][linkname]["hmat"] = np.array(hmats) #"hmat" is unnecessary, kept for backwards compatibility. TODO: just make linkname a dataset
+    for lr in 'lr':
+        joint_vals = []
+        for step in end_state.history:
+            joint_vals.append(step.gripper_vals["%s_gripper_l_finger_joint"%lr]) #why is it the l_finger joint?
+        hdf[demo_name].create_dataset("%s_gripper_joint"%lr, data=np.array(joint_vals))
+    hdf.close()
 
 def setup_lfd_environment(args):
     actions = h5py.File(args.eval.actionfile, 'r')
