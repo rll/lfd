@@ -127,7 +127,7 @@ class SimulationEnvironment(LfdEnvironment):
         
         return pts
 
-    def open_gripper(self, lr, target_val=None, step_viewer=1):
+    def open_gripper(self, lr, target_val=None, step_viewer=1, max_vel=.02):
         self._remove_constraints(lr)
         
         # generate gripper finger trajectory
@@ -135,7 +135,7 @@ class SimulationEnvironment(LfdEnvironment):
         start_val = self.robot.GetDOFValues([joint_ind])[0]
         if target_val is None:
             target_val = sim_util.get_binary_gripper_angle(True)
-        joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / .02))
+        joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / max_vel))
 
         # execute gripper finger trajectory
         for val in joint_traj:
@@ -144,39 +144,45 @@ class SimulationEnvironment(LfdEnvironment):
         if step_viewer:
             self.viewer.Step()
 
-    def close_gripper(self, lr, step_viewer=1, close_dist_thresh=0.0025, grab_dist_thresh=0.005):
+    def close_gripper(self, lr, step_viewer=1, max_vel=.02, close_dist_thresh=0.004, grab_dist_thresh=0.005):
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = self.robot.GetDOFValues([joint_ind])[0]
-        target_val = 0.0
-        joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / .02))
-
+        
         # execute gripper finger trajectory
         dyn_bt_objs = [bt_obj for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects()]
-        stop_closing = False
-        for val in joint_traj:
-            self.robot.SetDOFValues([val], [joint_ind])
-            self.step()
-            if step_viewer:
-                self.viewer.Step()
-            
+        next_val = start_val
+        while next_val:
             flr2finger_pts_grid = self._get_finger_pts_grid(lr)
             ray_froms, ray_tos = flr2finger_pts_grid['l'], flr2finger_pts_grid['r']
 
             # stop closing if any ray hits a dynamic object within a distance of close_dist_thresh from both sides
+            next_vel = max_vel
             for bt_obj in dyn_bt_objs:
                 from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
-                for from_to_rc in from_to_ray_collisions:
-                    if np.linalg.norm(from_to_rc.pt - from_to_rc.rayFrom) < close_dist_thresh:
-                        to_from_ray_collisions = self.bt_env.RayTest(from_to_rc.rayTo[None,:], from_to_rc.rayFrom[None,:], bt_obj)
-                        for to_from_rc in to_from_ray_collisions:
-                            if np.linalg.norm(to_from_rc.pt - to_from_rc.rayFrom) < close_dist_thresh:
-                                stop_closing = True
-                                break
-                if stop_closing:
-                    break
-            if stop_closing:
+                to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
+                rays_dists = np.inf * np.ones((len(ray_froms), 2))
+                for rc in from_to_ray_collisions:
+                    ray_id = np.argmin(np.apply_along_axis(np.linalg.norm, 1, ray_froms - rc.rayFrom))
+                    rays_dists[ray_id,0] = np.linalg.norm(rc.pt - rc.rayFrom)
+                for rc in to_from_ray_collisions:
+                    ray_id = np.argmin(np.apply_along_axis(np.linalg.norm, 1, ray_tos - rc.rayFrom))
+                    rays_dists[ray_id,1] = np.linalg.norm(rc.pt - rc.rayFrom)
+                colliding_rays_inds = np.logical_and(rays_dists[:,0] != np.inf, rays_dists[:,1] != np.inf)
+                if np.any(colliding_rays_inds):
+                    rays_dists = rays_dists[colliding_rays_inds,:]
+                    if np.any(np.logical_and(rays_dists[:,0] < close_dist_thresh, rays_dists[:,1] < close_dist_thresh)):
+                        next_vel = 0
+                    else:
+                        next_vel = np.minimum(next_vel, np.min(rays_dists.sum(axis=1)))
+            if next_vel == 0:
                 break
+            next_val = np.maximum(next_val - next_vel, 0)
+
+            self.robot.SetDOFValues([next_val], [joint_ind])
+            self.step()
+            if step_viewer:
+                self.viewer.Step()
         
         # add constraints at the points where a ray hits a dynamic link within a distance of grab_dist_thresh
         for bt_obj in dyn_bt_objs:
