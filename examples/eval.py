@@ -27,6 +27,7 @@ from rapprentice import math_utils as mu
 from rapprentice.yes_or_no import yes_or_no
 import pdb, time
 
+from mmqe import search
 from ropesimulation.transfer_simulate import TransferSimulate
 from trajectory_transfer.transfer import Transfer
 
@@ -46,6 +47,15 @@ class GlobalVars:
     actions = None
     actions_cache = None
     demos = None
+    features = None
+
+def select_best(args_eval, state, expander):
+    actions = GlobalVars.demos.keys()
+    #assert actions == GlobalVars.demos.keys()
+    def evaluator(state):
+        return np.dot(GlobalVars.features.features(state), GlobalVars.features.weights)
+    return search.beam_search(state, actions, expander, evaluator, None,
+                       width=args_eval.width, depth=args_eval.depth)
 
 def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
@@ -89,7 +99,9 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             eval_stats = eval_util.EvalStats()
             
             try:
-                agenda, q_values_root = action_selection.plan_agenda(next_state)
+                agenda, q_values_root = action_selection.plan_agenda(state)
+                # agenda, q_values_root = select_best(args.eval, state, None)
+                # agenda, q_values_root = action_selection.plan_agenda(next_state)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 break
 
@@ -555,6 +567,7 @@ def get_features(args):
         pass
     if args.eval.weightfile:
         feats.load_weights(args.eval.weightfile)
+    GlobalVars.features = feats
     return feats
 
 
@@ -573,12 +586,13 @@ def main():
     setup_log_file(args)
 
     set_global_vars(args)
+    get_features(args)
     trajoptpy.SetInteractive(args.interactive)
     lfd_env = setup_lfd_environment(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
     # action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
     # look_ahead_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
-    action_selection = MmqeActionSelection(reg_and_traj_transferer.registration_factory, get_features(args), GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
+    action_selection = MmqeActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
 
     if args.subparser_name == "eval":
         start = time.time()

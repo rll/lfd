@@ -38,10 +38,10 @@ class GreedyActionSelection(ActionSelection):
 
 class MmqeActionSelection(ActionSelection):
     # TODO Chelsea
-    def __init__(self, registration_factory, features, demos,
+    def __init__(self, registration_factory, features, actions, demos,
                  width=3, depth=2, simulator=None, lfd_env=None):
         self.features = features
-        self.actions = demos.keys()
+        self.actions = actions.keys()
         self.demos = demos
         self.width = width
         self.depth = depth
