@@ -2,6 +2,7 @@
 
 from __future__ import division
 
+import copy
 import pprint
 import argparse
 from core import demonstration, registration, transfer, sim_util
@@ -14,16 +15,20 @@ from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFa
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
+from core.action_selection import MmqeActionSelection
 
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
- 
+
 from rapprentice import berkeley_pr2, \
      animate_traj, ros2rave, plotting_openrave, task_execution, \
      tps, func_utils, resampling, ropesim, rope_initialization
 from rapprentice import math_utils as mu
 from rapprentice.yes_or_no import yes_or_no
 import pdb, time
+
+from ropesimulation.transfer_simulate import TransferSimulate
+from trajectory_transfer.transfer import Transfer
 
 import trajoptpy, openravepy
 from rapprentice.knot_classifier import isKnot as is_knot, calculateCrossings
@@ -68,15 +73,15 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
 
         lfd_env.add_object(rope)
         lfd_env.settle(step_viewer=args.animation)
-        
+
         next_state = lfd_env.observe_scene()
-        
+
         if args.animation:
             lfd_env.viewer.Step()
 
         for i_step in range(args.eval.num_steps):
             redprint("task %s step %i" % (i_task, i_step))
-            
+
             state = next_state
             orig_rope_nodes = rope.get_bullet_objects()[0].GetNodes()
 
@@ -322,16 +327,22 @@ def parse_input_args():
 
     subparsers = parser.add_subparsers(dest='subparser_name')
 
+    # arguments for eval
     parser_eval = subparsers.add_parser('eval')
     
     parser_eval.add_argument('actionfile', type=str, nargs='?', default='../bigdata/misc/overhand_actions.h5')
     parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='../bigdata/misc/holdout_set_Jun20_0.10.h5')
+    parser.add_argument("--landmarkfile", type=str, default='../data/misc/landmarks.h5')
+
+    parser_eval.add_argument('--weightfile', type=str, default='')
+    parser_eval.add_argument('feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'], default='base')
 
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger'], default='finger')
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
     parser_eval.add_argument("--unified", type=int, default=0)
     
     parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
+    parser_eval.add_argument("--downsample", type=int, default=1)
     parser_eval.add_argument("--downsample_size", type=int, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
@@ -340,8 +351,11 @@ def parse_input_args():
     parser_eval.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser_eval.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
-    
+
     parser_eval.add_argument("--search_until_feasible", action="store_true")
+
+    parser_eval.add_argument("--width", type=int, default=1)
+    parser_eval.add_argument("--depth", type=int, default=0)
 
     parser_eval.add_argument("--alpha", type=float, default=1000000.0)
     parser_eval.add_argument("--beta_pos", type=float, default=1000000.0)
@@ -353,14 +367,17 @@ def parse_input_args():
     parser_eval.add_argument("--dof_limits_factor", type=float, default=1.0)
     parser_eval.add_argument("--rope_param_radius", type=str, default=None)
     parser_eval.add_argument("--rope_param_angStiffness", type=str, default=None)
-    
+
+    parser_eval.add_argument("--use_color", type=int, default=0)
+
+
     parser_eval.add_argument("--parallel", action="store_true")
     parser_eval.add_argument("--gpu", action="store_true", default=False)
 
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
     parser_replay.add_argument("--compute_traj_steps", type=int, default=[], nargs='*', metavar='i_step', help="recompute trajectories for the i_step of all tasks")
-    parser_replay.add_argument("--simulate_traj_steps", type=int, default=None, nargs='*', metavar='i_step', 
+    parser_replay.add_argument("--simulate_traj_steps", type=int, default=None, nargs='*', metavar='i_step',
                                help="if specified, restore the rope state from file and then simulate for the i_step of all tasks")
                                # if not specified, the rope state is not restored from file, but it is as given by the sequential simulation
 
@@ -417,7 +434,7 @@ def setup_lfd_environment(args):
     
     init_rope_xyz, init_joint_names, init_joint_values = sim_util.load_fake_data_segment(actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
     table_height = init_rope_xyz[:,2].mean() - .02
-    
+ 
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
@@ -431,7 +448,7 @@ def setup_lfd_environment(args):
         sim_objs.append(CylinderSimulationObject("cylinder1", [.7,-.43,table_height+(.01+.5)], .12, 1., dynamic=False))
         sim_objs.append(CylinderSimulationObject("cylinder2", [.4,.2,table_height+(.01+.65)], .06, .5, dynamic=False))
         sim_objs.append(CylinderSimulationObject("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5, dynamic=False))
-    
+
     if args.eval.ground_truth:
         lfd_env = GroundTruthRopeSimulationEnvironment(sim_objs, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
     else:
@@ -441,7 +458,7 @@ def setup_lfd_environment(args):
     values, dof_inds = zip(*[(value, dof_ind) for value, dof_ind in zip(init_joint_values, dof_inds) if dof_ind != -1])
     lfd_env.robot.SetDOFValues(values, dof_inds) # this also sets the torso (torso_lift_joint) to the height in the data
     sim_util.reset_arms_to_side(lfd_env)
-    
+
     if args.animation:
         lfd_env.viewer = trajoptpy.GetViewer(lfd_env.env)
         if os.path.isfile(args.window_prop_file) and os.path.isfile(args.camera_matrix_file):
@@ -482,6 +499,7 @@ def setup_lfd_environment(args):
                 active_dof_limits[0][active_dof_indices.tolist().index(ind)] = new_limits[0,i]
                 active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
         lfd_env.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
+ 
     return lfd_env
 
 def setup_registration_and_trajectory_transferer(args, lfd_env):
@@ -515,6 +533,31 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
         reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
     return reg_and_traj_transferer
 
+def get_features(args):
+    feat_type = args.eval.feature_type
+    if feat_type== 'base':
+        from mmqe.features import BatchRCFeats as feat
+    elif feat_type == 'mul':
+        from mmqe.features import MulFeats as feat
+    elif feat_type == 'mul_quad':
+        from mmqe.features import QuadMulFeats as feat
+    elif feat_type == 'mul_s':
+        from mmqe.features import SimpleMulFeats as feat
+    elif feat_type == 'landmark':
+        from mmqe.features import LandmarkFeats as feat
+    else:
+        raise ValueError('Incorrect Feature Type')
+
+    feats = feat(args.eval.actionfile)
+    try:
+        feats.set_landmark_file(args.landmarkfile)
+    except AttributeError:
+        pass
+    if args.eval.weightfile:
+        feats.load_weights(args.eval.weightfile)
+    return feats
+
+
 def main():
     args = parse_input_args()
 
@@ -526,14 +569,16 @@ def main():
         args.eval = loaded_args.eval
     else:
         raise RuntimeError("Invalid subparser name")
-    
+
     setup_log_file(args)
-    
+
     set_global_vars(args)
     trajoptpy.SetInteractive(args.interactive)
     lfd_env = setup_lfd_environment(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
-    action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
+    #action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
+    look_ahead_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
+    action_selection = MmqeActionSelection(reg_and_traj_transferer.registration_factory, get_features(args), GlobalVars.demos, simulator=look_ahead_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
 
     if args.subparser_name == "eval":
         start = time.time()

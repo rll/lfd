@@ -443,6 +443,9 @@ class SimulationEnvironment(LfdEnvironment):
                         for link in bt_obj.GetKinBody().GetLinks():
                             cc.IncludeCollisionPair(finger_link, link)
 
+    def is_grabbing_rope(self, lr):
+        return bool(self.constraints[lr])
+
 class GroundTruthRopeSimulationEnvironment(SimulationEnvironment):
     def __init__(self, sim_objs, upsample=0, upsample_rad=1, downsample_size=0):
         super(GroundTruthRopeSimulationEnvironment, self).__init__(sim_objs, downsample_size=downsample_size)
