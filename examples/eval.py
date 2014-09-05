@@ -576,9 +576,9 @@ def main():
     trajoptpy.SetInteractive(args.interactive)
     lfd_env = setup_lfd_environment(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
-    #action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
-    look_ahead_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
-    action_selection = MmqeActionSelection(reg_and_traj_transferer.registration_factory, get_features(args), GlobalVars.demos, simulator=look_ahead_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
+    # action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
+    # look_ahead_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
+    action_selection = MmqeActionSelection(reg_and_traj_transferer.registration_factory, get_features(args), GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
 
     if args.subparser_name == "eval":
         start = time.time()
