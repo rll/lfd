@@ -15,7 +15,7 @@ from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFa
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
-from core.action_selection import MmqeActionSelection
+from core.action_selection import FeatureActionSelection
 
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
@@ -48,14 +48,6 @@ class GlobalVars:
     actions_cache = None
     demos = None
     features = None
-
-def select_best(args_eval, state, expander):
-    actions = GlobalVars.demos.keys()
-    #assert actions == GlobalVars.demos.keys()
-    def evaluator(state):
-        return np.dot(GlobalVars.features.features(state), GlobalVars.features.weights)
-    return search.beam_search(state, actions, expander, evaluator, None,
-                       width=args_eval.width, depth=args_eval.depth)
 
 def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
@@ -100,8 +92,6 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             
             try:
                 agenda, q_values_root = action_selection.plan_agenda(state)
-                # agenda, q_values_root = select_best(args.eval, state, None)
-                # agenda, q_values_root = action_selection.plan_agenda(next_state)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 break
 
@@ -346,6 +336,7 @@ def parse_input_args():
     parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='../bigdata/misc/holdout_set_Jun20_0.10.h5')
     parser.add_argument("--landmarkfile", type=str, default='../data/misc/landmarks.h5')
 
+    parser_eval.add_argument('action_selection', type=str, nargs='?', choices=['greedy', 'feature'])
     parser_eval.add_argument('--weightfile', type=str, default='')
     parser_eval.add_argument('feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'], default='base')
 
@@ -473,7 +464,8 @@ def setup_lfd_environment(args):
 
     if args.animation:
         lfd_env.viewer = trajoptpy.GetViewer(lfd_env.env)
-        if os.path.isfile(args.window_prop_file) and os.path.isfile(args.camera_matrix_file):
+        if False:
+        # if os.path.isfile(args.window_prop_file) and os.path.isfile(args.camera_matrix_file):
             print "loading window and camera properties"
             window_prop = np.loadtxt(args.window_prop_file)
             camera_matrix = np.loadtxt(args.camera_matrix_file)
@@ -590,9 +582,10 @@ def main():
     trajoptpy.SetInteractive(args.interactive)
     lfd_env = setup_lfd_environment(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
-    # action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
-    # look_ahead_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
-    action_selection = MmqeActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
+    if args.eval.action_selection == 'greedy':
+        action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
+    else:
+        action_selection = FeatureActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
 
     if args.subparser_name == "eval":
         start = time.time()

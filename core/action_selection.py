@@ -36,8 +36,7 @@ class GreedyActionSelection(ActionSelection):
         q_values, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
         return agenda, q_values
 
-class MmqeActionSelection(ActionSelection):
-    # TODO Chelsea
+class FeatureActionSelection(ActionSelection):
     def __init__(self, registration_factory, features, actions, demos,
                  width=3, depth=2, simulator=None, lfd_env=None):
         self.features = features
