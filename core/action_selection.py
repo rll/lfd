@@ -41,12 +41,13 @@ class FeatureActionSelection(ActionSelection):
                  width=3, depth=2, simulator=None, lfd_env=None):
         self.features = features
         self.actions = actions.keys()
+        self.features.set_name2ind(self.actions)
         self.demos = demos
         self.width = width
         self.depth = depth
         self.transferer = simulator
         self.lfd_env = lfd_env
-        super(MmqeActionSelection, self).__init__(registration_factory)
+        super(FeatureActionSelection, self).__init__(registration_factory)
 
     def plan_agenda(self, scene_state):
         def evaluator(state):

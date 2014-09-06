@@ -377,7 +377,7 @@ class SimulationEnvironment(LfdEnvironment):
         for lr in 'lr':
             assert not self.constraints[lr]
             assert not self.constraints_links[lr]
-        
+ 
         self._include_gripper_finger_collisions()
 
         # remove bullet environment and dynamic objects in it
