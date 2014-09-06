@@ -28,8 +28,6 @@ from rapprentice.yes_or_no import yes_or_no
 import pdb, time
 
 from mmqe import search
-from ropesimulation.transfer_simulate import TransferSimulate
-from trajectory_transfer.transfer import Transfer
 
 import trajoptpy, openravepy
 from rapprentice.knot_classifier import isKnot as is_knot, calculateCrossings
