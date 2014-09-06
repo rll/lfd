@@ -38,7 +38,7 @@ class GreedyActionSelection(ActionSelection):
 
 class FeatureActionSelection(ActionSelection):
     def __init__(self, registration_factory, features, actions, demos,
-                 width=3, depth=2, simulator=None, lfd_env=None):
+                 width, depth, simulator=None, lfd_env=None):
         self.features = features
         self.actions = actions.keys()
         self.features.set_name2ind(self.actions)
