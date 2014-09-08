@@ -66,70 +66,54 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
     for i_task, demo_id_rope_nodes in holdout_items:
         redprint("task %s" % i_task)
-        sim_util.reset_arms_to_side(sim)
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         rope = RopeSimulationObject("rope", init_rope_nodes, rope_params)
-
-        # f = h5py.File("cpu-gpu-compare")
-        # rope_points = f[str(int(i_task)+1)][:]
-        # rope = RopeSimulationObject("rope", rope_points, rope_params)
-        # f.close()
 
         sim.add_objects([rope])
         sim.settle(step_viewer=args.animation)
         
-        next_state = lfd_env.observe_scene()
-        
-        if args.animation:
-            sim.viewer.Step()
-
         for i_step in range(args.eval.num_steps):
             redprint("task %s step %i" % (i_task, i_step))
             
-            state = next_state
-
-            num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
+            sim_util.reset_arms_to_side(sim)
+            if args.animation:
+                sim.viewer.Step()
+            sim_state = sim.get_state()
+            sim.set_state(sim_state)
+            scene_state = lfd_env.observe_scene()
+            
             eval_stats = eval_util.EvalStats()
             
             try:
-                agenda, q_values_root = action_selection.plan_agenda(next_state)
+                agenda, q_values_root = action_selection.plan_agenda(scene_state)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 break
-
-            unable_to_generalize = False
+            
+            eval_stats.generalized = True
+            num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             for i_choice in range(num_actions_to_try):
                 if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
-                    unable_to_generalize = True
+                    eval_stats.generalized = False
                     break
                 redprint("TRYING %s"%agenda[i_choice])
 
                 best_root_action = agenda[i_choice]
 
                 start_time = time.time()
-                test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], state, plotting=args.plotting)
-                lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
-                sim_util.reset_arms_to_side(sim)
-                if args.animation:
-                    sim.viewer.Step()
-                # TODO
-                eval_stats.success = True
-                eval_stats.feasible = True
-                eval_stats.misgrasp = False
-                next_state = lfd_env.observe_scene()
+                test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
+                eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
                 eval_stats.exec_elapsed_time += time.time() - start_time
 
                 if eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action
                      break
-            if unable_to_generalize:
-                 break
             print "BEST ACTION:", best_root_action
 
-            if not eval_stats.feasible:  # If not feasible, restore state
-                next_state = state
-            
-            results = {'state':state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'next_state':next_state, 'eval_stats':eval_stats, 'sim_state':sim.get_state()}
+            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
-
+            
+            if not eval_stats.generalized:
+                break
+            
             if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
@@ -138,9 +122,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             if is_knot(rope.rope.GetControlPoints()):
                 num_successes += 1
                 break;
-            
-            sim.set_state(sim.get_state())
-
+        
         sim.remove_objects([rope])
         
         num_total += 1

@@ -113,7 +113,6 @@ class DynamicSimulation(StaticSimulation):
         self.bt_env = None
         self.bt_robot = None   
         self.dyn_bt_objs = []
-        self._create_bullet() # Is this necessary?
     
     def add_objects(self, sim_objs):
         static_sim_objs = [sim_obj for sim_obj in sim_objs if not sim_obj.dynamic]
@@ -151,8 +150,10 @@ class DynamicSimulation(StaticSimulation):
         set_state(state)
         execution2()
         """
+        self._include_gripper_finger_collisions()
         self._remove_bullet()
         self._create_bullet()
+        self._exclude_gripper_finger_collisions()
         super(DynamicSimulation, self).set_state(state)
         self.update()
 

@@ -2,10 +2,9 @@ from __future__ import division
 
 import openravepy
 import trajoptpy, bulletsimpy
-from rapprentice import animate_traj, ropesim
+from rapprentice import animate_traj, ropesim, eval_util
 import numpy as np
 import demonstration, simulation_object, sim_util
-
 
 class LfdEnvironment(object):
     def __init__(self, world, sim, downsample_size=0):
@@ -31,7 +30,8 @@ class LfdEnvironment(object):
         open_or_close_inds = np.where(open_or_close_finger_traj)[0]
         
         traj, dof_inds = aug_traj.get_full_traj(self.sim.robot)
-        ret = True
+        feasible = True
+        misgrasp = False
         lr2gripper_open = {'l':True, 'r':True}
         for (start_ind, end_ind) in zip(np.r_[0, open_or_close_inds], np.r_[open_or_close_inds+1, aug_traj.n_steps]):
             if aug_traj.lr2open_finger_traj is not None:
@@ -46,7 +46,9 @@ class LfdEnvironment(object):
             if aug_traj.lr2close_finger_traj is not None:
                 for lr in aug_traj.lr2close_finger_traj.keys():
                     if aug_traj.lr2close_finger_traj[lr][start_ind]:
+                        n_cnts = len(self.sim.constraints[lr])
                         self.world.close_gripper(lr, step_viewer=step_viewer)
+                        misgrasp |= len(self.sim.constraints[lr]) == n_cnts
                         lr2gripper_open[lr] = False
             # don't execute trajectory for finger joint if the corresponding gripper is closed
             active_inds = np.ones(len(dof_inds), dtype=bool)
@@ -57,8 +59,12 @@ class LfdEnvironment(object):
                         active_inds[dof_inds.index(joint_ind)] = False
             miniseg_traj = traj[start_ind:end_ind, active_inds]
             miniseg_dof_inds = list(np.asarray(dof_inds)[active_inds])
-            ret &= self.world.execute_trajectory((miniseg_traj, miniseg_dof_inds), step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
-        return ret
+            full_traj = (miniseg_traj, miniseg_dof_inds)
+            feasible &= eval_util.traj_is_safe(self.sim, full_traj, 0)
+            if not feasible:
+                break
+            self.world.execute_trajectory(full_traj, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
+        return feasible, misgrasp
     
     def observe_scene(self):
         full_cloud = self.world.observe_cloud()
