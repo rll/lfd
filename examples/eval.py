@@ -8,8 +8,9 @@ from core import demonstration, registration, transfer, sim_util
 from core.constants import ROPE_RADIUS
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
+from core.simulation import DynamicSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from core.environment import SimulationEnvironment, GroundTruthRopeSimulationEnvironment
+from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
 from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
@@ -42,7 +43,15 @@ class GlobalVars:
     actions_cache = None
     demos = None
 
-def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
+def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim):
+    """TODO
+    
+    Args:
+        action_selection: ActionSelection
+        reg_and_traj_transferer: RegistrationAndTrajectoryTransferer
+        lfd_env: LfdEnvironment
+        sim: DynamicSimulation
+    """
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -57,7 +66,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
 
     for i_task, demo_id_rope_nodes in holdout_items:
         redprint("task %s" % i_task)
-        sim_util.reset_arms_to_side(lfd_env)
+        sim_util.reset_arms_to_side(sim)
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         rope = RopeSimulationObject("rope", init_rope_nodes, rope_params)
 
@@ -66,19 +75,18 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
         # rope = RopeSimulationObject("rope", rope_points, rope_params)
         # f.close()
 
-        lfd_env.add_object(rope)
-        lfd_env.settle(step_viewer=args.animation)
+        sim.add_objects([rope])
+        sim.settle(step_viewer=args.animation)
         
         next_state = lfd_env.observe_scene()
         
         if args.animation:
-            lfd_env.viewer.Step()
+            sim.viewer.Step()
 
         for i_step in range(args.eval.num_steps):
             redprint("task %s step %i" % (i_task, i_step))
             
             state = next_state
-            orig_rope_nodes = rope.get_bullet_objects()[0].GetNodes()
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
@@ -100,9 +108,9 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
                 start_time = time.time()
                 test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], state, plotting=args.plotting)
                 lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
-                sim_util.reset_arms_to_side(lfd_env)
+                sim_util.reset_arms_to_side(sim)
                 if args.animation:
-                    lfd_env.viewer.Step()
+                    sim.viewer.Step()
                 # TODO
                 eval_stats.success = True
                 eval_stats.feasible = True
@@ -119,7 +127,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             if not eval_stats.feasible:  # If not feasible, restore state
                 next_state = state
             
-            results = {'state':state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'next_state':next_state, 'eval_stats':eval_stats, 'sim_state':lfd_env.get_state()}
+            results = {'state':state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'next_state':next_state, 'eval_stats':eval_stats, 'sim_state':sim.get_state()}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
 
             if not eval_stats.feasible:
@@ -130,13 +138,15 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env):
             if is_knot(rope.rope.GetControlPoints()):
                 num_successes += 1
                 break;
+            
+            sim.set_state(sim.get_state())
 
-        lfd_env.remove_object(rope)
+        sim.remove_objects([rope])
         
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env):
+def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
@@ -242,7 +252,7 @@ def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env):
         num_total = len(successes)
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-def replay_on_holdout(args, action_selection, transfer, lfd_env):
+def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
@@ -412,7 +422,7 @@ def set_global_vars(args):
         demo = Demonstration(action, scene_state, aug_traj)
         GlobalVars.demos[action] = demo
 
-def setup_lfd_environment(args):
+def setup_lfd_environment_sim(args):
     actions = h5py.File(args.eval.actionfile, 'r')
     
     init_rope_xyz, init_joint_names, init_joint_values = sim_util.load_fake_data_segment(actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
@@ -432,59 +442,62 @@ def setup_lfd_environment(args):
         sim_objs.append(CylinderSimulationObject("cylinder2", [.4,.2,table_height+(.01+.65)], .06, .5, dynamic=False))
         sim_objs.append(CylinderSimulationObject("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5, dynamic=False))
     
+    sim = DynamicSimulationRobotWorld()
+    world = sim
+    sim.add_objects(sim_objs)
     if args.eval.ground_truth:
-        lfd_env = GroundTruthRopeSimulationEnvironment(sim_objs, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
+        lfd_env = GroundTruthRopeLfdEnvironment(sim, world, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
     else:
-        lfd_env = SimulationEnvironment(sim_objs, downsample_size=args.eval.downsample_size)
+        lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
 
-    dof_inds = sim_util.dof_inds_from_name(lfd_env.robot, '+'.join(init_joint_names))
+    dof_inds = sim_util.dof_inds_from_name(sim.robot, '+'.join(init_joint_names))
     values, dof_inds = zip(*[(value, dof_ind) for value, dof_ind in zip(init_joint_values, dof_inds) if dof_ind != -1])
-    lfd_env.robot.SetDOFValues(values, dof_inds) # this also sets the torso (torso_lift_joint) to the height in the data
-    sim_util.reset_arms_to_side(lfd_env)
+    sim.robot.SetDOFValues(values, dof_inds) # this also sets the torso (torso_lift_joint) to the height in the data
+    sim_util.reset_arms_to_side(sim)
     
     if args.animation:
-        lfd_env.viewer = trajoptpy.GetViewer(lfd_env.env)
+        viewer = trajoptpy.GetViewer(sim.env)
         if os.path.isfile(args.window_prop_file) and os.path.isfile(args.camera_matrix_file):
             print "loading window and camera properties"
             window_prop = np.loadtxt(args.window_prop_file)
             camera_matrix = np.loadtxt(args.camera_matrix_file)
             try:
-                lfd_env.viewer.SetWindowProp(*window_prop)
-                lfd_env.viewer.SetCameraManipulatorMatrix(camera_matrix)
+                viewer.SetWindowProp(*window_prop)
+                viewer.SetCameraManipulatorMatrix(camera_matrix)
             except:
                 print "SetWindowProp and SetCameraManipulatorMatrix are not defined. Pull and recompile Trajopt."
         else:
             print "move viewer to viewpoint that isn't stupid"
             print "then hit 'p' to continue"
-            lfd_env.viewer.Idle()
+            viewer.Idle()
             print "saving window and camera properties"
             try:
-                window_prop = lfd_env.viewer.GetWindowProp()
-                camera_matrix = lfd_env.viewer.GetCameraManipulatorMatrix()
+                window_prop = viewer.GetWindowProp()
+                camera_matrix = viewer.GetCameraManipulatorMatrix()
                 np.savetxt(args.window_prop_file, window_prop, fmt='%d')
                 np.savetxt(args.camera_matrix_file, camera_matrix)
             except:
                 print "GetWindowProp and GetCameraManipulatorMatrix are not defined. Pull and recompile Trajopt."
-        lfd_env.viewer.Step()
+        viewer.Step()
     
     if args.eval.dof_limits_factor != 1.0:
         assert 0 < args.eval.dof_limits_factor and args.eval.dof_limits_factor <= 1.0
-        active_dof_indices = lfd_env.robot.GetActiveDOFIndices()
-        active_dof_limits = lfd_env.robot.GetActiveDOFLimits()
+        active_dof_indices = sim.robot.GetActiveDOFIndices()
+        active_dof_limits = sim.robot.GetActiveDOFLimits()
         for lr in 'lr':
             manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            dof_inds = lfd_env.robot.GetManipulator(manip_name).GetArmIndices()
-            limits = np.asarray(lfd_env.robot.GetDOFLimits(dof_inds))
+            dof_inds = sim.robot.GetManipulator(manip_name).GetArmIndices()
+            limits = np.asarray(sim.robot.GetDOFLimits(dof_inds))
             limits_mean = limits.mean(axis=0)
             limits_width = np.diff(limits, axis=0)
             new_limits = limits_mean + args.eval.dof_limits_factor * np.r_[-limits_width/2.0, limits_width/2.0]
             for i, ind in enumerate(dof_inds):
                 active_dof_limits[0][active_dof_indices.tolist().index(ind)] = new_limits[0,i]
                 active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
-        lfd_env.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
-    return lfd_env
+        sim.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
+    return lfd_env, sim
 
-def setup_registration_and_trajectory_transferer(args, lfd_env):
+def setup_registration_and_trajectory_transferer(args, sim):
     if args.eval.gpu:
         if args.eval.reg_type == 'rpm':
             reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
@@ -503,9 +516,9 @@ def setup_registration_and_trajectory_transferer(args, lfd_env):
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
     if args.eval.transferopt == 'pose' or args.eval.transferopt == 'finger':
-        traj_transferer = PoseTrajectoryTransferer(lfd_env, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
+        traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
         if args.eval.transferopt == 'finger':
-            traj_transferer = FingerTrajectoryTransferer(lfd_env, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost, init_trajectory_transferer=traj_transferer)
+            traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost, init_trajectory_transferer=traj_transferer)
     else:
         raise RuntimeError("Invalid transferopt option %s"%args.eval.transferopt)
     
@@ -531,19 +544,19 @@ def main():
     
     set_global_vars(args)
     trajoptpy.SetInteractive(args.interactive)
-    lfd_env = setup_lfd_environment(args)
-    reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, lfd_env)
+    lfd_env, sim = setup_lfd_environment_sim(args)
+    reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, sim)
     action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
 
     if args.subparser_name == "eval":
         start = time.time()
         if args.eval.parallel:
-            eval_on_holdout_parallel(args, action_selection, reg_and_traj_transferer, lfd_env)
+            eval_on_holdout_parallel(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
         else:
-            eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env)
+            eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
         print "eval time is:\t{}".format(time.time() - start)
     elif args.subparser_name == "replay":
-        replay_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env)
+        replay_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
     else:
         raise RuntimeError("Invalid subparser name")
 

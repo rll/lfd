@@ -5,20 +5,20 @@ import numpy as np
 import trajoptpy
 import demonstration
 from rapprentice import planning, resampling
-import sim_util # TODO fold in sim_util function into LfdEnvironment
+import sim_util
 
 class TrajectoryTransferer(object):
-    def __init__(self, lfd_env, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=None):
+    def __init__(self, sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=None):
         """Inits TrajectoryTransferer
         
         Args:
-            lfd_env: LfdEnvironment
+            sim: StaticSimulation
             beta_pos: penalty coefficient for gripper positions
             gamma: penalty coefficient for joint velocities
             use_collision_cost: if False, collisions are ignored
             init_trajectory_transferer: TrajectoryTransferer used to get a trajectory for initializing the optimization
         """
-        self.lfd_env = lfd_env
+        self.sim = sim
         self.beta_pos = beta_pos
         self.gamma = gamma
         self.use_collision_cost = use_collision_cost
@@ -42,20 +42,20 @@ class TrajectoryTransferer(object):
         raise NotImplementedError
 
 class PoseTrajectoryTransferer(TrajectoryTransferer):
-    def __init__(self, lfd_env, beta_pos, beta_rot, gamma, use_collision_cost, init_trajectory_transferer=None):
-        super(PoseTrajectoryTransferer, self).__init__(lfd_env, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)
+    def __init__(self, sim, beta_pos, beta_rot, gamma, use_collision_cost, init_trajectory_transferer=None):
+        super(PoseTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)
         self.beta_rot = beta_rot
         
     def transfer(self, reg, demo, plotting=False):
         handles = []
         if plotting:
-            viewer = trajoptpy.GetViewer(self.lfd_env.env)
+            viewer = trajoptpy.GetViewer(self.sim.env)
             demo_cloud = demo.scene_state.cloud
             test_cloud = reg.test_scene_state.cloud
             demo_color = demo.scene_state.color
             test_color = reg.test_scene_state.color
-            handles.append(self.lfd_env.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
-            handles.append(self.lfd_env.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
+            handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
+            handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
             viewer.Step()
         
         active_lr = ""
@@ -92,19 +92,19 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
             transformed_ee_trajs_rs.append(transformed_ee_traj_rs)
             
             if plotting:
-                handles.append(self.lfd_env.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
-                handles.append(self.lfd_env.env.drawlinestrip(demo_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
-                handles.append(self.lfd_env.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
+                handles.append(self.sim.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
+                handles.append(self.sim.env.drawlinestrip(demo_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
+                handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
                 viewer.Step()
         
         if not self.init_trajectory_transferer:
             # modify the shoulder joint angle of init_traj to be the limit (highest arm) because this usually gives a better local optima (but this might not be the right thing to do)
-            dof_inds = sim_util.dof_inds_from_name(self.lfd_env.robot, manip_name)
-            joint_ind = self.lfd_env.robot.GetJointIndex("%s_shoulder_lift_joint"%lr)
-            init_traj[:,dof_inds.index(joint_ind)] = self.lfd_env.robot.GetDOFLimits([joint_ind])[0][0]
+            dof_inds = sim_util.dof_inds_from_name(self.sim.robot, manip_name)
+            joint_ind = self.sim.robot.GetJointIndex("%s_shoulder_lift_joint"%lr)
+            init_traj[:,dof_inds.index(joint_ind)] = self.sim.robot.GetDOFLimits([joint_ind])[0][0]
 
         print "planning pose trajectory following"
-        test_traj, obj_value, pose_errs = planning.plan_follow_trajs(self.lfd_env.robot, manip_name, ee_link_names, transformed_ee_trajs_rs, init_traj, 
+        test_traj, obj_value, pose_errs = planning.plan_follow_trajs(self.sim.robot, manip_name, ee_link_names, transformed_ee_trajs_rs, init_traj, 
                                                                        start_fixed=False,
                                                                        use_collision_cost=self.use_collision_cost,
                                                                        beta_pos=self.beta_pos, beta_rot=self.beta_rot)
@@ -117,30 +117,30 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
             manip_name += "+" + finger_name
             test_traj = np.c_[test_traj, demo_aug_traj_rs.lr2finger_traj[lr]]
 
-        full_traj = (test_traj, sim_util.dof_inds_from_name(self.lfd_env.robot, manip_name))
-        test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.lfd_env.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
+        full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
+        test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
         
         if plotting:
             for lr in active_lr:
-                handles.append(self.lfd_env.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+                handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
             viewer.Step()
         
         return test_aug_traj
 
 class FingerTrajectoryTransferer(TrajectoryTransferer):
-    def __init__(self, lfd_env, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=None):
-        super(FingerTrajectoryTransferer, self).__init__(lfd_env, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)
+    def __init__(self, sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=None):
+        super(FingerTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)
 
     def transfer(self, reg, demo, plotting=False):
         handles = []
         if plotting:
-            viewer = trajoptpy.GetViewer(self.lfd_env.env)
+            viewer = trajoptpy.GetViewer(self.sim.env)
             demo_cloud = demo.scene_state.cloud
             test_cloud = reg.test_scene_state.cloud
             demo_color = demo.scene_state.color
             test_color = reg.test_scene_state.color
-            handles.append(self.lfd_env.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
-            handles.append(self.lfd_env.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
+            handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
+            handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
             viewer.Step()
         
         active_lr = ""
@@ -174,13 +174,13 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
                 init_traj = np.c_[init_traj, demo_aug_traj_rs.lr2arm_traj[lr], demo_aug_traj_rs.lr2finger_traj[lr]]
             
             if plotting:
-                handles.append(self.lfd_env.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
-                handles.append(self.lfd_env.env.drawlinestrip(demo_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
+                handles.append(self.sim.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
+                handles.append(self.sim.env.drawlinestrip(demo_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
                 transformed_ee_traj_rs = reg.f.transform_hmats(demo_aug_traj_rs.lr2ee_traj[lr])
-                handles.append(self.lfd_env.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
+                handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
                 viewer.Step()
 
-            flr2demo_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.lfd_env.robot, lr, (demo_aug_traj_rs.lr2ee_traj[lr], demo_aug_traj_rs.lr2finger_traj[lr]))
+            flr2demo_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.sim.robot, lr, (demo_aug_traj_rs.lr2ee_traj[lr], demo_aug_traj_rs.lr2finger_traj[lr]))
             
             flr2transformed_finger_pts_traj_rs = {}
             flr2finger_link_name = {}
@@ -193,32 +193,32 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
             flr2transformed_finger_pts_trajs_rs.append(flr2transformed_finger_pts_traj_rs)
             
             if plotting:
-                handles.extend(sim_util.draw_finger_pts_traj(self.lfd_env, flr2demo_finger_pts_traj_rs, (1,1,0)))
-                handles.extend(sim_util.draw_finger_pts_traj(self.lfd_env, flr2transformed_finger_pts_traj_rs, (0,1,0)))
+                handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2demo_finger_pts_traj_rs, (1,1,0)))
+                handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2transformed_finger_pts_traj_rs, (0,1,0)))
                 viewer.Step()
         
         if not self.init_trajectory_transferer:
             # modify the shoulder joint angle of init_traj to be the limit (highest arm) because this usually gives a better local optima (but this might not be the right thing to do)
-            dof_inds = sim_util.dof_inds_from_name(self.lfd_env.robot, manip_name)
-            joint_ind = self.lfd_env.robot.GetJointIndex("%s_shoulder_lift_joint"%lr)
-            init_traj[:,dof_inds.index(joint_ind)] = self.lfd_env.robot.GetDOFLimits([joint_ind])[0][0]
+            dof_inds = sim_util.dof_inds_from_name(self.sim.robot, manip_name)
+            joint_ind = self.sim.robot.GetJointIndex("%s_shoulder_lift_joint"%lr)
+            init_traj[:,dof_inds.index(joint_ind)] = self.sim.robot.GetDOFLimits([joint_ind])[0][0]
         
         print "planning finger trajectory following"
-        test_traj, obj_value, rel_pts_costs = planning.plan_follow_finger_pts_trajs(self.lfd_env.robot, manip_name, 
+        test_traj, obj_value, rel_pts_costs = planning.plan_follow_finger_pts_trajs(self.sim.robot, manip_name, 
                                                                               flr2finger_link_names, flr2finger_rel_pts, 
                                                                               flr2transformed_finger_pts_trajs_rs, init_traj, 
                                                                               use_collision_cost=self.use_collision_cost,
                                                                               start_fixed=False,
                                                                               beta_pos=self.beta_pos, gamma=self.gamma)
 
-        full_traj = (test_traj, sim_util.dof_inds_from_name(self.lfd_env.robot, manip_name))
-        test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.lfd_env.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
+        full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
+        test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
         
         if plotting:
             for lr in active_lr:
-                handles.append(self.lfd_env.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-                flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.lfd_env.robot, lr, full_traj)
-                handles.extend(sim_util.draw_finger_pts_traj(self.lfd_env, flr2test_finger_pts_traj, (0,0,1)))
+                handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+                flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
+                handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
             viewer.Step()
         
         return test_aug_traj
