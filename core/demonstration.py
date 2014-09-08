@@ -73,21 +73,28 @@ class GroundTruthRopeSceneState(SceneState):
         self.crossing_info = None #TODO: optionally compute/load cached crossing_info
 
 class RecordingRopePositionsSceneState(SceneState):
-    def __init__(self, rope_nodes, rope_history, radius, upsample=0, upsample_rad=1, downsample_size=0):
+    def __init__(self, rope_nodes, history, radius, upsample=0, upsample_rad=1, downsample_size=0):
         full_cloud = ropesim.observe_cloud(rope_nodes, radius, upsample=upsample, upsample_rad=upsample_rad)
         super(RecordingRopePositionsSceneState, self).__init__(full_cloud, downsample_size=downsample_size)
         self.rope_nodes = rope_nodes
         self.crossing_info = None #TODO: optionally compute/load cached crossing_info
-        self.rope_history = rope_history #rope states at every timestep of most recent trajectory execution
+        self.history = history #TimestepStates at every timestep of most recent trajectory execution
 
 
 class TimestepState(object):
     def __init__(self, rope_nodes, robot, step=None):
         self.rope_nodes = rope_nodes
         self.step = step
+        self.time = 0
         self.manip_trajs = {}
+        self.gripper_vals = {}
         for manip in robot.GetManipulators():
             self.manip_trajs[manip.GetName()] = (manip.GetArmDOFValues(), manip.GetArmIndices())
+        for lr in 'lr':
+            joint_ind = robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
+            val = robot.GetDOFValues([joint_ind])[0]
+            self.gripper_vals["%s_gripper_l_finger_joint"%lr] = val #this int argument apparently does nothing (?)
+            print val
 
 class AugmentedTrajectory(object):
     def __init__(self, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):

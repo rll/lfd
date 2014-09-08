@@ -6,6 +6,7 @@ from rapprentice import animate_traj, ropesim
 import numpy as np
 import demonstration, simulation_object, sim_util
 
+
 class LfdEnvironment(object):
     def __init__(self, world, sim, downsample_size=0):
         """Inits LfdEnvironment
@@ -73,6 +74,7 @@ class GroundTruthRopeLfdEnvironment(LfdEnvironment):
             downsample_size: if downsample_size is positive, the clouds are downsampled to a voxel size of downsample_size, else they are not downsampled
         """
         super(GroundTruthRopeLfdEnvironment, self).__init__(world, sim, downsample_size=downsample_size)
+        
         self.upsample = upsample
         self.upsample_rad = upsample_rad
     
@@ -80,7 +82,11 @@ class GroundTruthRopeLfdEnvironment(LfdEnvironment):
         rope_sim_objs = [sim_obj for sim_obj in self.sim.sim_objs if isinstance(sim_obj, simulation_object.RopeSimulationObject)]
         assert len(rope_sim_objs) == 1
         rope_sim_obj = rope_sim_objs[0]
-        return demonstration.GroundTruthRopeSceneState(rope_sim_obj.rope.GetControlPoints(), rope_sim_obj.rope_params.radius, upsample=self.upsample, upsample_rad=self.upsample_rad, downsample_size=self.downsample_size)
+        return demonstration.GroundTruthRopeSceneState(rope_sim_obj.rope.GetControlPoints(), 
+                                                       rope_sim_obj.rope_params.radius, 
+                                                       upsample=self.upsample, 
+                                                       upsample_rad=self.upsample_rad, 
+                                                       downsample_size=self.downsample_size)
 
 class RecordingLfdEnvironment(GroundTruthRopeLfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):
@@ -98,10 +104,18 @@ class RecordingLfdEnvironment(GroundTruthRopeLfdEnvironment):
                 self.cur_step_states.append(cur_state)
                 self.sim.step()
             sim_callback = sim_cb
-        return super(RecordingLfdEnvironment, self).execute_augmented_trajectory(aug_traj, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
+        return super(RecordingLfdEnvironment, self).execute_augmented_trajectory(aug_traj, 
+                                                                                 step_viewer=step_viewer, 
+                                                                                 interactive=interactive, 
+                                                                                 sim_callback=sim_callback)
     
     def observe_scene(self):
         rope_sim_objs = [sim_obj for sim_obj in self.sim.sim_objs if isinstance(sim_obj, simulation_object.RopeSimulationObject)]
         assert len(rope_sim_objs) == 1
         rope_sim_obj = rope_sim_objs[0]
-        return demonstration.RecordingRopePositionsSceneState(rope_sim_obj.rope.GetControlPoints(), self.cur_step_states, rope_sim_obj.rope_params.radius, upsample=self.upsample, upsample_rad=self.upsample_rad, downsample_size=self.downsample_size)
+        return demonstration.RecordingRopePositionsSceneState(rope_sim_obj.rope.GetControlPoints(), 
+                                                              self.cur_step_states, 
+                                                              rope_sim_obj.rope_params.radius, 
+                                                              upsample=self.upsample, 
+                                                              upsample_rad=self.upsample_rad, 
+                                                              downsample_size=self.downsample_size)

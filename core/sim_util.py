@@ -102,7 +102,8 @@ class SimulationEnv:
     
         cc = trajoptpy.GetCollisionChecker(self.env)
         for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
-            cc.ExcludeCollisionPair(gripper_link, self.env.GetKinBody('table').GetLinks()[0])
+            if self.env.GetKinBody('table'):
+                cc.ExcludeCollisionPair(gripper_link, self.env.GetKinBody('table').GetLinks()[0])
     
         reset_arms_to_side(self)
     

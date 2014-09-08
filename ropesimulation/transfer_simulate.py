@@ -15,7 +15,7 @@ from rapprentice.registration import fit_ThinPlateSpline
 import sys, os
 
 from IPython import parallel
-from IPython.parallel import interactive
+from IPython.parallel.util import interactive
 
 import IPython as ipy
 
