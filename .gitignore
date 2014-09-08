@@ -44,6 +44,7 @@ data
 # ignore all files in bigdata except for .py files
 bigdata/*
 !bigdata/*.py
+*.h5
 
 # Temporary files
 *~

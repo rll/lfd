@@ -15,6 +15,7 @@ class EvalStats(object):
         self.success = False
         self.feasible = False
         self.misgrasp = False
+        self.generalized = False
         self.action_elapsed_time = 0
         self.exec_elapsed_time = 0
         for k in kwargs:

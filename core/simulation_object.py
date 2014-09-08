@@ -6,25 +6,25 @@ import numpy as np
 import IPython as ipy
 
 class SimulationObject(object):
+    add_after = False # if True, this object needs to be added after the BulletEnvironment has been created
     def __init__(self, names, dynamic=True):
         self.names = names
         self.dynamic = dynamic
-        self.add_after = False # if True, this object needs to be added after the BulletEnvironment has been created
-        self.sim_env = None
+        self.sim = None
 
-    def add_to_env(self, sim_env):
+    def add_to_env(self, sim):
         raise NotImplementedError
     
     def remove_from_env(self):
         raise NotImplementedError
     
     def get_bullet_objects(self):
-        if self.sim_env is None:
+        if self.sim is None:
             raise RuntimeError("get_bullet_objects should only be called when the object is in an environment")
         bt_objs = []
         for name in self.names:
-            body = self.sim_env.env.GetKinBody(name)
-            bt_obj = self.sim_env.bt_env.GetObjectFromKinBody(body)
+            body = self.sim.env.GetKinBody(name)
+            bt_obj = self.sim.bt_env.GetObjectFromKinBody(body)
             bt_objs.append(bt_obj)
         return bt_objs
     
@@ -40,20 +40,22 @@ class XmlSimulationObject(SimulationObject):
         super(XmlSimulationObject, self).__init__(None, dynamic=dynamic) # TODO: None names
         self.xml = xml
 
-    def add_to_env(self, sim_env):
-        self.sim_env = sim_env
-        pre_names = [body.GetName() for body in self.sim_env.env.GetBodies()]
+    def add_to_env(self, sim):
+        self.sim = sim
+        pre_names = [body.GetName() for body in self.sim.env.GetBodies()]
         if '<' in self.xml: # TODO: fix this hack
-            self.sim_env.env.LoadData(self.xml)
+            self.sim.env.LoadData(self.xml)
         else:
-            self.sim_env.env.Load(self.xml)
-        post_names = [body.GetName() for body in self.sim_env.env.GetBodies()]
+            self.sim.env.Load(self.xml)
+        post_names = [body.GetName() for body in self.sim.env.GetBodies()]
         self.names = [name for name in post_names if name not in pre_names]
     
     def remove_from_env(self):
         for bt_obj in self.get_bullet_objects():
-            self.sim_env.env.Remove(bt_obj.GetKinBody())
-        self.sim_env = None
+            if self.sim.viewer:
+                self.sim.viewer.RemoveKinBody(bt_obj.GetKinBody())
+            self.sim.env.Remove(bt_obj.GetKinBody())
+        self.sim = None
     
     def __repr__(self):
         return "XmlSimulationObject(%s, dynamic=%r)" % (self.xml, self.dynamic)
@@ -106,9 +108,9 @@ class CylinderSimulationObject(XmlSimulationObject):
         return "CylinderSimulationObject(%s, %s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.radius, self.height, self.dynamic)
 
 class RopeSimulationObject(SimulationObject):
+    add_after = True
     def __init__(self, name, ctrl_points, rope_params, dynamic=True, upsample=0, upsample_rad=1):
         super(RopeSimulationObject, self).__init__([name], dynamic=True)
-        self.add_after = True
         self.name = name
         self.init_ctrl_points = ctrl_points
         self.rope_params = rope_params
@@ -124,24 +126,26 @@ class RopeSimulationObject(SimulationObject):
         self.upsample_rad = upsample_rad
         self.rope = None
 
-    def add_to_env(self, sim_env):
-        self.sim_env = sim_env
-        self.rope = bulletsimpy.CapsuleRope(self.sim_env.bt_env, self.name, self.init_ctrl_points, self.capsule_rope_params)
+    def add_to_env(self, sim):
+        self.sim = sim
+        self.rope = bulletsimpy.CapsuleRope(self.sim.bt_env, self.name, self.init_ctrl_points, self.capsule_rope_params)
     
     def remove_from_env(self):
         # remove all capsule-capsule exclude to prevent memory leak
         # TODO: only interate through the capsule pairs that actually are excluded
-        cc = trajoptpy.GetCollisionChecker(self.sim_env.env)
+        cc = trajoptpy.GetCollisionChecker(self.sim.env)
         for rope_link0 in self.rope.GetKinBody().GetLinks():
             for rope_link1 in self.rope.GetKinBody().GetLinks():
                 cc.IncludeCollisionPair(rope_link0, rope_link1)
-        self.sim_env.env.Remove(self.rope.GetKinBody())
+        if self.sim.viewer:
+            self.sim.viewer.RemoveKinBody(self.rope.GetKinBody())
+        self.sim.env.Remove(self.rope.GetKinBody())
         self.rope = None
-        self.sim_env = None
+        self.sim = None
     
     def get_bullet_objects(self):
         # method of parent class doesn't work because self.rope casted to BulletObject
-        if self.sim_env is None:
+        if self.sim is None:
             raise RuntimeError("get_bullet_objects should only be called when the object is in an environment")
         return [self.rope]
     

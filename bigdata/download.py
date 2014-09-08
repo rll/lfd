@@ -15,7 +15,7 @@ else:
     urlinfo = urllib2.urlopen("http://rll.berkeley.edu/lfd/bigdata/all.tar.gz")
     with open("all.tar.gz","w") as fh:
         fh.write(urlinfo.read())
-    
-    print "unpacking file"
-    with tarfile.open("all.tar.gz") as tar:
-        tar.extractall(".")
+
+print "unpacking file"
+with tarfile.open("all.tar.gz") as tar:
+    tar.extractall(".")

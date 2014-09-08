@@ -3,8 +3,8 @@
 from __future__ import division
 
 import numpy as np
-import openravepy
-from core.environment import SimulationEnvironment
+import openravepy, trajoptpy
+from core.simulation import DynamicSimulation
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core import sim_util
 import unittest
@@ -37,35 +37,77 @@ class TestSimulation(unittest.TestCase):
         sim_objs.append(CylinderSimulationObject("cyl0", cyl_pos0, cyl_radius, cyl_height, dynamic=True))
         sim_objs.append(CylinderSimulationObject("cyl1", cyl_pos1, cyl_radius, cyl_height, dynamic=True))
         
-        self.lfd_env = SimulationEnvironment(sim_objs) # TODO: use only simulation stuff
-        robot = self.lfd_env.robot
-        robot.SetDOFValues([0.25], [robot.GetJoint('torso_lift_joint').GetJointIndex()])
-        sim_util.reset_arms_to_side(self.lfd_env)
+        self.sim = DynamicSimulation()
+        self.sim.add_objects(sim_objs)
+        self.sim.robot.SetDOFValues([0.25], [self.sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
+        sim_util.reset_arms_to_side(self.sim)
         
         # rotate cylinders by 90 deg
         for i in range(2):
-            bt_cyl = self.lfd_env.bt_env.GetObjectByName('cyl%d'%i)
+            bt_cyl = self.sim.bt_env.GetObjectByName('cyl%d'%i)
             T = openravepy.matrixFromAxisAngle(np.array([np.pi/2,0,0]))
             T[:3,3] = bt_cyl.GetTransform()[:3,3]
             bt_cyl.SetTransform(T) # SetTransform needs to be used in the Bullet object, not the openrave body
-        self.lfd_env._update_rave()
-
+        self.sim.update()
+    
     def test_reproducibility(self):
-        lfd_state0 = self.lfd_env.get_state()
+        sim_state0 = self.sim.get_state()
         
-        self.lfd_env.set_state(lfd_state0)
-        self.lfd_env.settle(max_steps=1000)
-        lfd_state1 = self.lfd_env.get_state()
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000)
+        sim_state1 = self.sim.get_state()
         
-        self.lfd_env.set_state(lfd_state0)
-        self.lfd_env.settle(max_steps=1000)
-        lfd_state2 = self.lfd_env.get_state()
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000)
+        sim_state2 = self.sim.get_state()
         
-        for obj_state1, obj_state2 in zip(lfd_state1[0], lfd_state2[0]):
-            self.assertTrue(np.all(obj_state1 == obj_state2))
-        for dof_limit_state1, dof_limit_state2 in zip(lfd_state1[1], lfd_state2[1]):
-            self.assertTrue(np.all(dof_limit_state1 == dof_limit_state2))
-        self.assertTrue(np.all(lfd_state1[2] == lfd_state2[2]))
+        self.assertArrayDictEqual(sim_state1, sim_state2)
+    
+    def test_viewer_side_effects(self):
+        """
+        Check if stepping the viewer has side effects in the simulation
+        """
+        sim_state0 = self.sim.get_state()
+        
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000, step_viewer=0)
+        sim_state1 = self.sim.get_state()
+        
+        # create viewer
+        viewer = trajoptpy.GetViewer(self.sim.env)
+        
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000, step_viewer=10)
+        sim_state2 = self.sim.get_state()
+        
+        self.assertArrayDictEqual(sim_state1, sim_state2)
+    
+    def test_remove_sim_obj(self):
+        sim_state0 = self.sim.get_state()
+        
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000)
+        sim_state1 = self.sim.get_state()
+        
+        rope = [sim_obj for sim_obj in self.sim.sim_objs if isinstance(sim_obj, RopeSimulationObject)][0]
+        self.sim.remove_objects([rope])
+        
+        with self.assertRaises(RuntimeError):
+            self.sim.set_state(sim_state0)
+        
+        self.sim.add_objects([rope])
+        
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000)
+        sim_state2 = self.sim.get_state()
+        
+        self.assertArrayDictEqual(sim_state1, sim_state2)
+    
+    def assertArrayDictEqual(self, d0, d1):
+        self.assertSetEqual(set(d0.keys()), set(d1.keys()))
+        for (k, v0) in d0.iteritems():
+            v1 = d1[k]
+            self.assertTrue(np.all(v0 == v1))
 
 if __name__ == '__main__':
     unittest.main()
