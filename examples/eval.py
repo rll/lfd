@@ -81,6 +81,12 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim_state = sim.get_state()
             sim.set_state(sim_state)
             scene_state = lfd_env.observe_scene()
+
+            # plot cloud of the test scene
+            handles = []
+            if args.plotting:
+                handles.append(sim.env.plot3(scene_state.cloud[:,:3], 2, scene_state.color if scene_state.color is not None else (0,0,1)))
+                sim.viewer.Step()
             
             eval_stats = eval_util.EvalStats()
             

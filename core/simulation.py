@@ -263,6 +263,13 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                     pts[i,:] = ray_collision.pt
                 cloud.append(pts)
         cloud = np.concatenate(cloud)
+
+        # hack to filter out point below the top of the table. TODO: fix this hack
+        table_sim_objs = [sim_obj for sim_obj in self.sim_objs if "table" in sim_obj.names]
+        assert len(table_sim_objs) == 1
+        table_sim_obj = table_sim_objs[0]
+        table_height = table_sim_obj.translation[2] + table_sim_obj.extents[2]
+        cloud = cloud[cloud[:,2] > table_height, :]
         return cloud
 
     def open_gripper(self, lr, target_val=None, step_viewer=1, max_vel=.02):

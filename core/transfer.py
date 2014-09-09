@@ -49,14 +49,13 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
     def transfer(self, reg, demo, plotting=False):
         handles = []
         if plotting:
-            viewer = trajoptpy.GetViewer(self.sim.env)
             demo_cloud = demo.scene_state.cloud
             test_cloud = reg.test_scene_state.cloud
             demo_color = demo.scene_state.color
             test_color = reg.test_scene_state.color
             handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
-            viewer.Step()
+            self.sim.viewer.Step()
         
         active_lr = ""
         for lr in 'lr':
@@ -95,7 +94,7 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
                 handles.append(self.sim.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
                 handles.append(self.sim.env.drawlinestrip(demo_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
                 handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
-                viewer.Step()
+                self.sim.viewer.Step()
         
         if not self.init_trajectory_transferer:
             # modify the shoulder joint angle of init_traj to be the limit (highest arm) because this usually gives a better local optima (but this might not be the right thing to do)
@@ -123,7 +122,7 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
         if plotting:
             for lr in active_lr:
                 handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-            viewer.Step()
+            self.sim.viewer.Step()
         
         return test_aug_traj
 
@@ -134,14 +133,13 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
     def transfer(self, reg, demo, plotting=False):
         handles = []
         if plotting:
-            viewer = trajoptpy.GetViewer(self.sim.env)
             demo_cloud = demo.scene_state.cloud
             test_cloud = reg.test_scene_state.cloud
             demo_color = demo.scene_state.color
             test_color = reg.test_scene_state.color
             handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
-            viewer.Step()
+            self.sim.viewer.Step()
         
         active_lr = ""
         for lr in 'lr':
@@ -178,7 +176,7 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
                 handles.append(self.sim.env.drawlinestrip(demo_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
                 transformed_ee_traj_rs = reg.f.transform_hmats(demo_aug_traj_rs.lr2ee_traj[lr])
                 handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
-                viewer.Step()
+                self.sim.viewer.Step()
 
             flr2demo_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.sim.robot, lr, (demo_aug_traj_rs.lr2ee_traj[lr], demo_aug_traj_rs.lr2finger_traj[lr]))
             
@@ -195,7 +193,7 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
             if plotting:
                 handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2demo_finger_pts_traj_rs, (1,1,0)))
                 handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2transformed_finger_pts_traj_rs, (0,1,0)))
-                viewer.Step()
+                self.sim.viewer.Step()
         
         if not self.init_trajectory_transferer:
             # modify the shoulder joint angle of init_traj to be the limit (highest arm) because this usually gives a better local optima (but this might not be the right thing to do)
@@ -219,6 +217,6 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
                 handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
                 flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
                 handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
-            viewer.Step()
+            self.sim.viewer.Step()
         
         return test_aug_traj
