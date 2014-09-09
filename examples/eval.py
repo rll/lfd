@@ -53,7 +53,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         sim: DynamicSimulation
     """
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
-    holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
+    holdout_items = eval_util.get_indexed_items(holdoutfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
 
     rope_params = sim_util.RopeParams()
     if args.eval.rope_param_radius is not None:
@@ -90,10 +90,12 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             
             eval_stats = eval_util.EvalStats()
             
+            start_time = time.time()
             try:
                 agenda, q_values_root = action_selection.plan_agenda(scene_state)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 break
+            eval_stats.action_elapsed_time += time.time() - start_time
             
             eval_stats.generalized = True
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
@@ -142,7 +144,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
-    holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
+    holdout_items = eval_util.get_indexed_items(holdoutfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
 
     rope_params = sim_util.RopeParams()
     if args.eval.rope_param_radius is not None:
@@ -247,15 +249,15 @@ def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
 
 def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
-    loadresult_items = eval_util.get_holdout_items(loadresultfile, args.tasks, args.taskfile, args.i_start, args.i_end)
-
+    loadresult_items = eval_util.get_indexed_items(loadresultfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
+    
     num_successes = 0
     num_total = 0
     
-    for i_task, _ in loadresult_items:
+    for i_task, task_info in loadresult_items:
         redprint("task %s" % i_task)
 
-        for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
+        for i_step in range(len(task_info)):
             redprint("task %s step %i" % (i_task, i_step))
             
             replay_results = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
