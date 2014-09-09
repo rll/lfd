@@ -112,6 +112,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 
                 if not args.eval.check_feasible or eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action and we care about feasibility
                      break
+                else:
+                     sim.set_state(sim_state)
             print "BEST ACTION:", best_root_action
 
             knot = is_knot(rope.rope.GetControlPoints())
@@ -119,11 +121,13 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
             if not eval_stats.generalized:
+                assert not knot
                 break
             
             if args.eval.check_feasible and not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
+                assert not knot
                 break
             
             if knot:
