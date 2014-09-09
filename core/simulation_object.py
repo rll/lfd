@@ -130,7 +130,7 @@ class RopeSimulationObject(SimulationObject):
     def __init__(self, name, ctrl_points, rope_params, dynamic=True, upsample=0, upsample_rad=1):
         super(RopeSimulationObject, self).__init__([name], dynamic=True)
         self.name = name
-        self.init_ctrl_points = ctrl_points
+        self.init_ctrl_points = np.asarray(ctrl_points)
         self.rope_params = rope_params
         self.upsample = upsample
         self.upsample_rad = upsample_rad
@@ -178,7 +178,7 @@ class RopeSimulationObject(SimulationObject):
         self.rope.SetRotations(tfs[:,:3,:3])
     
     def _get_constructor_info(self):
-        args = [self.name, self.init_ctrl_points, self.rope_params]
+        args = [self.name, self.init_ctrl_points.tolist(), self.rope_params]
         kwargs = {"dynamic":self.dynamic, "upsample":0, "upsample_rad":1}
         return (type(self).__name__, type(self).__module__), args, kwargs
     

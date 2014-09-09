@@ -114,7 +114,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                      break
             print "BEST ACTION:", best_root_action
 
-            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state}
+            knot = is_knot(rope.rope.GetControlPoints())
+            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
             if not eval_stats.generalized:
@@ -125,7 +126,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if is_knot(rope.rope.GetControlPoints()):
+            if knot:
                 num_successes += 1
                 break;
         
@@ -241,12 +242,8 @@ def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
-    raise NotImplementedError
-    holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
     loadresult_items = eval_util.get_holdout_items(loadresultfile, args.tasks, args.taskfile, args.i_start, args.i_end)
-
-    transfer_simulate = TransferSimulate(transfer, lfd_env)
 
     num_successes = 0
     num_total = 0
@@ -255,48 +252,40 @@ def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
         redprint("task %s" % i_task)
 
         for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
+            redprint("task %s step %i" % (i_task, i_step))
+            
+            replay_results = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
+            sim_state = replay_results['sim_state']
+
+            if i_step > 0: # sanity check for reproducibility
+                sim_util.reset_arms_to_side(sim)
+                if sim.simulation_state_equal(sim_state, sim.get_state()):
+                    yellowprint("Reproducible results OK")
+                else:
+                    yellowprint("The replayed simulation state doesn't match the one from the result file")
+                
+            sim.set_state(sim_state)
+
             if args.replay.simulate_traj_steps is not None and i_step not in args.replay.simulate_traj_steps:
                 continue
             
-            redprint("task %s step %i" % (i_task, i_step))
-
-            eval_stats = eval_util.EvalStats()
-
-            state, best_action, q_values, replay_full_trajs, replay_next_state, _, _ = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
-
-            unable_to_generalize = q_values.max() == -np.inf # none of the demonstrations generalize
-            if unable_to_generalize:
-                break
-            
-            start_time = time.time()
             if i_step in args.replay.compute_traj_steps: # compute the trajectory in this step
-                replay_full_trajs = None            
-            result = transfer_simulate.transfer_simulate(state, best_action, SceneState.get_unique_id(), animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
-            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
-            eval_stats.exec_elapsed_time += time.time() - start_time
-            print "BEST ACTION:", best_action
-
-            if not eval_stats.feasible:  # If not feasible, restore state
-                next_state = state
-            
-            if np.all(next_state.rope_state.tfs[0] == replay_next_state.rope_state.tfs[0]) and np.all(next_state.rope_state.tfs[1] == replay_next_state.rope_state.tfs[1]):
-                yellowprint("Reproducible results OK")
+                best_root_action = replay_results['best_action']
+                scene_state = replay_results['scene_state']
+                # plot cloud of the test scene
+                handles = []
+                if args.plotting:
+                    handles.append(sim.env.plot3(scene_state.cloud[:,:3], 2, scene_state.color if scene_state.color is not None else (0,0,1)))
+                    sim.viewer.Step()
+                test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
             else:
-                yellowprint("The rope transforms of the replay rope doesn't match the ones in the original result file by %f and %f" % (np.linalg.norm(next_state.rope_state.tfs[0] - replay_next_state.rope_state.tfs[0]), np.linalg.norm(next_state.rope_state.tfs[1] - replay_next_state.rope_state.tfs[1])))
+                test_aug_traj = replay_results['aug_traj']
+            feasible, misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
             
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_action, q_values, full_trajs, next_state, eval_stats)
-            
-            if not eval_stats.feasible:
-                # Skip to next knot tie if the action is infeasible -- since
-                # that means all future steps (up to 5) will have infeasible trajectories
-                break
-            
-            if is_knot(next_state.rope_nodes):
+            if replay_results['knot']:
                 num_successes += 1
-                break;
-
+        
         num_total += 1
-
         redprint('REPLAY Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def parse_input_args():

@@ -37,6 +37,15 @@ class RopeParams(object):
         self.linStopErp   = ROPE_LIN_STOP_ERP
         self.mass         = ROPE_MASS
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 class SceneState(object):
     ids = set()
     def __init__(self, cloud, rope_nodes, rope_state, id=None, color=None):

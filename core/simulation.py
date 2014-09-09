@@ -125,6 +125,20 @@ class StaticSimulation(object):
                         for link in bt_obj.GetKinBody().GetLinks():
                             cc.IncludeCollisionPair(finger_link, link)
 
+    @staticmethod
+    def simulation_state_equal(s0, s1):
+        if s0[0] != s1[0]:
+            return False
+        d0 = s0[1]
+        d1 = s1[1]
+        if not set(d0.keys()) == set(d1.keys()):
+            return False
+        for (k, v0) in d0.iteritems():
+            v1 = d1[k]
+            if not np.all(v0 == v1):
+                return False
+        return True
+
 class DynamicSimulation(StaticSimulation):
     def __init__(self, env=None):
         super(DynamicSimulation, self).__init__(env=env)
