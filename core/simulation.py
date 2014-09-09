@@ -6,6 +6,7 @@ from rapprentice import animate_traj, ropesim
 import numpy as np
 from robot_world import RobotWorld
 import sim_util
+import importlib
 
 class StaticSimulation(object):
     def __init__(self, env=None):
@@ -67,8 +68,19 @@ class StaticSimulation(object):
         constr_infos, states = sim_state
         
         cur_constr_infos = [sim_obj._get_constructor_info() for sim_obj in self.sim_objs]
-        sim_objs_to_add = [c(*args, **kwargs) for (c, args, kwargs) in constr_infos if (c, args, kwargs) not in cur_constr_infos]
-        sim_objs_to_remove = [self.sim_objs[cur_constr_infos.index(constr_info)] for constr_info in cur_constr_infos if constr_info not in constr_infos]
+        
+        constr_infos_to_remove = [constr_info for constr_info in cur_constr_infos if constr_info not in constr_infos]
+        constr_infos_to_add = [constr_info for constr_info in constr_infos if constr_info not in cur_constr_infos]
+        sim_objs_to_add = []
+        sim_objs_to_remove = []
+        for constr_info in constr_infos_to_remove:
+            sim_obj = self.sim_objs[cur_constr_infos.index(constr_info)]
+            sim_objs_to_remove.append(sim_obj)
+        for constr_info in constr_infos_to_add:
+            ((class_name, class_module), args, kwargs) = constr_info
+            class_module = importlib.import_module(class_module)
+            c = getattr(class_module, class_name)
+            sim_objs_to_add.append(c(*args, **kwargs))
         self.remove_objects(sim_objs_to_remove)
         self.add_objects(sim_objs_to_add)
         

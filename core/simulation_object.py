@@ -38,7 +38,7 @@ class SimulationObject(object):
     def _get_constructor_info(self):
         args = [self.names]
         kwargs = {"dynamic":self.dynamic}
-        return self.__class__, args, kwargs
+        return (type(self).__name__, type(self).__module__), args, kwargs
 
 class XmlSimulationObject(SimulationObject):
     def __init__(self, xml, dynamic=False):
@@ -63,7 +63,7 @@ class XmlSimulationObject(SimulationObject):
     def _get_constructor_info(self):
         args = [self.xml]
         kwargs = {"dynamic":self.dynamic}
-        return self.__class__, args, kwargs
+        return (type(self).__name__, type(self).__module__), args, kwargs
     
     def __repr__(self):
         return "XmlSimulationObject(%s, dynamic=%r)" % (self.xml, self.dynamic)
@@ -90,7 +90,7 @@ class BoxSimulationObject(XmlSimulationObject):
     def _get_constructor_info(self):
         args = [self.name, self.translation, self.extents]
         kwargs = {"dynamic":self.dynamic}
-        return self.__class__, args, kwargs
+        return (type(self).__name__, type(self).__module__), args, kwargs
     
     def __repr__(self):
         return "BoxSimulationObject(%s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.extents, self.dynamic)
@@ -120,7 +120,7 @@ class CylinderSimulationObject(XmlSimulationObject):
     def _get_constructor_info(self):
         args = [self.name, self.translation, self.radius, self.height]
         kwargs = {"dynamic":self.dynamic}
-        return self.__class__, args, kwargs
+        return (type(self).__name__, type(self).__module__), args, kwargs
     
     def __repr__(self):
         return "CylinderSimulationObject(%s, %s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.radius, self.height, self.dynamic)
@@ -180,7 +180,7 @@ class RopeSimulationObject(SimulationObject):
     def _get_constructor_info(self):
         args = [self.name, self.init_ctrl_points, self.rope_params]
         kwargs = {"dynamic":self.dynamic, "upsample":0, "upsample_rad":1}
-        return self.__class__, args, kwargs
+        return (type(self).__name__, type(self).__module__), args, kwargs
     
     def __repr__(self):
         return "RopeSimulationObject(%s, numpy.array([[...]]), RopeParams(...), dynamic=%r, upsample=%i, upsample_rad=%i)" % (self.name, self.dynamic, self.upsample, self.upsample_rad)
