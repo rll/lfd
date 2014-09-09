@@ -5,7 +5,7 @@ from __future__ import division
 import pprint
 import argparse
 from core import demonstration, registration, transfer, sim_util
-from core.constants import ROPE_RADIUS
+from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicSimulationRobotWorld
@@ -101,10 +101,10 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
                 start_time = time.time()
                 test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
-                eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
+                eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
                 eval_stats.exec_elapsed_time += time.time() - start_time
-
-                if eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action
+                
+                if not args.eval.check_feasible or eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action and we care about feasibility
                      break
             print "BEST ACTION:", best_root_action
 
@@ -114,7 +114,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             if not eval_stats.generalized:
                 break
             
-            if not eval_stats.feasible:
+            if args.eval.check_feasible and not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
@@ -334,6 +334,7 @@ def parse_input_args():
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
     
     parser_eval.add_argument("--search_until_feasible", action="store_true")
+    parser_eval.add_argument("--check_feasible", type=int, default=0)
 
     parser_eval.add_argument("--alpha", type=float, default=1000000.0)
     parser_eval.add_argument("--beta_pos", type=float, default=1000000.0)
