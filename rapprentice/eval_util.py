@@ -112,19 +112,25 @@ def save_results_args(fname, args):
             raise RuntimeError("The current arguments doesn't have eval arguments")
         loaded_args_eval_dict = vars(loaded_args.eval)
         args_eval_dict = vars(args.eval)
+        inconsistent_args = False
+        inconsistent_args_msg = ""
         if set(loaded_args_eval_dict.keys()) != set(args_eval_dict.keys()):
-            raise RuntimeError("The arguments of the file and the current arguments have different eval arguments")
+            inconsistent_args = True
         for (k, args_eval_val) in args_eval_dict.iteritems():
+            if inconsistent_args:
+                break
             loaded_args_eval_val = loaded_args_eval_dict[k]
             if np.any(args_eval_val != loaded_args_eval_val):
-                user_resp = raw_input("The arguments of the file and the current arguments have different eval arguments: %s, %s, overwrite?[y/N]"%(loaded_args_eval_val, args_eval_val))
-                if lower(user_resp) == 'y':
-                    result_file.close()
-                    result_file = h5py.File(fname, 'w')
-                    add_obj_to_group(result_file, 'args', args)
-                    break
-                else:
-                    raise RuntimeError
+                inconsistent_args = True
+                inconsistent_args_msg = "%s, %s"%(loaded_args_eval_val, args_eval_val)
+        if inconsistent_args:
+            user_resp = raw_input("The arguments of the file and the current arguments have different eval arguments %s, overwrite?[y/N]"%inconsistent_args_msg)
+            if lower(user_resp) == 'y':
+                result_file.close()
+                result_file = h5py.File(fname, 'w')
+                add_obj_to_group(result_file, 'args', args)
+            else:
+                raise RuntimeError
     else:
         add_obj_to_group(result_file, 'args', args)
     result_file.close()
