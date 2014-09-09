@@ -34,6 +34,11 @@ class SimulationObject(object):
     def set_state(self, tfs):
         for (bt_obj, tf) in zip(self.get_bullet_objects(), tfs):
             bt_obj.SetTransform(tf)
+    
+    def _get_constructor_info(self):
+        args = [self.names]
+        kwargs = {"dynamic":self.dynamic}
+        return self.__class__, args, kwargs
 
 class XmlSimulationObject(SimulationObject):
     def __init__(self, xml, dynamic=False):
@@ -52,10 +57,13 @@ class XmlSimulationObject(SimulationObject):
     
     def remove_from_env(self):
         for bt_obj in self.get_bullet_objects():
-            if self.sim.viewer:
-                self.sim.viewer.RemoveKinBody(bt_obj.GetKinBody())
             self.sim.env.Remove(bt_obj.GetKinBody())
         self.sim = None
+    
+    def _get_constructor_info(self):
+        args = [self.xml]
+        kwargs = {"dynamic":self.dynamic}
+        return self.__class__, args, kwargs
     
     def __repr__(self):
         return "XmlSimulationObject(%s, dynamic=%r)" % (self.xml, self.dynamic)
@@ -78,6 +86,11 @@ class BoxSimulationObject(XmlSimulationObject):
         self.name = name
         self.translation = translation
         self.extents = extents
+    
+    def _get_constructor_info(self):
+        args = [self.name, self.translation, self.extents]
+        kwargs = {"dynamic":self.dynamic}
+        return self.__class__, args, kwargs
     
     def __repr__(self):
         return "BoxSimulationObject(%s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.extents, self.dynamic)
@@ -104,6 +117,11 @@ class CylinderSimulationObject(XmlSimulationObject):
         self.radius = radius
         self.height = height
     
+    def _get_constructor_info(self):
+        args = [self.name, self.translation, self.radius, self.height]
+        kwargs = {"dynamic":self.dynamic}
+        return self.__class__, args, kwargs
+    
     def __repr__(self):
         return "CylinderSimulationObject(%s, %s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.radius, self.height, self.dynamic)
 
@@ -114,21 +132,21 @@ class RopeSimulationObject(SimulationObject):
         self.name = name
         self.init_ctrl_points = ctrl_points
         self.rope_params = rope_params
-        self.capsule_rope_params = bulletsimpy.CapsuleRopeParams()
-        self.capsule_rope_params.radius       = self.rope_params.radius
-        self.capsule_rope_params.angStiffness = self.rope_params.angStiffness
-        self.capsule_rope_params.angDamping   = self.rope_params.angDamping
-        self.capsule_rope_params.linDamping   = self.rope_params.linDamping
-        self.capsule_rope_params.angLimit     = self.rope_params.angLimit
-        self.capsule_rope_params.linStopErp   = self.rope_params.linStopErp
-        self.capsule_rope_params.mass         = self.rope_params.mass
         self.upsample = upsample
         self.upsample_rad = upsample_rad
         self.rope = None
 
     def add_to_env(self, sim):
         self.sim = sim
-        self.rope = bulletsimpy.CapsuleRope(self.sim.bt_env, self.name, self.init_ctrl_points, self.capsule_rope_params)
+        capsule_rope_params = bulletsimpy.CapsuleRopeParams()
+        capsule_rope_params.radius       = self.rope_params.radius
+        capsule_rope_params.angStiffness = self.rope_params.angStiffness
+        capsule_rope_params.angDamping   = self.rope_params.angDamping
+        capsule_rope_params.linDamping   = self.rope_params.linDamping
+        capsule_rope_params.angLimit     = self.rope_params.angLimit
+        capsule_rope_params.linStopErp   = self.rope_params.linStopErp
+        capsule_rope_params.mass         = self.rope_params.mass
+        self.rope = bulletsimpy.CapsuleRope(self.sim.bt_env, self.name, self.init_ctrl_points, capsule_rope_params)
     
     def remove_from_env(self):
         # remove all capsule-capsule exclude to prevent memory leak
@@ -137,8 +155,6 @@ class RopeSimulationObject(SimulationObject):
         for rope_link0 in self.rope.GetKinBody().GetLinks():
             for rope_link1 in self.rope.GetKinBody().GetLinks():
                 cc.IncludeCollisionPair(rope_link0, rope_link1)
-        if self.sim.viewer:
-            self.sim.viewer.RemoveKinBody(self.rope.GetKinBody())
         self.sim.env.Remove(self.rope.GetKinBody())
         self.rope = None
         self.sim = None
@@ -160,6 +176,11 @@ class RopeSimulationObject(SimulationObject):
     def set_state(self, tfs):
         self.rope.SetTranslations(tfs[:,:3,3])
         self.rope.SetRotations(tfs[:,:3,:3])
+    
+    def _get_constructor_info(self):
+        args = [self.name, self.init_ctrl_points, self.rope_params]
+        kwargs = {"dynamic":self.dynamic, "upsample":0, "upsample_rad":1}
+        return self.__class__, args, kwargs
     
     def __repr__(self):
         return "RopeSimulationObject(%s, numpy.array([[...]]), RopeParams(...), dynamic=%r, upsample=%i, upsample_rad=%i)" % (self.name, self.dynamic, self.upsample, self.upsample_rad)

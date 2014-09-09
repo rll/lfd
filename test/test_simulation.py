@@ -61,7 +61,7 @@ class TestSimulation(unittest.TestCase):
         self.sim.settle(max_steps=1000)
         sim_state2 = self.sim.get_state()
         
-        self.assertArrayDictEqual(sim_state1, sim_state2)
+        self.assertArrayDictEqual(sim_state1[1], sim_state2[1])
     
     def test_viewer_side_effects(self):
         """
@@ -80,7 +80,7 @@ class TestSimulation(unittest.TestCase):
         self.sim.settle(max_steps=1000, step_viewer=10)
         sim_state2 = self.sim.get_state()
         
-        self.assertArrayDictEqual(sim_state1, sim_state2)
+        self.assertArrayDictEqual(sim_state1[1], sim_state2[1])
     
     def test_remove_sim_obj(self):
         sim_state0 = self.sim.get_state()
@@ -90,18 +90,29 @@ class TestSimulation(unittest.TestCase):
         sim_state1 = self.sim.get_state()
         
         rope = [sim_obj for sim_obj in self.sim.sim_objs if isinstance(sim_obj, RopeSimulationObject)][0]
+        box = BoxSimulationObject("box", [0]*3, [.1]*3, dynamic=False)
+
         self.sim.remove_objects([rope])
-        
-        with self.assertRaises(RuntimeError):
-            self.sim.set_state(sim_state0)
-        
-        self.sim.add_objects([rope])
-        
         self.sim.set_state(sim_state0)
         self.sim.settle(max_steps=1000)
-        sim_state2 = self.sim.get_state()
+        sim_state2 = self.sim.get_state() # this adds another rope that has the same properties as rope
         
-        self.assertArrayDictEqual(sim_state1, sim_state2)
+        self.sim.add_objects([box])
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000)
+        sim_state3 = self.sim.get_state() # this removes the recently added box
+        
+        rope = [sim_obj for sim_obj in self.sim.sim_objs if isinstance(sim_obj, RopeSimulationObject)][0]
+        
+        self.sim.remove_objects([rope])
+        self.sim.add_objects([box])
+        self.sim.set_state(sim_state0)
+        self.sim.settle(max_steps=1000)
+        sim_state4 = self.sim.get_state()
+        
+        self.assertArrayDictEqual(sim_state1[1], sim_state2[1])
+        self.assertArrayDictEqual(sim_state1[1], sim_state3[1])
+        self.assertArrayDictEqual(sim_state1[1], sim_state4[1])
     
     def assertArrayDictEqual(self, d0, d1):
         self.assertSetEqual(set(d0.keys()), set(d1.keys()))

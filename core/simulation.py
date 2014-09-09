@@ -50,29 +50,36 @@ class StaticSimulation(object):
             self._exclude_gripper_finger_collisions()
     
     def get_state(self):
-        sim_state = {}
+        constr_infos = [sim_obj._get_constructor_info() for sim_obj in self.sim_objs]
+        
+        states = {}
         for sim_obj in self.sim_objs:
-            sim_state_key = "".join(sim_obj.names)
-            assert sim_state_key not in sim_state
-            sim_state[sim_state_key] = sim_obj.get_state()
-        sim_state["dof_limits"] = np.asarray(self.robot.GetDOFLimits())
-        sim_state["dof_values"] = self.robot.GetDOFValues()
+            state_key = "".join(sim_obj.names)
+            assert state_key not in states
+            states[state_key] = sim_obj.get_state()
+        states["dof_limits"] = np.asarray(self.robot.GetDOFLimits())
+        states["dof_values"] = self.robot.GetDOFValues()
+        
+        sim_state = (constr_infos, states)
         return sim_state
     
     def set_state(self, sim_state):
-        unvisited_sim_state_keys = sim_state.keys()
+        constr_infos, states = sim_state
+        
+        cur_constr_infos = [sim_obj._get_constructor_info() for sim_obj in self.sim_objs]
+        sim_objs_to_add = [c(*args, **kwargs) for (c, args, kwargs) in constr_infos if (c, args, kwargs) not in cur_constr_infos]
+        sim_objs_to_remove = [self.sim_objs[cur_constr_infos.index(constr_info)] for constr_info in cur_constr_infos if constr_info not in constr_infos]
+        self.remove_objects(sim_objs_to_remove)
+        self.add_objects(sim_objs_to_add)
+        
+        # the states should have one and only one state for every sim_obj and dof info
+        states_keys = ["".join(sim_obj.names) for sim_obj in self.sim_objs] + ["dof_limits", "dof_values"]
+        assert set(states_keys) == set(states.keys())
         for sim_obj in self.sim_objs:
-            sim_state_key = "".join(sim_obj.names)
-            if sim_state_key not in sim_state:
-                raise RuntimeError("The simulation state doesn't have a state for simulation object %s"%sim_state_key)
-            sim_obj.set_state(sim_state[sim_state_key])
-            unvisited_sim_state_keys.remove(sim_state_key)
-        self.robot.SetDOFLimits(*sim_state["dof_limits"])
-        self.robot.SetDOFValues(sim_state["dof_values"])
-        unvisited_sim_state_keys.remove("dof_limits")
-        unvisited_sim_state_keys.remove("dof_values")
-        if len(unvisited_sim_state_keys) > 0:
-            raise RuntimeError("The simulation state has states for %s but these are not in the simulation"%", ".join(sim_state.keys()))
+            state_key = "".join(sim_obj.names)
+            sim_obj.set_state(states[state_key])
+        self.robot.SetDOFLimits(*states["dof_limits"])
+        self.robot.SetDOFValues(states["dof_values"])
     
     @property
     def viewer(self):
@@ -142,19 +149,19 @@ class DynamicSimulation(StaticSimulation):
         self._create_bullet()
         self._exclude_gripper_finger_collisions()
     
-    def set_state(self, state):
+    def set_state(self, sim_state):
         """
         Defined such that execution1 and execution2 gives the same results if execution1 == execution2 in the following code execution:
-        set_state(state)
+        set_state(sim_state)
         execution1()
-        set_state(state)
+        set_state(sim_state)
         execution2()
         """
         self._include_gripper_finger_collisions()
         self._remove_bullet()
         self._create_bullet()
         self._exclude_gripper_finger_collisions()
-        super(DynamicSimulation, self).set_state(state)
+        super(DynamicSimulation, self).set_state(sim_state)
         self.update()
 
     def update(self):
