@@ -495,7 +495,7 @@ def setup_registration_and_trajectory_transferer(args, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=10) #TODO
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
