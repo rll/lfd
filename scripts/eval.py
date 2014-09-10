@@ -6,7 +6,7 @@ import copy
 import pprint
 import argparse
 from core import demonstration, registration, transfer, sim_util
-from core.constants import ROPE_RADIUS
+from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicSimulationRobotWorld
@@ -58,7 +58,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         sim: DynamicSimulation
     """
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
-    holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
+    holdout_items = eval_util.get_indexed_items(holdoutfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
 
     rope_params = sim_util.RopeParams()
     if args.eval.rope_param_radius is not None:
@@ -87,13 +87,21 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim.set_state(sim_state)
             scene_state = lfd_env.observe_scene()
 
+            # plot cloud of the test scene
+            handles = []
+            if args.plotting:
+                handles.append(sim.env.plot3(scene_state.cloud[:,:3], 2, scene_state.color if scene_state.color is not None else (0,0,1)))
+                sim.viewer.Step()
+            
             eval_stats = eval_util.EvalStats()
-
+            
+            start_time = time.time()
             try:
                 agenda, q_values_root = action_selection.plan_agenda(scene_state)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 redprint("**Raised Value Error during action selection")
                 break
+            eval_stats.action_elapsed_time += time.time() - start_time
             
             eval_stats.generalized = True
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
@@ -107,25 +115,30 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
                 start_time = time.time()
                 test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
-                eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
+                eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
                 eval_stats.exec_elapsed_time += time.time() - start_time
-
-                if eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action
+                
+                if not args.eval.check_feasible or eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action and we care about feasibility
                      break
+                else:
+                     sim.set_state(sim_state)
             print "BEST ACTION:", best_root_action
 
-            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state}
+            knot = is_knot(rope.rope.GetControlPoints())
+            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
             if not eval_stats.generalized:
+                assert not knot
                 break
             
-            if not eval_stats.feasible:
+            if args.eval.check_feasible and not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
+                assert not knot
                 break
             
-            if is_knot(rope.rope.GetControlPoints()):
+            if knot:
                 num_successes += 1
                 break;
         
@@ -137,7 +150,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
-    holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
+    holdout_items = eval_util.get_indexed_items(holdoutfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
 
     rope_params = sim_util.RopeParams()
     if args.eval.rope_param_radius is not None:
@@ -241,62 +254,50 @@ def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
-    raise NotImplementedError
-    holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
-    loadresult_items = eval_util.get_holdout_items(loadresultfile, args.tasks, args.taskfile, args.i_start, args.i_end)
-
-    transfer_simulate = TransferSimulate(transfer, lfd_env)
-
+    loadresult_items = eval_util.get_indexed_items(loadresultfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
+    
     num_successes = 0
     num_total = 0
     
-    for i_task, _ in loadresult_items:
+    for i_task, task_info in loadresult_items:
         redprint("task %s" % i_task)
 
-        for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
+        for i_step in range(len(task_info)):
+            redprint("task %s step %i" % (i_task, i_step))
+            
+            replay_results = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
+            sim_state = replay_results['sim_state']
+
+            if i_step > 0: # sanity check for reproducibility
+                sim_util.reset_arms_to_side(sim)
+                if sim.simulation_state_equal(sim_state, sim.get_state()):
+                    yellowprint("Reproducible results OK")
+                else:
+                    yellowprint("The replayed simulation state doesn't match the one from the result file")
+                
+            sim.set_state(sim_state)
+
             if args.replay.simulate_traj_steps is not None and i_step not in args.replay.simulate_traj_steps:
                 continue
             
-            redprint("task %s step %i" % (i_task, i_step))
-
-            eval_stats = eval_util.EvalStats()
-
-            state, best_action, q_values, replay_full_trajs, replay_next_state, _, _ = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
-
-            unable_to_generalize = q_values.max() == -np.inf # none of the demonstrations generalize
-            if unable_to_generalize:
-                break
-            
-            start_time = time.time()
             if i_step in args.replay.compute_traj_steps: # compute the trajectory in this step
-                replay_full_trajs = None            
-            result = transfer_simulate.transfer_simulate(state, best_action, SceneState.get_unique_id(), animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
-            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
-            eval_stats.exec_elapsed_time += time.time() - start_time
-            print "BEST ACTION:", best_action
-
-            if not eval_stats.feasible:  # If not feasible, restore state
-                next_state = state
-            
-            if np.all(next_state.rope_state.tfs[0] == replay_next_state.rope_state.tfs[0]) and np.all(next_state.rope_state.tfs[1] == replay_next_state.rope_state.tfs[1]):
-                yellowprint("Reproducible results OK")
+                best_root_action = replay_results['best_action']
+                scene_state = replay_results['scene_state']
+                # plot cloud of the test scene
+                handles = []
+                if args.plotting:
+                    handles.append(sim.env.plot3(scene_state.cloud[:,:3], 2, scene_state.color if scene_state.color is not None else (0,0,1)))
+                    sim.viewer.Step()
+                test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
             else:
-                yellowprint("The rope transforms of the replay rope doesn't match the ones in the original result file by %f and %f" % (np.linalg.norm(next_state.rope_state.tfs[0] - replay_next_state.rope_state.tfs[0]), np.linalg.norm(next_state.rope_state.tfs[1] - replay_next_state.rope_state.tfs[1])))
+                test_aug_traj = replay_results['aug_traj']
+            feasible, misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
             
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_action, q_values, full_trajs, next_state, eval_stats)
-            
-            if not eval_stats.feasible:
-                # Skip to next knot tie if the action is infeasible -- since
-                # that means all future steps (up to 5) will have infeasible trajectories
-                break
-            
-            if is_knot(next_state.rope_nodes):
+            if replay_results['knot']:
                 num_successes += 1
-                break;
-
+        
         num_total += 1
-
         redprint('REPLAY Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def parse_input_args():
@@ -347,6 +348,7 @@ def parse_input_args():
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
 
     parser_eval.add_argument("--search_until_feasible", action="store_true")
+    parser_eval.add_argument("--check_feasible", type=int, default=0)
 
     parser_eval.add_argument("--width", type=int, default=1)
     parser_eval.add_argument("--depth", type=int, default=0)
@@ -512,7 +514,7 @@ def setup_registration_and_trajectory_transferer(args, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=10) #TODO
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 

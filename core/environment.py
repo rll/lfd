@@ -18,8 +18,8 @@ class LfdEnvironment(object):
         self.world = world
         self.sim = sim
         self.downsample_size = downsample_size
-
-    def execute_augmented_trajectory(self, aug_traj, step_viewer=1, interactive=False, sim_callback=None):
+    
+    def execute_augmented_trajectory(self, aug_traj, step_viewer=1, interactive=False, sim_callback=None, check_feasible=False):
         open_or_close_finger_traj = np.zeros(aug_traj.n_steps, dtype=bool)
         if aug_traj.lr2open_finger_traj is not None:
             for lr in aug_traj.lr2open_finger_traj.keys():
@@ -61,7 +61,7 @@ class LfdEnvironment(object):
             miniseg_dof_inds = list(np.asarray(dof_inds)[active_inds])
             full_traj = (miniseg_traj, miniseg_dof_inds)
             feasible &= eval_util.traj_is_safe(self.sim, full_traj, 0)
-            if not feasible:
+            if check_feasible and not feasible:
                 break
             self.world.execute_trajectory(full_traj, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
         return feasible, misgrasp

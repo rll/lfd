@@ -21,7 +21,7 @@ class EvalStats(object):
         for k in kwargs:
             setattr(self, k, kwargs[k])
 
-def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
+def get_indexed_items(itemsfile, task_list=None, task_file=None, i_start=-1, i_end=-1):
     tasks = [] if task_list is None else task_list
     if task_file is not None:
         file = open(task_file, 'r')
@@ -32,14 +32,14 @@ def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
                 print "get_specified_tasks:", line, "is not a valid task"
     if i_start != -1 or i_end != -1:
         if i_end == -1:
-            i_end = len(holdoutfile)
+            i_end = len(itemsfile)
         if i_start == -1:
             i_start = 0
         tasks.extend(range(i_start, i_end))
     if not tasks:
-        return sorted(holdoutfile.iteritems(), key=lambda item: int(item[0]))
+        return sorted([item for item in itemsfile.iteritems() if item[0].isnumeric() or isinstance(item[0], int)], key=lambda item: int(item[0]))
     else:
-        return [(unicode(t), holdoutfile[unicode(t)]) for t in tasks]
+        return [(unicode(t), itemsfile[unicode(t)]) for t in tasks]
 
 def add_obj_to_group(group, k, v):
     if v is None:
@@ -112,19 +112,25 @@ def save_results_args(fname, args):
             raise RuntimeError("The current arguments doesn't have eval arguments")
         loaded_args_eval_dict = vars(loaded_args.eval)
         args_eval_dict = vars(args.eval)
+        inconsistent_args = False
+        inconsistent_args_msg = ""
         if set(loaded_args_eval_dict.keys()) != set(args_eval_dict.keys()):
-            raise RuntimeError("The arguments of the file and the current arguments have different eval arguments")
+            inconsistent_args = True
         for (k, args_eval_val) in args_eval_dict.iteritems():
+            if inconsistent_args:
+                break
             loaded_args_eval_val = loaded_args_eval_dict[k]
             if np.any(args_eval_val != loaded_args_eval_val):
-                user_resp = raw_input("The arguments of the file and the current arguments have different eval arguments: %s, %s, overwrite?[y/N]"%(loaded_args_eval_val, args_eval_val))
-                if lower(user_resp) == 'y':
-                    result_file.close()
-                    result_file = h5py.File(fname, 'w')
-                    add_obj_to_group(result_file, 'args', args)
-                    break
-                else:
-                    raise RuntimeError
+                inconsistent_args = True
+                inconsistent_args_msg = "%s, %s"%(loaded_args_eval_val, args_eval_val)
+        if inconsistent_args:
+            user_resp = raw_input("The arguments of the file and the current arguments have different eval arguments %s, overwrite?[y/N]"%inconsistent_args_msg)
+            if lower(user_resp) == 'y':
+                result_file.close()
+                result_file = h5py.File(fname, 'w')
+                add_obj_to_group(result_file, 'args', args)
+            else:
+                raise RuntimeError
     else:
         add_obj_to_group(result_file, 'args', args)
     result_file.close()

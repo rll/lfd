@@ -24,7 +24,7 @@ class Demonstration(object):
         self.aug_traj = aug_traj
     
     def __repr__(self):
-        return "Demonstration(%s, SceneState(..., id=%i), AugmentedTrajectory(...))" % (self.name, self.scene_state.id)
+        return "%s(%s, %s, %s)" % (self.__class__.__name__, self.name, self.scene_state.__repr__(), self.aug_traj.__repr__())
 
 
 class SceneState(object):
@@ -64,6 +64,9 @@ class SceneState(object):
         assert id not in SceneState.ids
         SceneState.ids.add(id)
         return id
+    
+    def __repr__(self):
+        return "%s(..., id=%i)" % (self.__class__.__name__, self.id)
 
 class GroundTruthRopeSceneState(SceneState):
     def __init__(self, rope_nodes, radius, upsample=0, upsample_rad=1, downsample_size=0):
@@ -231,3 +234,6 @@ class AugmentedTrajectory(object):
                 lr2oc_finger_traj_rs[lr] = oc_finger_traj_rs
         
         return AugmentedTrajectory(lr2arm_traj=lr2arm_traj_rs, lr2finger_traj=lr2finger_traj_rs, lr2ee_traj=lr2ee_traj_rs, lr2open_finger_traj=lr2open_finger_traj_rs, lr2close_finger_traj=lr2close_finger_traj_rs)
+    
+    def __repr__(self):
+        return "%s(...)" % (self.__class__.__name__)
