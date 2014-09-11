@@ -68,5 +68,5 @@ class FeatureActionSelection(ActionSelection):
             return (result_state, next_state_id, rope_knot)
 
         return beam_search(scene_state, self.actions, simulate_transfer,
-                           evaluator, self.lfd_env, width=self.width,
+                           evaluator, self.lfd_env.sim, width=self.width,
                            depth=self.depth)

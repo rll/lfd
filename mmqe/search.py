@@ -84,16 +84,16 @@ class MaxNode(SearchNode):
             self.parent.update(self.value, self.ID)
 
     def select_best(self):
-        expanded_inds = self.child_expands == np.max(self.child_expands)        
+        expanded_inds = self.child_expands == np.max(self.child_expands)
         shifted_vals = self.child_vals + np.max(self.child_vals) * (expanded_inds - 1)
         return [SearchNode.ind2action[np.argmax(shifted_vals)]], [np.max(self.child_vals)]
 
 # env is for resetting the state at each step
-def beam_search(start_state, actions, expander, evaluator, env, width=1, depth=1):
-    id2envstate = {}
+def beam_search(start_state, actions, expander, evaluator, sim, width=1, depth=1):
+    id2simstate = {}
     SearchNode.set_actions(actions)
     root_id = SearchNode.get_UID()
-    #id2envstate[root_id] = env.get_state()
+    id2simstate[root_id] = sim.get_state()
     root_vals = evaluator(start_state)
     root = MaxNode(root_id, start_state, root_vals)
     agenda = [root]
@@ -112,9 +112,9 @@ def beam_search(start_state, actions, expander, evaluator, env, width=1, depth=1
             parent_node = SearchNode.id_map[P_ID]
             parent_state = parent_node.state
             child_id = parent_node.child_ids[SearchNode.action2ind[a]]
-            env.set_state(id2envstate[P_ID])
+            sim.set_state(id2simstate[P_ID])
             expand_res.append(expander(parent_state, a, child_id))
-            id2envstate[child_id] = env.get_state()
+            id2simstate[child_id] = sim.get_state()
             child_node = ExpandingNode(child_id, parent_node)
         agenda = []
         for res in expand_res:
@@ -136,5 +136,5 @@ def beam_search(start_state, actions, expander, evaluator, env, width=1, depth=1
         if goal_found:
             break
     # Reset back to the original state before returning
-    #env.set_state(id2envstate[root_id])
+    sim.set_state(id2simstate[root_id])
     return root.select_best()
