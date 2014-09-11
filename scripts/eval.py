@@ -330,7 +330,7 @@ def parse_input_args():
 
     parser_eval.add_argument('action_selection', type=str, nargs='?', choices=['greedy', 'feature'])
     parser_eval.add_argument('--weightfile', type=str, default='')
-    parser_eval.add_argument('feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'], default='base')
+    parser_eval.add_argument('--feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'], default='base')
 
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger'], default='finger')
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')

@@ -56,11 +56,10 @@ class FeatureActionSelection(ActionSelection):
         def simulate_transfer(state, action, next_state_id):
             aug_traj=self.transferer.transfer(self.demos[action], state, plotting=False)
             self.lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0)
-            sim_util.reset_arms_to_side(self.lfd_env)
             result_state = self.lfd_env.observe_scene()
 
             # Get the rope simulation object and determine if it's a knot
-            for sim_obj in self.lfd_env.sim_objs:
+            for sim_obj in self.lfd_env.sim.sim_objs:
                 if isinstance(sim_obj, simulation_object.RopeSimulationObject):
                     rope_sim_obj = sim_obj
                     break
