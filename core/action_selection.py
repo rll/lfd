@@ -40,3 +40,36 @@ class MmqeActionSelection(ActionSelection):
     
     def plan_agenda(self, scene_state):
         raise NotImplementedError
+
+class SoftmaxActionSelection(ActionSelection):
+    def __init__(self, registration_factory, alpha=10):
+        super(SoftmaxActionSelection, self).__init__(registration_factory)
+        self.alpha = alpha
+
+    def plan_agenda(self, scene_state):
+        """
+        a ~ softmax(q_values; alpha)
+        """
+        action2q_value   = self.registration_factory.batch_cost(scene_state)
+        q_values, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
+
+        sm_values = np.exp(self.alpha * np.asarray(q_values))
+        sm_values = np.cumsum(sm_values / np.sum(sm_values))# CDF
+        i_chosen  = np.searchsorted(sm_values, np.random.rand())
+        return [agenda[i_chosen]], [q_values[i_chosen]]
+
+class ParentActionSelection(ActionSelection):
+
+    def __init__(self, registration_factory, base_selector):
+        super(ParentActionSelection, self).__init__(registration_factory)
+        self.base_selector = base_selector
+
+    def plan_agenda(self, scene_state):
+        agenda, q_values = self.base_selector.plan_agenda(scene_state)
+        selected_demo = self.registration_factory.demos[agenda[0]]
+        try:
+            while True:
+                selected_demo = selected_demo.parent
+        except AttributeError:
+            pass
+        return [selected_demo.name], [q_values[0]]

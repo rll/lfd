@@ -5,11 +5,11 @@ import trajoptpy
 from rapprentice import ropesim, resampling
 from rapprentice import math_utils as mu
 import sim_util # TODO fold in sim_util function into LfdEnvironment
-
+from tpsopt.precompute import ds_and_precompute
 import IPython as ipy
 
 class Demonstration(object):
-    def __init__(self, name, scene_state, aug_traj):
+    def __init__(self, name, scene_state, aug_traj, solver_data = None):
         """Inits Demonstration
         
         Args:
@@ -22,10 +22,31 @@ class Demonstration(object):
         assert aug_traj.lr2ee_traj is not None
         assert aug_traj.lr2finger_traj is not None
         self.aug_traj = aug_traj
+        self.solver_data = solver_data
+
+    def compute_solver_data(self, bend_coefs):
+        x_nd = self.scene_state.transfer_cld()
+        l_traj = None; r_traj = None
+        if 'l' in self.aug_traj.lr2ee_traj: 
+            l_traj = self.aug_traj.lr2ee_traj['l'][:, :3, 3]
+        if 'r' in self.aug_traj.lr2ee_traj: 
+            r_traj = self.aug_traj.lr2ee_traj['r'][:, :3, 3]
+        self.solver_data = ds_and_precompute(x_nd, bend_coefs,
+                                             l_traj, r_traj)
     
     def __repr__(self):
         return "%s(%s, %s, %s)" % (self.__class__.__name__, self.name, self.scene_state.__repr__(), self.aug_traj.__repr__())
 
+class BootstrapDemonstration(Demonstration):
+
+    def __init__(self, UID, scene_state, aug_traj, solver_data = None, parent_demo = None):
+        if parent_demo is None:
+            parent_name = 'root'
+        else:
+            parent_name = parent_demo.name
+        super(BootstrapDemonstration, self).__init__('{}->{}'.format(parent_name, UID),
+                                                     scene_state, aug_traj, solver_data = solver_data)
+        self.parent = parent_demo
 
 class SceneState(object):
     ids = set()
@@ -57,6 +78,9 @@ class SceneState(object):
             self.id = SceneState.get_unique_id()
         else:
             self.id = id
+    
+    def transfer_cld(self):
+        return self.cloud
 
     @staticmethod
     def get_unique_id():
@@ -74,6 +98,9 @@ class GroundTruthRopeSceneState(SceneState):
         super(GroundTruthRopeSceneState, self).__init__(full_cloud, downsample_size=downsample_size)
         self.rope_nodes = rope_nodes
         self.crossing_info = None #TODO: optionally compute/load cached crossing_info
+
+    def transfer_cld(self):
+        return self.rope_nodes
 
 class RecordingRopePositionsSceneState(SceneState):
     def __init__(self, rope_nodes, history, radius, upsample=0, upsample_rad=1, downsample_size=0):

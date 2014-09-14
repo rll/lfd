@@ -142,6 +142,10 @@ void pyResetDevice(){
   resetDevice();
 }
 
+int pyGetMaxDim(){
+  return MAX_DIM;
+}
+
 BOOST_PYTHON_MODULE(cuda_funcs) {
   py::def("float_gpu_print_arr", &pyFloatPrintArr, (py::arg("x"), py::arg("N")));
   py::def("int_gpu_print_arr", &pyIntPrintArr, (py::arg("x"), py::arg("N")));
@@ -177,4 +181,5 @@ BOOST_PYTHON_MODULE(cuda_funcs) {
 					  py::arg("xt"), py::arg("yt")));
   py::def("check_cuda_err", &pyCheckCudaErr);
   py::def("reset_cuda", &pyResetDevice);
+  py::def("get_max_cld_size", &pyGetMaxDim);
 }

@@ -270,6 +270,31 @@ def get_sol_params(x_na, K_nn, bend_coef, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
 
     return bend_coef, res_dict
 
+def ds_and_precompute(x_nd, bend_coefs, l_traj=None, r_traj=None):
+    sol_data = {}
+    x_nd = downsample_cloud(x_nd)
+    scaled_x_nd, scale_params = unit_boxify(x_nd)
+    K_nn = tps_kernel_matrix(scaled_x_nd)
+    if r_traj is not None:
+        scaled_r_traj   = r_traj * scale_params[0] + scale_params[1]
+        scaled_r_traj_K = tps_kernel_matrix2(scaled_r_traj, scaled_x_nd)
+        sol_data['r_traj'] = scaled_r_traj
+        sol_data['r_traj_K'] = scaled_r_traj_K
+    if l_traj is not None:
+        scaled_l_traj   = l_traj * scale_params[0] + scale_params[1]
+        scaled_l_traj_K = tps_kernel_matrix2(scaled_l_traj, scaled_x_nd)
+        sol_data['l_traj']             = scaled_l_traj        
+        sol_data['l_traj_K']           = scaled_l_traj_K
+    sol_data['cloud_xyz']          = scaled_x_nd
+    sol_data['scale_params']       = scale_params
+    sol_data['kernel']             = K_nn
+
+
+    for bend_coef in bend_coefs:
+        _, res = get_sol_params(scaled_x_nd, K_nn, bend_coef)
+        sol_data[str(bend_coef)] = res
+    return sol_data
+
 
 def downsample_cloud(cloud_xyz):
     return clouds.downsample(cloud_xyz, DS_SIZE)

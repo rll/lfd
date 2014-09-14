@@ -199,7 +199,7 @@ class DynamicSimulation(StaticSimulation):
         self.bt_env.Step(.01, 200, .005)
         self._update_rave()
 
-    def settle(self, max_steps=100, tol=.001, step_viewer=1):
+    def settle(self, max_steps=1000, tol=.001, step_viewer=1):
         """Keep stepping until the dynamic objects doesn't move, up to some tolerance"""
         prev_trans = np.concatenate([np.asarray([link.GetTransform() for link in bt_obj.GetKinBody().GetLinks()])[:,:3,3] for bt_obj in self.dyn_bt_objs]) # translation part of all links of all dynamic objects
         for i in range(max_steps):

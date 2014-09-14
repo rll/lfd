@@ -5,7 +5,7 @@ from __future__ import division
 import pprint
 import argparse
 from core import demonstration, registration, transfer, sim_util
-from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
+from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY, DS_SIZE, TORSO_HEIGHT, TORSO_IND
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicSimulationRobotWorld
@@ -15,18 +15,12 @@ from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFa
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
-
+from core.file_utils import fname_to_obj
 from rapprentice import eval_util, util
-from rapprentice import tps_registration, planning
- 
-from rapprentice import berkeley_pr2, \
-     animate_traj, ros2rave, plotting_openrave, task_execution, \
-     tps, func_utils, resampling, ropesim, rope_initialization
-from rapprentice import math_utils as mu
-from rapprentice.yes_or_no import yes_or_no
+
 import pdb, time
 
-import trajoptpy, openravepy
+import trajoptpy
 from rapprentice.knot_classifier import isKnot as is_knot, calculateCrossings
 import os, os.path, numpy as np, h5py
 from rapprentice.util import redprint, yellowprint
@@ -140,6 +134,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
+    return num_successes / num_total
 
 def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
@@ -294,7 +289,7 @@ def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
         num_total += 1
         redprint('REPLAY Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-def parse_input_args():
+def build_parser():
     parser = util.ArgumentParser()
     
     parser.add_argument("--animation", type=int, default=0, help="animates if it is non-zero. the viewer is stepped according to this number")
@@ -325,7 +320,7 @@ def parse_input_args():
     parser_eval.add_argument("--unified", type=int, default=0)
     
     parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
-    parser_eval.add_argument("--downsample_size", type=int, default=0.025)
+    parser_eval.add_argument("--downsample_size", type=int, default=DS_SIZE)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
     parser_eval.add_argument("--ground_truth", type=int, default=1)
@@ -357,7 +352,10 @@ def parse_input_args():
     parser_replay.add_argument("--simulate_traj_steps", type=int, default=None, nargs='*', metavar='i_step', 
                                help="if specified, restore the rope state from file and then simulate for the i_step of all tasks")
                                # if not specified, the rope state is not restored from file, but it is as given by the sequential simulation
+    return parser
 
+def parse_input_args():
+    parser = build_parser()
     args = parser.parse_args()
     if not args.animation:
         args.plotting = 0
@@ -372,44 +370,13 @@ def setup_log_file(args):
 
 def set_global_vars(args):
     if args.random_seed is not None: np.random.seed(args.random_seed)
-    GlobalVars.actions = h5py.File(args.eval.actionfile, 'r')
-    actions_root, actions_ext = os.path.splitext(args.eval.actionfile)
-    GlobalVars.actions_cache = h5py.File(actions_root + '.cache' + actions_ext, 'a')
-    
-    GlobalVars.demos = {}
-    for action, seg_info in GlobalVars.actions.iteritems():
-        if args.eval.ground_truth:
-            rope_nodes = seg_info['rope_nodes'][()]
-            scene_state = GroundTruthRopeSceneState(rope_nodes, ROPE_RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
-        else:
-            full_cloud = seg_info['cloud_xyz'][()]
-            scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
-        lr2arm_traj = {}
-        lr2finger_traj = {}
-        lr2ee_traj = {}
-        lr2open_finger_traj = {}
-        lr2close_finger_traj = {}
-        for lr in 'lr':
-            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            lr2arm_traj[lr] = np.asarray(seg_info[arm_name])
-            lr2finger_traj[lr] = sim_util.gripper_joint2gripper_l_finger_joint_values(np.asarray(seg_info['%s_gripper_joint'%lr]))[:,None]
-            lr2ee_traj[lr] = np.asarray(seg_info["%s_gripper_tool_frame"%lr]['hmat'])
-            lr2open_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
-            lr2close_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
-            opening_inds, closing_inds = sim_util.get_opening_closing_inds(lr2finger_traj[lr])
-#             # opening_inds/closing_inds are indices before the opening/closing happens, so increment those indices (if they are not out of bound)
-#             opening_inds = np.clip(opening_inds+1, 0, len(lr2finger_traj[lr])-1) # TODO figure out if +1 is necessary
-#             closing_inds = np.clip(closing_inds+1, 0, len(lr2finger_traj[lr])-1)
-            lr2open_finger_traj[lr][opening_inds] = True
-            lr2close_finger_traj[lr][closing_inds] = True
-        aug_traj = AugmentedTrajectory(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
-        demo = Demonstration(action, scene_state, aug_traj)
-        GlobalVars.demos[action] = demo
+    GlobalVars.demos = fname_to_obj(args.eval.actionfile)
 
 def setup_lfd_environment_sim(args):
     actions = h5py.File(args.eval.actionfile, 'r')
     
-    init_rope_xyz, init_joint_names, init_joint_values = sim_util.load_fake_data_segment(actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
+    init_rope_xyz = GlobalVars.demos.values()[0].scene_state.transfer_cld()
+    table_height = init_rope_xyz[:,2].mean() - .02
     table_height = init_rope_xyz[:,2].mean() - .02
     
     sim_objs = []
@@ -434,9 +401,7 @@ def setup_lfd_environment_sim(args):
     else:
         lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
 
-    dof_inds = sim_util.dof_inds_from_name(sim.robot, '+'.join(init_joint_names))
-    values, dof_inds = zip(*[(value, dof_ind) for value, dof_ind in zip(init_joint_values, dof_inds) if dof_ind != -1])
-    sim.robot.SetDOFValues(values, dof_inds) # this also sets the torso (torso_lift_joint) to the height in the data
+    sim.robot.SetDOFValues([TORSO_HEIGHT], [TORSO_IND])
     sim_util.reset_arms_to_side(sim)
     
     if args.animation:
@@ -484,9 +449,9 @@ def setup_lfd_environment_sim(args):
 def setup_registration_and_trajectory_transferer(args, sim):
     if args.eval.gpu:
         if args.eval.reg_type == 'rpm':
-            reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
+            reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
+            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:

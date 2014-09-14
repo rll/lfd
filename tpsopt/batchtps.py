@@ -19,6 +19,7 @@ from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err,
 from registration import registration_cost as cpu_registration_cost, unit_boxify, loglinspace
 from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
     DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
+from file_utils import group_or_dataset_to_obj
 
 import IPython as ipy
 from pdb import pm, set_trace
@@ -145,6 +146,8 @@ class GPUContext(object):
             offset_mats[b] = offset_mats_arr[i]
         return proj_mats, offset_mats, K
 
+    ADD_CLD_KW = ['cloud_xyz', 'kernel', 'scale_params']
+
     def add_cld(self, name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params, update_ptrs = False):
         """
         adds a new cloud to our context for batch processing
@@ -219,6 +222,7 @@ class GPUContext(object):
         self.ptrs_valid = True
 
     def read_h5(self, fname):
+        raise DeprecationWarning('use the raw data file storage')
         f = h5py.File(fname, 'r')
         for seg_name, seg_info in f.iteritems():
             if 'inv' not in seg_info:
@@ -243,6 +247,22 @@ class GPUContext(object):
         f.close()
         self.update_ptrs()
 
+    def add_demonstrations(self, demo_dict, sol_data_kw = ADD_CLD_KW):
+        if type(demo_dict) != type({}):
+            fname       = demo_dict
+            action_file = h5py.File(fname, 'r')
+            demo_dict = group_or_dataset_to_obj(action_file)
+            action_file.close()
+        for a_name, demo in demo_dict.iteritems():
+            sol_data = demo.solver_data
+            proj_mats   = {}
+            offset_mats = {}
+            for b in self.bend_coefs:
+                proj_mats[b] = sol_data[str(b)]['proj_mat'][:]
+                offset_mats[b] = sol_data[str(b)]['offset_mat'][:]
+            filtered_sol_data = dict([(k, sol_data[k]) for k in sol_data_kw])
+            self.add_cld(a_name, proj_mats, offset_mats, **filtered_sol_data)
+        self.update_ptrs()
 
     # @profile
     def setup_tgt_ctx(self, cloud_xyz):
@@ -594,6 +614,8 @@ class SrcContext(GPUContext):
 
         GPUContext.update_ptrs(self)
 
+    ADD_CLD_KW = ['cloud_xyz', 'kernel', 'scale_params', 'r_traj', 'r_traj_K', 'l_traj', 'l_traj_K']
+                
     def add_cld(self, name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params,
                 r_traj, r_traj_K, l_traj, l_traj_K, update_ptrs = False):
         """
@@ -617,6 +639,7 @@ class SrcContext(GPUContext):
             self.update_ptrs()
 
     def read_h5(self, fname):
+        raise DeprecationWarning
         f = h5py.File(fname, 'r')
         for seg_name, seg_info in f.iteritems():
             if 'inv' not in seg_info:
@@ -644,6 +667,9 @@ class SrcContext(GPUContext):
                          r_traj, r_traj_K, l_traj, l_traj_K)
         f.close()
         self.update_ptrs()
+
+    def add_demonstrations(self, demo_dict, sol_data_kw = ADD_CLD_KW):
+        super(SrcContext, self).add_demonstrations(demo_dict, sol_data_kw)
 
     def transform_trajs(self):
         """

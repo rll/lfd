@@ -11,6 +11,8 @@ from tpsopt.registration import loglinspace
 from tpsopt.batchtps import GPUContext, TgtContext, SrcContext, batch_tps_rpm_bij
 from tpsopt.transformations import EmptySolver, TPSSolver
 
+import time
+
 import IPython as ipy
 
 class Registration(object):
@@ -135,7 +137,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
 
 class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
     # TODO Dylan
-    def __init__(self, demos, filename, em_iter=1, rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1],
+    def __init__(self, demos, em_iter=1, rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1],
                     outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
         super(GpuTpsRpmBijRegistrationFactory, self).__init__(demos)
         self.em_iter = em_iter
@@ -151,7 +153,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         self.f_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
         self.g_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
         self.src_ctx = GPUContext(self.bend_coefs)
-        self.src_ctx.read_h5(filename)
+        self.src_ctx.add_demonstrations(demos)
 
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         """
@@ -214,9 +216,12 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         cloud = test_scene_state.cloud
         if len(cloud) > MAX_CLD_SIZE:
             cloud = cloud[np.random.choice(range(len(cloud)), size=MAX_CLD_SIZE, replace=False)]
+        print 'computing batch registration costs'
+        start = time.time()
         tgt_ctx.set_cld(cloud)
         cost_array = batch_tps_rpm_bij(self.src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, #same as reg init and reg final?
-                      outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, component_cost=False)
+                                       outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, component_cost=False)
+        print 'cost computation took {} s'.format(time.time() - start)
         if self.cost_type == 'bending':
             costs = dict(zip(self.src_ctx.seg_names, cost_array))
             return costs

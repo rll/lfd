@@ -20,7 +20,9 @@ class RegistrationAndTrajectoryTransferer(object):
 class TwoStepRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
     def transfer(self, demo, test_scene_state, plotting=False):
         reg = self.registration_factory.register(demo, test_scene_state)
+        print 'computed registration'
         test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
+        print 'computed test traj'
         return test_aug_traj
 
 class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):

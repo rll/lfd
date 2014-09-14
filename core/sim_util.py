@@ -9,11 +9,13 @@ import numpy as np
 from numpy import asarray
 import re
 import IPython as ipy
+import sys, os
+import random
 
-from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu, plotting_openrave
+from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu, plotting_openrave, rope_initialization
 from rapprentice.util import yellowprint
 from constants import GRIPPER_OPEN_CLOSE_THRESH, ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LIN_DAMPING, \
-    ROPE_ANG_LIMIT, ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE
+    ROPE_ANG_LIMIT, ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, GRIPPER_MULT
 PR2_L_POSTURES = dict(
     untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
     tucked = [0.06, 1.25, 1.79, -1.68, -1.73, -0.10, -0.09],
@@ -392,9 +394,17 @@ def gripper_joint2gripper_l_finger_joint_values(gripper_joint_vals):
     Only the %s_gripper_l_finger_joint%lr can be controlled (this is the joint returned by robot.GetManipulator({"l":"leftarm", "r":"rightarm"}[lr]).GetGripperIndices())
     The rest of the gripper joints (like %s_gripper_joint%lr) are mimiced and cannot be controlled directly
     """
-    mult = 5.0
-    gripper_l_finger_joint_vals = mult * gripper_joint_vals
+    gripper_l_finger_joint_vals = GRIPPER_MULT * gripper_joint_vals
     return gripper_l_finger_joint_vals
+
+def gripper_l_finger_joint2gripper_joint_values(gripper_l_finger_joint_vals):
+    """
+    Only the %s_gripper_l_finger_joint%lr can be controlled (this is the joint returned by robot.GetManipulator({"l":"leftarm", "r":"rightarm"}[lr]).GetGripperIndices())
+    The rest of the gripper joints (like %s_gripper_joint%lr) are mimiced and cannot be controlled directly
+    """
+    gripper_joint_vals = gripper_l_finger_joint_vals / GRIPPER_MULT
+    return gripper_joint_vals
+
 
 def binarize_gripper(angle):
     return angle > GRIPPER_OPEN_CLOSE_THRESH
@@ -688,7 +698,7 @@ def remove_tight_rope_pull(sim_env, full_traj):
 def load_random_start_segment(demofile):
     start_keys = [k for k in demofile.keys() if k.startswith('demo') and k.endswith('00')]
     seg_name = random.choice(start_keys)
-    return demofile[seg_name]['cloud_xyz'][:,:3]
+    return demofile[seg_name]['cloud_xyz'][:,:3], seg_name
 
 def load_fake_data_segment(demofile, fake_data_segment, fake_data_transform):
     fake_seg = demofile[fake_data_segment]
@@ -819,3 +829,60 @@ def draw_finger_pts_traj(sim_env, flr2finger_pts_traj, color):
             handles.append(sim_env.env.drawlinestrip(np.r_[pts, pts[0][None,:]], 1, color))
     return handles
 
+def one_l_print(string, pad=20):
+    for _ in range(pad): string += ' '
+    string += '\r'
+    sys.stdout.write(string)
+    sys.stdout.flush()
+
+class suppress_stdout(object):
+    '''
+    A context manager for doing a "deep suppression" of stdout in 
+    Python, i.e. will suppress all print, even if the print originates in a 
+    compiled C/Fortran sub-function.
+    '''
+    def __init__(self):
+        # Open a null file
+        self.null_fds =  os.open(os.devnull,os.O_RDWR)
+        # Save the actual stdout file descriptor
+        self.save_fds = os.dup(1)
+
+    def __enter__(self):
+        # Assign the null pointers to stdout
+        os.dup2(self.null_fds,1)
+        os.close(self.null_fds)
+
+    def __exit__(self, *_):
+        # Re-assign the real stdout back
+        os.dup2(self.save_fds,1)
+        # Close the null file
+        os.close(self.save_fds)
+
+def rotate_about_median(xyz, theta):
+    """                                                                                                                                             
+    rotates xyz by theta around the median along the x, y dimensions                                                                                
+    """
+    median = np.median(xyz, axis=0)
+    centered_xyz = xyz - median
+    r_mat = np.eye(3)
+    r_mat[0:2, 0:2] = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta), np.cos(theta)]])
+    rotated_xyz = centered_xyz.dot(r_mat)
+    new_xyz = rotated_xyz + median    
+    return new_xyz
+
+def sample_rope_state(demofile, perturb_points=5, min_rad=0, max_rad=.15, rotation=False):
+    """
+    samples a rope state, by picking a random segment, perturbing, rotating about the median, 
+    then setting a random translation such that the rope is essentially within grasp room
+    """
+
+    # TODO: pick a random rope initialization
+    new_xyz, source_name = load_random_start_segment(demofile)
+    perturb_radius = random.uniform(min_rad, max_rad)
+    rope_nodes = rope_initialization.find_path_through_point_cloud( new_xyz,
+                                                                    perturb_peak_dist=perturb_radius,
+                                                                    num_perturb_points=perturb_points)
+    if rotation:
+        rand_theta = rotation*np.random.rand()
+        rope_nodes = rotate_about_median(rope_nodes, rand_theta)
+    return rope_nodes, source_name

@@ -3,125 +3,105 @@ import numpy as np
 import os.path as os
 from rapprentice import clouds
 
-DS_SIZE = 0.025
+def format_action_file(orig_fname, target_fname, args):
+    demos = {}
+    actions = h5py.File(orig_fname, 'r')
+    for action, seg_info in actions.iteritems():
+        if args.ground_truth:
+            rope_nodes = seg_info['rope_nodes'][()]
+            x_nd = rope_nodes
+            scene_state = GroundTruthRopeSceneState(rope_nodes, ROPE_RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
+        else:
+            full_cloud = seg_info['cloud_xyz'][()]
+            x_nd = full_cloud
+            scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
+        lr2arm_traj = {}
+        lr2finger_traj = {}
+        lr2ee_traj = {}
+        lr2open_finger_traj = {}
+        lr2close_finger_traj = {}
+        for lr in 'lr':
+            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
+            lr2arm_traj[lr] = np.asarray(seg_info[arm_name])
+            lr2finger_traj[lr] = sim_util.gripper_joint2gripper_l_finger_joint_values(np.asarray(seg_info['%s_gripper_joint'%lr]))[:,None]
+            lr2ee_traj[lr] = np.asarray(seg_info["%s_gripper_tool_frame"%lr]['hmat'])
+            lr2open_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
+            lr2close_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
+            opening_inds, closing_inds = sim_util.get_opening_closing_inds(lr2finger_traj[lr])
+            lr2open_finger_traj[lr][opening_inds] = True
+            lr2close_finger_traj[lr][closing_inds] = True
+        aug_traj = AugmentedTrajectory(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
+        bend_coefs = np.around(loglinspace(args.bend_coef_init, args.bend_coef_final, args.n_iter), 
+                               BEND_COEF_DIGITS)
 
-def setup_bootstrap_file(action_fname, bootstrap_fname):
-    """
-    copies over the relevant fields of action file to a bootstrap_file so that we can use the 
-    resulting file for run_example
-    """
-    print action_fname, bootstrap_fname
-    actfile = h5py.File(action_fname, 'r')
-    bootfile = h5py.File(bootstrap_fname, 'w')
-    for seg_name, seg_info in actfile.iteritems():
-        seg_name = str(seg_name)
-        cloud_xyz = clouds.downsample(seg_info['cloud_xyz'][:], DS_SIZE)
-        # cloud_xyz = seg_info['cloud_xyz'][:]
-        hmats = dict((lr, seg_info['{}_gripper_tool_frame'.format(lr)]['hmat'][:]) for lr in 'lr')
-        cmat = np.eye(cloud_xyz.shape[0])
-        gripper_joints = dict(('{}_gripper_joint'.format(lr), seg_info['{}_gripper_joint'.format(lr)][:]) for lr in 'lr')
-        create_bootstrap_item(outfile=bootfile, cloud_xyz=cloud_xyz, root_seg=seg_name, parent=seg_name,
-                              children=[], hmats=hmats, cmat=cmat, other_items=gripper_joints,
-                              update_parent=False, seg_name=seg_name)
-    actfile.close()
-    assert check_bootstrap_file(bootstrap_fname, action_fname)
-    return bootfile
+        solver_data = ds_and_precompute(x_nd, lr2ee_traj['l'][:, :3, 3], lr2ee_traj['r'][:, :3, 3], bend_coefs)
+
+        demo = Demonstration(action, scene_state, aug_traj, solver_data = solver_data)
+        
+        demos[action] = demo
+    actions.close()
+    raw_file = h5py.File(target_fname, 'w')
+    add_obj_to_group(raw_file, 'data', demos)
+    raw_file.close()
+    
 
 
-def create_bootstrap_item(outfile, cloud_xyz, root_seg, parent, children, hmats, 
-                          cmat, other_items = None, update_parent=True, seg_name=None):
-    if not seg_name:
-        seg_name = str(len(outfile))
-    assert seg_name not in outfile, 'created duplicate segment in bootstrap file'
+def add_obj_to_group(group, k, v):
+    if v is None:
+        group[k] = 'None'
+    elif (type(v) == dict or type(v) == list or type(v) == tuple) and len(v) == 0:
+        group[k] = 'empty'
+        group[k].attrs.create('value_type', type(v).__name__)
+    elif type(v) == dict or type(v) == list or type(v) == tuple or hasattr(v, '__dict__'):
+        vgroup = group.create_group(k)
+        if type(v) == dict:
+            d = v
+        elif type(v) == list or type(v) == tuple:
+            vgroup.attrs.create('value_type', type(v).__name__)
+            d = dict((str(i),vi) for (i,vi) in enumerate(v))
+        elif hasattr(v, '__dict__'):
+            vgroup.attrs.create('value_type', type(v).__name__)
+            vgroup.attrs.create('value_type_module', type(v).__module__)
+            d = vars(v)
+        for (vk,vv) in d.iteritems():
+            add_obj_to_group(vgroup, vk, vv)
+    else:
+        group[k] = v
+    return group
 
-    g = outfile.create_group(seg_name)
-    g['cloud_xyz'] = cloud_xyz # pt cloud associated with this action
-    g['root_seg'] = root_seg # string that points to the root segment associated with this segment
-    g['parent'] = parent     # string that points to the parent that this segment was matched to
-    g['children'] = children if children else 0 # will contain a list of pointers to children for this node
-                                                # initialized to be 0 b/c you can't store a 0-sized list in h5
-    hmat_g = g.create_group('hmats')
-    for lr in 'lr':
-        hmat_g[lr] = hmats[lr] # list of hmats that contains the trajectory for the lr gripper in this segment    
-
-    root_xyz = outfile[root_seg]['cloud_xyz'][:]
-    root_n = root_xyz.shape[0]
-    seg_m = cloud_xyz.shape[0]
-    # do this check here, b/c we don't have to explicitly check if root_seg == seg_name
-    assert cmat.shape == (root_n, seg_m), 'correspondence matrix formatted wrong'
-    g['cmat'] = cmat
-
-    if update_parent:
-        parent_children = outfile[parent]['children'][()]
-        del outfile[parent]['children']
-        if parent_children == 0:
-            parent_children = []
-        parent_children = np.append(parent_children, [seg_name])
-        outfile[parent]['children'] = parent_children
-    if other_items:
-        for k, v in other_items.iteritems():
-            g[k] = v
-    outfile.flush()
-    return seg_name
-
-def check_bootstrap_file(bootstrap_fname, orig_fname):
-    """
-    checks that bootstrap file is properly formatted
-    assumes bootstrap_file was generated from orig_file
-    this will return False is the file is improperly formatted
-        - all the actions in orig_file are in bootstrap_file as their own parent
-        - all top level entries have the correct fields
-        - all parent and child pointers exist and point to each other
-    returns True if file is formatted correctly
-    """
-    required_keys = ['children', 'cloud_xyz', 'cmat', 'hmats', 'parent', 'root_seg']
-    bootf = h5py.File(bootstrap_fname, 'r')
-    origf = h5py.File(orig_fname, 'r')
-    success = True
-    try:
-        for seg_name in origf: # do original action checks
-            seg_name = str(seg_name)
-            if seg_name not in bootf:
-                print 'original action {} from {} not in {}'.format(seg_name, orig_fname, bootstrap_fname)
-                success = False
-            for lr in 'lr':
-                if '{}_gripper_joint'.format(lr) not in bootf[seg_name]:
-                    print 'boostrap file {} root segment {} missing {}_gripper_joint'.format(bootstrap_fname, seg_name, lr)
-                    success = False
-        for seg_name, seg_info in bootf.iteritems():
-            seg_name = str(seg_name)
-            for k in required_keys:
-                if k not in seg_info:
-                    print 'bootstrap file {} segment {} missing key {}'.format(bootstrap_fname, seg_name, k)
-            for lr in 'lr':
-                if lr not in seg_info['hmats']:
-                    print 'boostrap file {} segment {} missing {} hmats'.format(bootstrap_fname, seg_name, lr)
-                    success = False
-            parent = str(seg_info['parent'][()])
-            if parent not in bootf:
-                print 'boostrap file {} missing parent {} for segment {}'.format(bootstrap_fname, parent, seg_name)
-                success = False
-            parent_children = bootf[parent]['children'][()]
-            if parent != seg_name and seg_name not in parent_children:
-                print 'boostrap file {} parent {} does not have pointer to child {}'.format(bootstrap_fname, parent, seg_name)
-                success = False
-            root_seg = str(seg_info['root_seg'][()])
-            if root_seg not in bootf:
-                print 'boostrap file {} missing root_seg {} for segment {}'.format(bootstrap_fname, root_seg, seg_name)
-                success = False
-            root_n = bootf[root_seg]['cloud_xyz'][:].shape[0]
-            seg_m = seg_info['cloud_xyz'][:].shape[0]
-            if seg_info['cmat'][:].shape != (root_n, seg_m):
-                print 'boostrap file {} cmat for segment {} has wrong dimension'.format(bootstrap_fname, root_seg, seg_name)
-                print 'is', seg_info['cloud_xyz'][:].shape[0], 'should be', (root_n, seg_m)
-                success = False
-    except:
-        print 'encountered exception', sys.exc_info()
-        bootf.close()
-        origf.close()
-        success = False
-        raise
-    return success
+def group_or_dataset_to_obj(group_or_dataset):
+    if 'value_type' in group_or_dataset.attrs.keys():
+        if 'value_type_module' in group_or_dataset.attrs.keys():
+            module = importlib.import_module(group_or_dataset.attrs['value_type_module'])
+        else:
+            module = __builtin__
+        v_type = getattr(module, group_or_dataset.attrs['value_type'])
+    else:
+        v_type = None
+    if isinstance(group_or_dataset, h5py.Group):
+        group = group_or_dataset
+        v_dict = {}
+        for (gk,gv) in group.iteritems():
+            v_dict[gk] = group_or_dataset_to_obj(gv)
+        if v_type is not None:
+            if v_type == tuple or v_type == list:
+                v = v_type(zip(*sorted(v_dict.items(), key=lambda (vk, vv): int(vk)))[1])
+            elif hasattr(v_type, '__dict__'):
+                v = v_type.__new__(v_type)
+                v.__dict__ = v_dict
+        else:
+            v = v_dict
+    else:
+        dataset = group_or_dataset
+        if dataset[()] == 'None':
+            v = None
+        elif dataset[()] == 'empty':
+            v = []
+            if v_type is not None:
+                v = v_type(v)
+        else:
+            v = dataset[()]
+    return v
 
 def gen_rot_sequence_task_file(taskfname, actionfname):
     """
