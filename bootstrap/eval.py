@@ -4,6 +4,7 @@ from scripts.eval import build_parser, setup_log_file, set_global_vars, setup_lf
 from core.action_selection import GreedyActionSelection
 from core.file_utils import fname_to_obj
 from rapprentice import eval_util
+from tpsopt.cuda_funcs import reset_cuda
 
 import trajoptpy
 import time
@@ -15,6 +16,7 @@ def parse_input_args():
     args = parser.parse_args()
     args.eval.ground_truth = True
     args.eval.gpu = True
+    if not args.animation: args.plotting = 0
     return args 
 
 def main():
@@ -45,6 +47,7 @@ def main():
         else:
             for s in args.train_sizes:
                 scripts.eval.GlobalVars.demos = bootstrap_data[str(s)]
+                reset_cuda()#to make sure we have space
                 reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, sim)
                 action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
                 results[s] = eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
