@@ -36,7 +36,7 @@ def find_path_through_point_cloud(xyzs, plotting=False, perturb_peak_dist=None, 
     PG = make_path_graph(C, [len(path) for path in segs3d])
 
     (score, nodes) = longest_path_through_segment_graph(PG)
-    print nodes
+#    print nodes
 
     total_path = []
     for node in nodes[::2]:
@@ -348,7 +348,7 @@ def make_cost_matrix(paths):
             features[np.isnan(features)] = 0
             cost_matrix[i,j] = cost_matrix[j,i] =  np.dot(WEIGHTS, features)
         #cost_matrix[i,j] = cost_matrix[j,i] =  np.linalg.norm(pdi[0] - pdj[0])*1000
-    print cost_matrix
+#    print cost_matrix
     return cost_matrix    
 
 def make_path_graph(cost_matrix, lengths):
