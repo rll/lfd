@@ -11,12 +11,12 @@ from rapprentice import clouds, plotting_plt
 
 from culinalg_exts import dot_batch, get_gpu_ptrs, dot_batch_nocheck, m_dot_batch
 
-import pycuda.driver as drv
-import pycuda.autoinit
-from pycuda import gpuarray
-import scikits.cuda.linalg
-from scikits.cuda.linalg import dot as cu_dot
-from scikits.cuda.linalg import pinv as cu_pinv
+#import pycuda.driver as drv
+#import pycuda.autoinit
+#from pycuda import gpuarray
+#import scikits.cuda.linalg
+#from scikits.cuda.linalg import dot as cu_dot
+#from scikits.cuda.linalg import pinv as cu_pinv
 from constants import N_ITER_CHEAP, DEFAULT_LAMBDA, DS_SIZE, BEND_COEF_DIGITS, EXACT_LAMBDA, N_ITER_EXACT
 import sys
 

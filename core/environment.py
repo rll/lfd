@@ -94,6 +94,61 @@ class GroundTruthRopeLfdEnvironment(LfdEnvironment):
                                                        upsample_rad=self.upsample_rad, 
                                                        downsample_size=self.downsample_size)
 
+class GroundTruthBoxLfdEnvironment(LfdEnvironment):
+    def __init__(self, world, sim, box0pos, box1pos, box1pos_2, box_width, box_top_height, bottom_height, downsample_size=0):
+        super(GroundTruthBoxLfdEnvironment, self).__init__(world, sim,downsample_size=downsample_size)
+        self.box0pos = box0pos
+        self.box1pos = box1pos
+        self.box1pos_2 = box1pos_2
+        self.box_width = box_width
+        self.box_top_height = box_top_height
+        self.bottom_height = bottom_height
+
+    def observe_scene(self, scene):
+        pts = np.zeros((0,3))
+        box0_x,box0_y = self.box0pos[0],self.box0pos[1]
+        box1_x,box1_y = self.box1pos[0],self.box1pos[1]
+        box1_x_2,box1_y_2 = self.box1pos_2[0],self.box1pos_2[1]
+        box_width = self.box_width
+        box_top_height = self.box_top_height
+
+        pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
+        [box0_x-box_width,box0_y+box_width,box_top_height],
+        [box0_x+box_width,box0_y-box_width,box_top_height],
+        [box0_x+box_width,box0_y+box_width,box_top_height]])]
+
+        if scene == ("demonstration"):
+            pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
+            [box1_x-box_width,box1_y+box_width,box_top_height],
+            [box1_x+box_width,box1_y-box_width,box_top_height],
+            [box1_x+box_width,box1_y+box_width,box_top_height]])]
+        else:
+            pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
+            [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
+            [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
+            [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
+
+        box_top_height = self.bottom_height
+
+        pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
+        [box0_x-box_width,box0_y+box_width,box_top_height],
+        [box0_x+box_width,box0_y-box_width,box_top_height],
+        [box0_x+box_width,box0_y+box_width,box_top_height]])]
+
+        if scene == ("demonstration"):
+            pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
+            [box1_x-box_width,box1_y+box_width,box_top_height],
+            [box1_x+box_width,box1_y-box_width,box_top_height],
+            [box1_x+box_width,box1_y+box_width,box_top_height]])]
+        else:
+            pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
+            [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
+            [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
+            [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
+
+
+        return demonstration.SceneState(pts,downsample_size=0)
+
 class RecordingLfdEnvironment(GroundTruthRopeLfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):
         super(RecordingLfdEnvironment, self).__init__(world, sim, upsample=upsample, upsample_rad=upsample_rad, downsample_size=downsample_size)

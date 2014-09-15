@@ -3,6 +3,9 @@ from __future__ import division
 from constants import EXACT_LAMBDA, DEFAULT_LAMBDA, N_ITER_EXACT, N_ITER_CHEAP
 import numpy as np
 from rapprentice import registration
+from tn_rapprentice import registration as tn_registration
+from tn_rapprentice import tps_n_rpm as tps_n_rpm
+from tn_eval import tps_utils
 
 import tpsopt
 from constants import BEND_COEF_DIGITS, MAX_CLD_SIZE
@@ -82,6 +85,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.outlierfrac = outlierfrac
         self.cost_type = cost_type
         self.prior_fn = prior_fn
+        self.bend_coef = 0
+        self.normal_coef= 0
         
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         """
@@ -95,10 +100,10 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         new_cloud = test_scene_state.cloud
         x_nd = old_cloud[:,:3]
         y_md = new_cloud[:,:3]
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
-        scaled_y_md, targ_params = registration.unit_boxify(y_md)
+        #scaled_x_nd, src_params = registration.unit_boxify(x_nd)
+        #scaled_y_md, targ_params = registration.unit_boxify(y_md)
         x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
-        (f,g), corr = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md,
+        (f,g), corr = registration.tps_rpm_bij(x_nd,y_md,
                                     x_weights = x_weights,
                                     n_iter = self.n_iter,
                                     reg_init = self.reg_init,
@@ -112,9 +117,12 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                     return_corr = True,
                                     plotting = plotting,
                                     plot_cb = plot_cb)
-        bending_cost = registration.tps_reg_cost(f)
-        f = registration.unscale_tps(f, src_params, targ_params)
-        f._bending_cost = bending_cost # TODO: do this properly
+
+        #bending_cost = registration.tps_reg_cost(f)
+        f_tmp = f
+        #f = registration.unscale_tps(f, src_params, targ_params)
+        f._old = f_tmp
+        f._bending_cost = 0 # TODO: do this properly
         return Registration(demo, test_scene_state, f, corr, g=g)
 
     # def batch_register(self, test_scene_state):
@@ -308,13 +316,110 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     """
     TPS-RPM using normals information
     """
-    def __init__(self, demos):
+    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.1, temp_final=.01, bend_init=.01, bend_final=.001, outlierfrac=1e-2, outlierprior=.1, normal_weight_init=5, normal_weight_final=.5, normal_coef_init=1, normal_coef_final=.5):
+        """
+        TODO: do something better for default parameters and write comment
+        """
+        super(TpsnRpmRegistrationFactory, self).__init__(demos)
+        self.cost_type = cost_type
+        self.prior_fn = prior_fn
+        self.temp_init = temp_init
+        self.temp_final = temp_final
+        self.bend_init = bend_init
+        self.bend_final = bend_final
+        self.outlierfrac = outlierfrac
+        self.outlierprior = outlierprior
+        self.normal_weight_init = normal_weight_init
+        self.normal_weight_final = normal_weight_final
+        self.normal_coef_init = normal_coef_init
+        self.normal_coef_final = normal_coef_final
+
+    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+        # TODO
+        """
+        TODO: use em_iter
+        """
+        if self.prior_fn is not None:
+            vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
+        else:
+            vis_cost_xy = None
+        old_cloud = demo.scene_state.cloud
+        new_cloud = test_scene_state.cloud
+        x_nd = old_cloud[:,:3]
+        y_md = new_cloud[:,:3]
+        #scaled_x_nd, src_params = registration.unit_boxify(x_nd)
+        #scaled_y_md, targ_params = registration.unit_boxify(y_md)
+
+        #f = registration.ThinPlateSpline(3)
+        #Epts = np.r_[x_nd[0:8],x_nd[0:8]]
+        #Exs = tps_utils.find_all_normals_naive(x_nd, wsize = 0.05)
+        #Exs = np.r_[np.tile(np.array([-1,0,0]),(2,1)),np.tile(np.array([-1,0,0]),(2,1)),np.tile(np.array([-1,0,0]),(2,1)),np.tile(np.array([-1,0,0]),(2,1)),np.tile(np.array([0,0,1]),(8,1))]
+        #Exs = np.r_[Exs,Exs]
+        #Eys = Exs
+
+        Epts = np.array([[.45,-.2,1], [.55,0,1]])
+        Epts = np.r_[Epts,x_nd[0:8]]
+        Exs = np.tile(np.array([0,0,1]), (10,1))
+        Eys = Exs
+
+        f,corr1,_ = tps_n_rpm.tps_rpm_double_corr(x_nd, y_md, Epts, Exs, Eys, temp_init=self.temp_init,  temp_final=self.temp_final, bend_init=self.bend_init, bend_final=self.bend_final,
+                    outlierfrac = self.outlierfrac, outlierprior = self.outlierprior, normal_weight_init = self.normal_weight_init, normal_weight_final = self.normal_weight_final, normal_coef_init = self.normal_coef_init, normal_coef_final = self.normal_coef_final)
+        
+        #y_md = corr.dot(y_md)
+        #f = registration.fit_ThinPlateSpline(x_nd, y_md, bend_coef=self.bend_coef)
+        #f = tn_registration.fit_KrigingSpline(x_nd, Epts, Exs, y_md, Eys, bend_coef = self.bend_coef,normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
+
+        #bending_cost = registration.tps_reg_cost(f)
+        f_tmp = f
+        #f = registration.unscale_tps(f, src_params, targ_params)
+        f._old = f_tmp
+        f._bending_cost = 0 # TODO: do this properly
+        return Registration(demo, test_scene_state, f, corr1)
+    
+    def cost(self, demo, test_scene_state):
         # TODO
         raise NotImplementedError
+
+class TpsnRegistrationFactory(RegistrationFactory):
+    """
+    TPS using normals information
+    """
+    def __init__(self, demos, bend_coef=1e-9, normal_coef=1e-9, prior_fn=None, cost_type='bending'):
+        """
+        TODO: do something better for default parameters and write comment
+        """
+        super(TpsnRegistrationFactory, self).__init__(demos)
+        self.cost_type = cost_type
+        self.bend_coef = bend_coef
+        self.prior_fn = prior_fn
+        self.normal_coef = normal_coef
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         # TODO
-        raise NotImplementedError
+        """
+        TODO: use em_iter
+        """
+        if self.prior_fn is not None:
+            vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
+        else:
+            vis_cost_xy = None
+        old_cloud = demo.scene_state.cloud
+        new_cloud = test_scene_state.cloud
+        x_nd = old_cloud[:,:3]
+        y_md = new_cloud[:,:3]
+
+        Epts = np.array([[.45,-.2,1], [.55,0,1]])
+        Epts = np.r_[Epts,x_nd[0:8]]
+        Exs = np.tile(np.array([0,0,1]), (10,1))
+        Eys = Exs
+
+        f = tn_registration.fit_KrigingSpline(x_nd, Epts, Exs, y_md, Eys, bend_coef = self.bend_coef,normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
+
+        f_tmp = f
+
+        f._old = f_tmp
+        f._bending_cost = 0 # TODO: do this properly
+        return Registration(demo, test_scene_state, f, None)
     
     def cost(self, demo, test_scene_state):
         # TODO

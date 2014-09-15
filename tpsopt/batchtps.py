@@ -5,17 +5,17 @@ import numpy as np
 import scipy.spatial.distance as ssd
 import h5py, sys
 
-import pycuda.driver as drv
-import pycuda.autoinit
-from pycuda import gpuarray
-from scikits.cuda import linalg
-linalg.init()
+#import pycuda.driver as drv
+#import pycuda.autoinit
+#from pycuda import gpuarray
+#from scikits.cuda import linalg
+#linalg.init()
 
 from tps import tps_kernel_matrix, tps_eval, tps_kernel_matrix2
-from culinalg_exts import dot_batch_nocheck, get_gpu_ptrs, m_dot_batch
+#from culinalg_exts import dot_batch_nocheck, get_gpu_ptrs, m_dot_batch
 from precompute import downsample_cloud, batch_get_sol_params
-from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
-    closest_point_cost, scale_points, gram_mat_dist
+#from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
+    #closest_point_cost, scale_points, gram_mat_dist
 from registration import registration_cost as cpu_registration_cost, unit_boxify, loglinspace
 from constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
     DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
@@ -29,7 +29,8 @@ class Globals:
     sync = False
     streams = []
     for i in range(N_STREAMS):
-        streams.append(drv.Stream())
+        #streams.append(drv.Stream())
+        pass
 
 def get_stream(i):
     return Globals.streams[i % N_STREAMS]
@@ -118,11 +119,12 @@ class GPUContext(object):
         sets the tps params to be identity
         """
         for p in self.tps_params:
-            drv.memcpy_dtod_async(p.gpudata, self.default_tps_params.gpudata, p.nbytes)            
+            #drv.memcpy_dtod_async(p.gpudata, self.default_tps_params.gpudata, p.nbytes)    
+            pass     
     def set_tps_params(self, vals):
         for d, s in zip(self.tps_params, vals):
-            drv.memcpy_dtod_async(d.gpudata, s.gpudata, d.nbytes)            
-
+            #drv.memcpy_dtod_async(d.gpudata, s.gpudata, d.nbytes)            
+            pass
     def reset_warp_err(self):
         self.warp_err.fill(0)
 

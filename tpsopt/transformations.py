@@ -1,12 +1,12 @@
 import tps
 import numpy as np
 
-import pycuda.gpuarray as gpuarray
-import pycuda.driver as drv
-import pycuda.autoinit
+#import pycuda.gpuarray as gpuarray
+#import pycuda.driver as drv
+#import pycuda.autoinit
  
-from culinalg_exts import gemm, get_gpu_ptrs, dot_batch_nocheck
-from cuda_funcs import check_cuda_err
+#from culinalg_exts import gemm, get_gpu_ptrs, dot_batch_nocheck
+#from cuda_funcs import check_cuda_err
 import scipy.linalg
 
 class NoGPUTPSSolver(object):

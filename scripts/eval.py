@@ -10,8 +10,8 @@ from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
+from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment, GroundTruthBoxLfdEnvironment
+from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory, TpsnRpmRegistrationFactory, TpsnRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
@@ -42,6 +42,128 @@ class GlobalVars:
     actions = None
     actions_cache = None
     demos = None
+
+def get_move_traj(t_start, t_end, start_fixed, lfd_env, lr):
+    n_steps = 10
+    R = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+    manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+    ee_link_name = "%s_gripper_tool_frame"%lr
+    ee_link = lfd_env.world.robot.GetLink(ee_link_name)
+
+    hmat_start = np.r_[np.c_[R, t_start], np.c_[0,0,0,1]]
+    hmat_end = np.r_[np.c_[R, t_end], np.c_[0,0,0,1]]
+    new_hmats = np.asarray(resampling.interp_hmats(np.arange(n_steps), np.r_[0, n_steps-1], [hmat_start, hmat_end]))
+    dof_vals = lfd_env.world.robot.GetManipulator(manip_name).GetArmDOFValues()
+    old_traj = np.tile(dof_vals, (n_steps,1))
+    
+    traj, _, _ = planning.plan_follow_traj(lfd_env.world.robot, manip_name, ee_link, new_hmats, old_traj, start_fixed=start_fixed, beta_rot=10000.0)
+    return traj, new_hmats
+
+def generate_box_demonstration(lfd_env,box0_pos, box1_pos, move_height, box_depth):
+    lr = 'r'
+    manip_names = {"l":"leftarm", "r":"rightarm"}
+
+    dof_inds = sim_util.dof_inds_from_name(lfd_env.world.robot, manip_names['r']) + (sim_util.dof_inds_from_name(lfd_env.world.robot, manip_names['l']))
+
+    t1, h1 = get_move_traj(box0_pos + np.r_[0,0,move_height], box0_pos + np.r_[0,0,box_depth/2-0.02], False, lfd_env, 'r')
+    t2, h2 = get_move_traj(box0_pos + np.r_[0,0,box_depth/2-0.02], box0_pos + np.r_[0,0,move_height], False, lfd_env, 'r')
+    t3, h3 = get_move_traj(box0_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,move_height], False, lfd_env, 'r')
+    t4, h4 = get_move_traj(box1_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,box_depth+box_depth/2-0.02+0.001], False, lfd_env, 'r')
+    t5, h5 = get_move_traj(box1_pos + np.r_[0,0,box_depth+box_depth/2-0.02+0.001], box1_pos + np.r_[0,0,move_height], False, lfd_env, 'r')
+
+    full_traj_r = np.r_[t1,t2,t3,t4,t5]
+
+    dof_vals = lfd_env.world.robot.GetManipulator(manip_names['l']).GetArmDOFValues()
+
+    full_traj = np.c_[full_traj_r,np.tile(dof_vals,(50,1))]
+
+    R = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+
+    demonstration_traj = AugmentedTrajectory.create_from_full_traj(lfd_env.world.robot, (full_traj,dof_inds))
+    demonstration_traj.lr2open_finger_traj = {'l': np.tile(np.array([False],dtype=bool),50),'r': np.tile(np.array([False],dtype=bool),50)}
+    demonstration_traj.lr2close_finger_traj = {'l': np.tile(np.array([False],dtype=bool),50),'r': np.tile(np.array([False],dtype=bool),50)}
+    demonstration_traj.lr2finger_traj = {'l': np.tile(np.array([0.4]), (50,1)), 'r': np.tile(np.array([0.4]), (50,1))}
+    demonstration_traj.lr2ee_traj = {'r': np.r_[h1,h2,h3,h4,h5],'l': np.tile(np.r_[np.c_[R, np.array([.101,-.682,1.16])],np.c_[0,0,0,1]], (50,1,1))}
+    demonstration_traj.lr2finger_traj['r'][10:,] = .4
+    demonstration_traj.lr2finger_traj['r'][39:,] = .4
+    demonstration_traj.lr2close_finger_traj['r'][9] = True
+    demonstration_traj.lr2open_finger_traj['r'][39] = True
+
+    d1 = Demonstration("d1", lfd_env.observe_scene("demonstration"), demonstration_traj)
+    return d1
+
+
+def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
+    table_height = 0.78
+    box_length = 0.04
+    box_depth = 0.12
+    box0_pos = np.r_[.45, -.2, table_height+box_depth/2]
+    box1_pos = np.r_[.45, 0, table_height+box_depth/2]
+    box1_pos_2 = np.r_[.6, 0, table_height+box_depth/2]
+    move_height = .3
+
+    d1 = generate_box_demonstration(lfd_env, box0_pos, box1_pos, move_height, box_depth)
+
+    box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
+    sim.add_objects([box0])
+
+    table_height = 0.78
+    box_length = 0.04
+    box_depth = 0.12
+    box0_pos = np.r_[.45, -.2, table_height+box_depth/2]
+    box1_pos = np.r_[.45, 0, table_height+box_depth/2]
+    box_length1 = 0.046
+    x_offset = .15
+    #box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
+    #sim_objs.append(box0)
+    static_offset = 0.0
+
+    success,failure=0,0
+    succeeds = []
+    box2 = BoxSimulationObject("box2", np.r_[.45 + box_length1 + x_offset,0,table_height+box_depth/2-static_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False)
+    box3 = BoxSimulationObject("box3", np.r_[.45 - box_length1 + x_offset,0,table_height+box_depth/2-static_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False)
+    box4 = BoxSimulationObject("box4", np.r_[.45 + x_offset, -box_length1,table_height+box_depth/2-static_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False)
+    box5 = BoxSimulationObject("box5", np.r_[.45 + x_offset, box_length1 ,table_height+box_depth/2-static_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False)
+    sim.add_objects([box2,box3,box4,box5])
+    for b in np.linspace(1e-2,10e-20,10):
+        for n in np.linspace(1e-2,10e-20,10):
+            for offset in np.linspace(-.2,.2,10):
+                sim.remove_objects([box2,box3,box4,box5])
+
+                box2 = BoxSimulationObject("box2", np.r_[.45 + box_length1 + offset,0,table_height+box_depth/2-static_offset], [box_length/2, box_length, box_depth/2], dynamic=False)
+                box3 = BoxSimulationObject("box3", np.r_[.45 - box_length1 + offset,0,table_height+box_depth/2-static_offset], [box_length/2, box_length, box_depth/2], dynamic=False)
+                box4 = BoxSimulationObject("box4", np.r_[.45 + offset, -box_length1,table_height+box_depth/2-static_offset], [box_length, box_length/2, box_depth/2], dynamic=False)
+                box5 = BoxSimulationObject("box5", np.r_[.45 + offset, box_length1 ,table_height+box_depth/2-static_offset], [box_length, box_length/2, box_depth/2], dynamic=False)
+
+                lfd_env.box1pos_2=np.array([.45 + offset, 0])
+
+                sim.add_objects([box2,box3,box4,box5])
+                #reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=10)
+                reg_factory = TpsnRpmRegistrationFactory(GlobalVars.demos)
+                traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
+                traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost, init_trajectory_transferer=traj_transferer)
+
+                reg_factory.bend_coef = 10e-9
+                reg_factory.normal_coef = 10e-9
+
+                reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+
+                test_aug_traj = reg_and_traj_transferer.transfer(d1, lfd_env.observe_scene("test"), plotting=args.plotting)
+                lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
+
+                bt_box0 = lfd_env.sim.bt_env.GetObjectByName('box0')
+                final_pos = bt_box0.GetTransform()[:3,3]
+                if final_pos[1] < (box1_pos_2[1] + box_length/2) and final_pos[1] > (box1_pos_2[1] - box_length/2) and final_pos[0] < (box1_pos_2[0] + box_length/2) and final_pos[0] > (box1_pos_2[0] - box_length/2) and final_pos[2] < table_height+box_depth:
+                    success+=1
+                    succeeds.append((b,n))
+                else:
+                    failure+=1
+                sim.remove_objects([box0])
+                sim.viewer.Step()
+                sim.add_objects([box0])
+    ipy.embed()
+    print success,failure
+    
 
 def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim):
     """TODO
@@ -301,6 +423,7 @@ def parse_input_args():
     parser.add_argument("--plotting", type=int, default=1, help="plots if animation != 0 and plotting != 0")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
     parser.add_argument("--resultfile", type=str, help="no results are saved if this is not specified")
+    parser.add_argument("--box", type=int, default=0)
 
     # selects tasks to evaluate/replay
     parser.add_argument("--tasks", type=int, nargs='*', metavar="i_task")
@@ -415,6 +538,19 @@ def setup_lfd_environment_sim(args):
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
+
+    #BOX PARAMETERS
+    table_height = 0.78
+    box_length = 0.04
+    box_depth = 0.12
+    box0_pos = np.r_[.45, -.2, table_height+box_depth/2]
+    box1_pos = np.r_[.45, 0, table_height+box_depth/2]
+    box_length1 = 0.047
+    x_offset = .15
+    #box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
+    #sim_objs.append(box0)
+    static_offset = 0.02
+        
     if 'bookshelve' in args.eval.obstacles:
         sim_objs.append(XmlSimulationObject("../data/bookshelve.env.xml", dynamic=False))
     if 'boxes' in args.eval.obstacles:
@@ -430,7 +566,10 @@ def setup_lfd_environment_sim(args):
     world = sim
     sim.add_objects(sim_objs)
     if args.eval.ground_truth:
-        lfd_env = GroundTruthRopeLfdEnvironment(sim, world, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
+        if args.box:
+            lfd_env = GroundTruthBoxLfdEnvironment(sim, world, box0_pos[:2], box1_pos[:2], box1_pos[:2] + np.array([x_offset, 0]),box_length/2, table_height+box_depth, table_height, downsample_size=args.eval.downsample_size)
+        else:
+            lfd_env = GroundTruthRopeLfdEnvironment(sim, world, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
     else:
         lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
 
@@ -537,7 +676,10 @@ def main():
         if args.eval.parallel:
             eval_on_holdout_parallel(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
         else:
-            eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
+            if args.box:
+                box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim)
+            else:
+                eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
         print "eval time is:\t{}".format(time.time() - start)
     elif args.subparser_name == "replay":
         replay_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)

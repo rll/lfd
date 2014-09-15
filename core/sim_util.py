@@ -800,8 +800,10 @@ def tpsrpm_plot_cb(sim_env, x_nd, y_md, targ_Nd, corr_nm, wt_n, f):
 
 def draw_grid(sim_env, old_xyz, f, color = (1,1,0,1)):
     grid_means = .5 * (old_xyz.max(axis=0) + old_xyz.min(axis=0))
-    grid_mins = grid_means - (old_xyz.max(axis=0) - old_xyz.min(axis=0))
-    grid_maxs = grid_means + (old_xyz.max(axis=0) - old_xyz.min(axis=0))
+    #grid_mins = grid_means - (old_xyz.max(axis=0) - old_xyz.min(axis=0))
+    #grid_maxs = grid_means + (old_xyz.max(axis=0) - old_xyz.min(axis=0))
+    grid_mins = np.array([0,-1,.3])
+    grid_maxs = np.array([1,1,1])
     return plotting_openrave.draw_grid(sim_env.env, f.transform_points, grid_mins, grid_maxs, 
                                        xres = .1, yres = .1, zres = .04, color = color)
 

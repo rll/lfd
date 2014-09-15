@@ -8,6 +8,7 @@ from rapprentice import planning, resampling
 from core.simulation import DynamicSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject
 from core import sim_util
+import IPython as ipy
 
 table_height = 0.77
 box_length = 0.04
@@ -35,7 +36,7 @@ viewer.SetCameraManipulatorMatrix(camera_matrix)
 
 # rotate box0 by 22.5 degrees
 bt_box0 = sim.bt_env.GetObjectByName('box0')
-T = openravepy.matrixFromAxisAngle(np.array([0,0,np.pi/8]))
+T = openravepy.matrixFromAxisAngle(np.array([0,0,np.pi/4]))
 T[:3,3] = bt_box0.GetTransform()[:3,3]
 bt_box0.SetTransform(T) # SetTransform needs to be used in the Bullet object, not the openrave body
 sim.update()

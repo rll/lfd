@@ -1,7 +1,7 @@
-import pycuda.gpuarray as gpuarray
-import pycuda.driver as drv
-import pycuda.autoinit
-from scikits.cuda import misc, cublas
+#import pycuda.gpuarray as gpuarray
+#import pycuda.driver as drv
+#import pycuda.autoinit
+#from scikits.cuda import misc, cublas
 from string import lower, upper
 import numpy as np
 

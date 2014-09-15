@@ -95,7 +95,7 @@ class StaticSimulation(object):
     
     @property
     def viewer(self):
-        if not self.__viewer and trajoptpy.ViewerExists(self.env):
+        if not self.__viewer:
             self.__viewer = trajoptpy.GetViewer(self.env)
         return self.__viewer
 

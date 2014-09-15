@@ -176,7 +176,7 @@ class AugmentedTrajectory(object):
             finger_ind = robot.GetJointIndex("%s_gripper_l_finger_joint"%lr)
             if finger_ind in dof_inds:
                 lr2finger_traj[lr] = traj[:,dof_inds.index(finger_ind)][:,None]
-        lr2ee_traj = {}    
+        lr2ee_traj = {}
         for lr in lr2arm_traj.keys():
             lr2ee_traj[lr] = sim_util.get_ee_traj(robot, lr, lr2arm_traj[lr])
         return AugmentedTrajectory(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
@@ -232,8 +232,8 @@ class AugmentedTrajectory(object):
                 oc_finger_traj_rs = np.zeros(len(timesteps_rs), dtype=bool)
                 oc_finger_traj_rs[oc_inds_rs] = True
                 lr2oc_finger_traj_rs[lr] = oc_finger_traj_rs
-        
         return AugmentedTrajectory(lr2arm_traj=lr2arm_traj_rs, lr2finger_traj=lr2finger_traj_rs, lr2ee_traj=lr2ee_traj_rs, lr2open_finger_traj=lr2open_finger_traj_rs, lr2close_finger_traj=lr2close_finger_traj_rs)
     
     def __repr__(self):
         return "%s(...)" % (self.__class__.__name__)
+
