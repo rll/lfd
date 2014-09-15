@@ -1,22 +1,25 @@
 
 import numpy as np, os.path as osp
 import openravepy as rave
-from numpy import inf, zeros, dot, r_, pi
+from numpy import inf, zeros, dot, r_
 from numpy.linalg import norm, inv
 from threading import Thread
 
-from rapprentice import retiming, math_utils as mu,conversions as conv, func_utils, resampling
+from rapprentice import retiming, math_utils as mu, kinematics_utils as ku, \
+    conversions as conv, func_utils
 
 import roslib
 roslib.load_manifest("pr2_controllers_msgs")
 roslib.load_manifest("move_base_msgs")
+roslib.load_manifest("tf");
 import pr2_controllers_msgs.msg as pcm
 import trajectory_msgs.msg as tm
 import sensor_msgs.msg as sm
 import actionlib
 import rospy
-import geometry_msgs.msg as gm           
-import move_base_msgs.msg as mbm   
+import geometry_msgs.msg as gm
+import move_base_msgs.msg as mbm
+from tf import TransformListener
 
 VEL_RATIO = .2
 ACC_RATIO = .3
@@ -28,7 +31,7 @@ class TopicListener(object):
     "stores last message"
     last_msg = None
     def __init__(self,topic_name,msg_type):
-        self.sub = rospy.Subscriber(topic_name,msg_type,self.callback)        
+        self.sub = rospy.Subscriber(topic_name,msg_type,self.callback)
 
         rospy.loginfo('waiting for the first message: %s'%topic_name)
         while self.last_msg is None: rospy.sleep(.01)
@@ -46,7 +49,7 @@ class JustWaitThread(Thread):
         self.duration = duration
 
     def run(self):
-        t_done = rospy.Time.now() + rospy.Duration(self.duration)        
+        t_done = rospy.Time.now() + rospy.Duration(self.duration)
         while not self.wants_exit and rospy.Time.now() < t_done and not rospy.is_shutdown():
             rospy.sleep(.01)
 
@@ -64,10 +67,10 @@ class GripperTrajectoryThread(Thread):
         t_start = rospy.Time.now()
         self.gripper.set_angle_target(self.angles[0])
         for i in xrange(1,len(self.times)):
-            if rospy.is_shutdown() or self.wants_exit: break          
+            if rospy.is_shutdown() or self.wants_exit: break
             duration_elapsed = rospy.Time.now() - t_start
             self.gripper.set_angle_target(self.angles[i])
-            rospy.sleep(rospy.Duration(self.times[i]) - duration_elapsed)            
+            rospy.sleep(rospy.Duration(self.times[i]) - duration_elapsed)
 
 
 
@@ -80,19 +83,24 @@ class PR2(object):
     def create(rave_only=False):
         return PR2(rave_only)
 
-    def __init__(self):
+    def __init__(self, rave_robot=None):
 
         # set up openrave
-        self.env = rave.Environment()
-        self.env.StopSimulation()
-        self.env.Load("robots/pr2-beta-static.zae") # todo: use up-to-date urdf
-        self.robot = self.env.GetRobots()[0]
+        if not rave_robot:
+            self.env = rave.Environment()
+            self.env.StopSimulation()
+            # self.env.Load("robots/pr2-beta-static.zae") # todo: use up-to-date urdf
+            self.env.Load("../tests/pr2-beta-static.zae") # todo: use up-to-date urdf
+            self.robot = self.env.GetRobots()[0]
+        else:
+            self.env   = rave_robot.GetEnv()
+            self.robot = rave_robot
 
         self.joint_listener = TopicListener("/joint_states", sm.JointState)
 
         # rave to ros conversions
-        joint_msg = self.get_last_joint_message()        
-        ros_names = joint_msg.name                
+        joint_msg = self.get_last_joint_message()
+        ros_names = joint_msg.name
         inds_ros2rave = np.array([self.robot.GetJointIndex(name) for name in ros_names])
         self.good_ros_inds = np.flatnonzero(inds_ros2rave != -1) # ros joints inds with matching rave joint
         self.rave_inds = inds_ros2rave[self.good_ros_inds] # openrave indices corresponding to those joints
@@ -125,7 +133,7 @@ class PR2(object):
                 low_limits[larm_index] = low
                 high_limits[larm_index] = high
         self.robot.SetDOFLimits(low_limits, high_limits)
-        
+
 
     def start_thread(self, thread):
         self.pending_threads.append(thread)
@@ -135,14 +143,14 @@ class PR2(object):
         return self.joint_listener.last_msg
 
     def update_rave(self):
-        ros_values = self.get_last_joint_message().position        
-        rave_values = [ros_values[i_ros] for i_ros in self.good_ros_inds]        
+        ros_values = self.get_last_joint_message().position
+        rave_values = [ros_values[i_ros] for i_ros in self.good_ros_inds]
         self.robot.SetJointValues(rave_values[:20],self.rave_inds[:20])
-        self.robot.SetJointValues(rave_values[20:],self.rave_inds[20:])   
+        self.robot.SetJointValues(rave_values[20:],self.rave_inds[20:])
 
         # if use_map:
-        #     (trans,rot) = self.tf_listener.lookupTransform('/map', '/base_link', rospy.Time(0))            
-        #     self.robot.SetTransform(conv.trans_rot_to_hmat(trans, rot))            
+        #     (trans,rot) = self.tf_listener.lookupTransform('/map', '/base_link', rospy.Time(0))
+        #     self.robot.SetTransform(conv.trans_rot_to_hmat(trans, rot))
 
     def update_rave_without_ros(self, joint_vals):
         self.robot.SetJointValues(joint_vals)
@@ -177,7 +185,7 @@ class TrajectoryControllerWrapper(object):
         self.ros_joint_inds = [msg.name.index(name) for name in self.joint_names]
         self.rave_joint_inds = [pr2.robot.GetJointIndex(name) for name in self.joint_names]
 
-        self.controller_pub = rospy.Publisher("%s/command"%controller_name, tm.JointTrajectory)        
+        self.controller_pub = rospy.Publisher("%s/command"%controller_name, tm.JointTrajectory)
 
         all_vel_limits = self.pr2.robot.GetDOFVelocityLimits()
         self.vel_limits = np.array([all_vel_limits[i_rave]*VEL_RATIO for i_rave in self.rave_joint_inds])
@@ -210,7 +218,7 @@ class TrajectoryControllerWrapper(object):
 
         rospy.loginfo("%s: starting %.2f sec traj", self.controller_name, duration)
         self.pr2.start_thread(JustWaitThread(duration))
-    
+
 
     def follow_joint_trajectory(self, traj):
         traj = np.r_[np.atleast_2d(self.get_joint_positions()), traj]
@@ -220,7 +228,7 @@ class TrajectoryControllerWrapper(object):
         times = retiming.retime_with_vel_limits(traj, self.vel_limits)
         times_up = np.arange(0,times[-1],.1)
         traj_up = mu.interp2d(times_up, times, traj)
-        vels = resampling.get_velocities(traj_up, times_up, .001)
+        vels = ku.get_velocities(traj_up, times_up, .001)
         self.follow_timed_joint_trajectory(traj_up, vels, times_up)
 
 
@@ -263,40 +271,40 @@ def transform_relative_pose_for_ik(manip, matrix4, ref_frame, targ_frame):
         ref = robot.GetLink(ref_frame)
         worldFromRef = ref.GetTransform()
 
-    if targ_frame == "end_effector":        
+    if targ_frame == "end_effector":
         targFromEE = np.eye(4)
     else:
         targ = robot.GetLink(targ_frame)
         worldFromTarg = targ.GetTransform()
-        worldFromEE = manip.GetEndEffectorTransform()    
-        targFromEE = dot(inv(worldFromTarg), worldFromEE)       
+        worldFromEE = manip.GetEndEffectorTransform()
+        targFromEE = dot(inv(worldFromTarg), worldFromEE)
 
     refFromTarg_new = matrix4
-    worldFromEE_new = dot(dot(worldFromRef, refFromTarg_new), targFromEE)    
+    worldFromEE_new = dot(dot(worldFromRef, refFromTarg_new), targFromEE)
 
     return worldFromEE_new
 
 def cart_to_joint(manip, matrix4, ref_frame, targ_frame, filter_options = 0):
     robot = manip.GetRobot()
-    worldFromEE = transform_relative_pose_for_ik(manip, matrix4, ref_frame, targ_frame)        
+    worldFromEE = transform_relative_pose_for_ik(manip, matrix4, ref_frame, targ_frame)
     joint_positions = manip.FindIKSolution(worldFromEE, filter_options)
     if joint_positions is None: return joint_positions
     current_joints = robot.GetDOFValues(manip.GetArmIndices())
-    joint_positions_unrolled = closer_joint_angles(joint_positions, current_joints)
+    joint_positions_unrolled = ku.closer_joint_angles(joint_positions, current_joints)
     return joint_positions_unrolled
 
 
 
 class Arm(TrajectoryControllerWrapper):
 
-    L_POSTURES = dict(        
-        untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
-        tucked = [0.06, 1.25, 1.79, -1.68, -1.73, -0.10, -0.09],
-        up = [ 0.33, -0.35,  2.59, -0.15,  0.59, -1.41, -0.27],
-        side = [  1.832,  -0.332,   1.011,  -1.437,   1.1  ,  -2.106,  3.074],
+    L_POSTURES = dict(
+        untucked=[0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
+        tucked=[0.06, 1.25, 1.79, -1.68, -1.73, -0.10, -0.09],
+        up=[0.33, -0.35,  2.59, -0.15,  0.59, -1.41, -0.27],
+        side=[1.832,  -0.332,   1.011,  -1.437,   1.1,  -2.106,  3.074],
         side2=[1.832, -0.332, 1.011, -1.437, 1.1, 0, 3.074],
-        handoff=[0.3, -0.5, 1.5, -2, 1.08, -1.45, 1.45]
-    )    
+        handoff=[0.3, -0.5, 1.5, -2, 1.08, -1.45, 1.45],
+    )
 
     def __init__(self, pr2, lr):
         TrajectoryControllerWrapper.__init__(self,pr2, "%s_arm_controller"%lr)
@@ -309,13 +317,13 @@ class Arm(TrajectoryControllerWrapper):
 
 
     def goto_posture(self, name):
-        l_joints = self.L_POSTURES[name]        
+        l_joints = self.L_POSTURES[name]
         joints = l_joints if self.lr == 'l' else mirror_arm_joints(l_joints)
         self.goto_joint_positions(joints)
 
     def goto_joint_positions(self, positions_goal):
-        positions_cur = self.get_joint_positions()        
-        positions_goal = closer_joint_angles(positions_goal, positions_cur)
+        positions_cur = self.get_joint_positions()
+        positions_goal = ku.closer_joint_angles(positions_goal, positions_cur)
         TrajectoryControllerWrapper.goto_joint_positions(self, positions_goal)
 
 
@@ -331,14 +339,14 @@ class Arm(TrajectoryControllerWrapper):
         self.pr2.update_rave()
         return cart_to_joint(self.manip, matrix4, ref_frame, targ_frame, filter_options)
 
-    def goto_pose_matrix(self, matrix4, ref_frame, targ_frame, filter_options = 0): 
+    def goto_pose_matrix(self, matrix4, ref_frame, targ_frame, filter_options = 0):
         """
         IKFO_CheckEnvCollisions = 1
         IKFO_IgnoreSelfCollisions = 2
         IKFO_IgnoreJointLimits = 4
         IKFO_IgnoreCustomFilters = 8
         IKFO_IgnoreEndEffectorCollisions = 16
-        """                               
+        """
         self.pr2.update_rave()
         joint_positions = cart_to_joint(self.manip, matrix4, ref_frame, targ_frame, filter_options)
         if joint_positions is not None: self.goto_joint_positions(joint_positions)
@@ -365,7 +373,7 @@ class Head(TrajectoryControllerWrapper):
 
         worldFromRef = self.pr2.robot.GetLink(reference_frame).GetTransform()
         worldFromCam = self.pr2.robot.GetLink(camera_frame).GetTransform()
-        refFromCam = dot(inv(worldFromRef), worldFromCam)        
+        refFromCam = dot(inv(worldFromRef), worldFromCam)
 
         xyz_cam = refFromCam[:3,3]
         ax = xyz_target - xyz_cam # pointing axis
@@ -388,7 +396,7 @@ class Torso(TrajectoryControllerWrapper):
     def go_up(self):
         self.set_height(.3)
     def go_down(self):
-        self.set_height(.02)        
+        self.set_height(.02)
 
 
 class Gripper(object):
@@ -405,7 +413,7 @@ class Gripper(object):
         self.ros_joint_inds = [msg.name.index(name) for name in self.joint_names]
         self.rave_joint_inds = [pr2.robot.GetJointIndex(name) for name in self.joint_names]
 
-        self.controller_pub = rospy.Publisher("%s/command"%self.controller_name, pcm.Pr2GripperCommand)        
+        self.controller_pub = rospy.Publisher("%s/command"%self.controller_name, pcm.Pr2GripperCommand)
 
         self.grip_client = actionlib.SimpleActionClient('%s_gripper_controller/gripper_action'%lr, pcm.Pr2GripperCommandAction)
         #self.grip_client.wait_for_server()
@@ -413,16 +421,16 @@ class Gripper(object):
         self.acc_limits = [inf]
 
         self.diag_pub = rospy.Publisher("/%s_gripper_traj_diagnostic"%lr, tm.JointTrajectory)
-        # XXX 
+        # XXX
         self.closed_angle = 0
 
     def set_angle(self, a, max_effort = default_max_effort):
         self.grip_client.send_goal(pcm.Pr2GripperCommandGoal(pcm.Pr2GripperCommand(position=a,max_effort=max_effort)))
         self.pr2.start_thread(Thread(target=self.grip_client.wait_for_result))
-    def open(self, max_effort=default_max_effort):
-        self.set_angle(.08, max_effort = max_effort)
+    def open(self, max_effort=default_max_effort, scale_factor=1.0):
+        self.set_angle(.08 * scale_factor, max_effort = max_effort)
     def close(self,max_effort=default_max_effort):
-        self.set_angle(-.01, max_effort = max_effort)        
+        self.set_angle(-.01, max_effort = max_effort)
     def is_closed(self): # (and empty)
         return self.get_angle() <= self.closed_angle# + 0.001 #.0025
     def set_angle_target(self, position, max_effort = default_max_effort):
@@ -458,11 +466,12 @@ class Base(object):
     def __init__(self, pr2):
         self.pr2 = pr2
         self.action_client = actionlib.SimpleActionClient('move_base',mbm.MoveBaseAction)
-        self.command_pub = rospy.Publisher('base_controller/command', gm.Twist)        
+        self.command_pub = rospy.Publisher('base_controller/command', gm.Twist)
         self.traj_pub = rospy.Publisher("base_traj_controller/command", tm.JointTrajectory)
         self.vel_limits = [.2,.2,.3]
         self.acc_limits = [2,2,2] # note: I didn't think these thru
         self.n_joints = 3
+        self.tf_listener = TransformListener()
 
     def goto_pose(self, xya, frame_id):
         trans,rot = conv.xya_to_trans_rot(xya)
@@ -474,15 +483,21 @@ class Base(object):
 
         goal = mbm.MoveBaseGoal()
         goal.target_pose = ps
-        goal.header.frame_id = frame_id
+        goal.target_pose.header.frame_id = frame_id
         rospy.loginfo('Sending move base goal')
         finished = self.action_client.send_goal_and_wait(goal)
         rospy.loginfo('Move base action returned %d.' % finished)
-        return finished 
+        return finished
 
     def get_pose(self, ref_frame):
         # todo: use AMCL directly instead of TF
-        raise NotImplementedError
+        while True:
+            try:
+                t = self.tf_listener.getLatestCommonTime(ref_frame, "/base_footprint")
+                trans, rot = self.tf_listener.lookupTransform(ref_frame, '/base_footprint', t)
+                return (trans[0], trans[1], conv.quat_to_yaw(rot))
+            except:
+                continue
 
     def set_twist(self,xya):
         vx, vy, omega = xya
@@ -497,36 +512,11 @@ class Base(object):
         jt.header.frame_id = frame_id
         n = len(xyas)
         assert len(times) == n
-        for i in xrange(n):            
+        for i in xrange(n):
             jtp = tm.JointTrajectoryPoint()
             jtp.time_from_start = rospy.Duration(times[i])
             jtp.positions = xyas[i]
-            jt.points.append(jtp)            
-        self.traj_pub.publish(jt)    
-
-
-def smaller_ang(x):
-    return (x + pi)%(2*pi) - pi
-def closer_ang(x,a,dir=0):
-    """                                                                        
-    find angle y (==x mod 2*pi) that is close to a                             
-    dir == 0: minimize absolute value of difference                            
-    dir == 1: y > x                                                            
-    dir == 2: y < x                                                            
-    """
-    if dir == 0:
-        return a + smaller_ang(x-a)
-    elif dir == 1:
-        return a + (x-a)%(2*pi)
-    elif dir == -1:
-        return a + (x-a)%(2*pi) - 2*pi
-def closer_joint_angles(pos,seed):
-    result = np.array(pos)
-    for i in [2,4,6]:
-        result[i] = closer_ang(pos[i],seed[i],0)
-    return result
-def unwrap_arm_traj_in_place(traj):
-    assert traj.shape[1] == 7
-    for i in [2,4,6]:
-        traj[:,i] = np.unwrap(traj[:,i])
-    return traj
+            jt.points.append(jtp)
+        self.traj_pub.publish(jt)
+        rospy.loginfo("base_move: starting %.2f sec traj", times[-1])
+        self.pr2.start_thread(JustWaitThread(times[-1] + 5))

@@ -147,6 +147,13 @@ def fit_ThinPlateSpline(x_na, y_ng, bend_coef=.1, rot_coef = 1e-5, wt_n=None):
     f.x_na = x_na
     return f        
 
+def set_ThinPlateSpline(f, x_na, theta):
+    f.x_na = x_na
+    d = x_na.shape[1]
+    f.trans_g = theta[0]
+    f.lin_ag  = theta[1:d+1]
+    f.w_ng    = theta[d+1:]
+
 def fit_ThinPlateSpline_RotReg(x_na, y_ng, bend_coef = .1, rot_coefs = (0.01,0.01,0.0025),scale_coef=.01):
     import fastrapp
     f = ThinPlateSpline()

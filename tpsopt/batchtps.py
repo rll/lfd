@@ -243,6 +243,28 @@ class GPUContext(object):
         f.close()
         self.update_ptrs()
 
+    def read_dict(self, f):
+        for seg_name, seg_info in f.iteritems():
+            if 'inv' not in seg_info:
+                raise KeyError("Batch Mode only works with precomputed solvers")
+            seg_info = seg_info['inv']
+
+            proj_mats   = {}
+            offset_mats = {}
+            for b in self.bend_coefs:
+                k = str(b)
+                if k not in seg_info:
+                    raise KeyError("H5 File {} bend coefficient {}".format(seg_name, k))
+                proj_mats[b] = seg_info[k]['proj_mat'][:]
+                offset_mats[b] = seg_info[k]['offset_mat'][:]
+
+            ds_g         = seg_info['DS_SIZE_{}'.format(DS_SIZE)]
+            cloud_xyz    = ds_g['scaled_cloud_xyz'][:]
+            kernel       = ds_g['scaled_K_nn'][:]
+            scale_params = (ds_g['scaling'][()], ds_g['scaled_translation'][:])
+            self.add_cld(seg_name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params)
+
+        self.update_ptrs()
 
     # @profile
     def setup_tgt_ctx(self, cloud_xyz):
@@ -535,6 +557,42 @@ class GPUContext(object):
             ipy.embed()
             sys.exit(1)                            
 
+    def test_get_sol_params(self, other, test_ind = 0, bend_coef=DEFAULT_LAMBDA[1], rot_coef = np.r_[1e-4, 1e-4, 1e-1]):
+        from transformations import ThinPlateSpline, fit_ThinPlateSpline, set_ThinPlateSpline
+        from precompute import get_sol_params
+        n, m = self.dims[0], other.dims[0]
+        x_nd = self.pts[0].get()[:n]
+        xtarg_nd = self.pts_t[0].get()[:n]
+        K = tps_kernel_matrix(x_nd)
+        _, res_dict = get_sol_params(x_nd, K, bend_coef, rot_coef=rot_coef)
+        f_p_mat = res_dict['proj_mat']
+        f_o_mat = res_dict['offset_mat']
+
+        (proj_mats_arr, _), (offset_mats_arr, _) = batch_get_sol_params(x_nd, K, [bend_coef], rot_coef = rot_coef)
+        f_p_mat_batch = proj_mats_arr[0].get_async()
+        f_o_mat_batch = offset_mats_arr[0].get_async()
+        # import ipdb
+        # ipdb.set_trace()
+
+
+        f_params = f_p_mat.dot(xtarg_nd) + f_o_mat
+        f_params_batch = f_p_mat_batch.dot(xtarg_nd) + f_o_mat_batch
+
+        f_old = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = bend_coef, rot_coef = rot_coef)
+
+        f_single = ThinPlateSpline()
+        f_batch = ThinPlateSpline()
+        set_ThinPlateSpline(f_single, x_nd, f_params)
+        set_ThinPlateSpline(f_batch, x_nd, f_params_batch)
+        
+
+        assert(np.allclose(f_old.lin_ag, f_single.lin_ag))
+        assert(np.allclose(f_old.w_ng, f_single.w_ng))
+        assert(np.allclose(f_old.trans_g, f_single.trans_g))
+        assert(np.allclose(f_old.lin_ag, f_batch.lin_ag, atol=5e-4))
+        assert(np.allclose(f_old.w_ng, f_batch.w_ng, atol=1e-4))
+        assert(np.allclose(f_old.trans_g, f_batch.trans_g, atol=1e-4))
+
     def unit_test(self, other):
         print "running basic unit tests"
         self.test_init_corr(other)
@@ -542,6 +600,7 @@ class GPUContext(object):
         self.test_get_targ(other)
         self.test_mapping_cost(other)
         self.test_bending_cost(other)
+        self.test_get_sol_params(other)
         print "UNIT TESTS PASSED"
 
 class SrcContext(GPUContext):
@@ -643,6 +702,33 @@ class SrcContext(GPUContext):
             self.add_cld(seg_name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params,
                          r_traj, r_traj_K, l_traj, l_traj_K)
         f.close()
+        self.update_ptrs()
+
+    def read_dict(self, f):
+        for seg_name, seg_info in f.iteritems():
+            if 'inv' not in seg_info:
+                raise KeyError("Batch Mode only works with precomputed solvers")
+            seg_info = seg_info['inv']
+
+            proj_mats   = {}
+            offset_mats = {}
+            for b in self.bend_coefs:
+                k = str(b)
+                if k not in seg_info:
+                    raise KeyError("H5 File {} bend coefficient {}".format(seg_name, k))
+                proj_mats[b] = seg_info[k]['proj_mat'][:]
+                offset_mats[b] = seg_info[k]['offset_mat'][:]
+
+            ds_g         = seg_info['DS_SIZE_{}'.format(DS_SIZE)]
+            cloud_xyz    = ds_g['scaled_cloud_xyz'][:]
+            kernel       = ds_g['scaled_K_nn'][:]
+            r_traj       = ds_g['scaled_r_traj'][:]
+            r_traj_K     = ds_g['scaled_r_traj_K'][:]
+            l_traj       = ds_g['scaled_l_traj'][:]  
+            l_traj_K     = ds_g['scaled_l_traj_K'][:]          
+            scale_params = (ds_g['scaling'][()], ds_g['scaled_translation'][:])
+            self.add_cld(seg_name, proj_mats, offset_mats, cloud_xyz, kernel, scale_params,
+                         r_traj, r_traj_K, l_traj, l_traj_K)
         self.update_ptrs()
 
     def transform_trajs(self):
@@ -1045,7 +1131,6 @@ def test_batch_tps_rpm_bij(src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3,
     cpu_cost = f._cost + g._cost
     assert np.isclose(gpu_cost[test_ind], cpu_cost, atol=1e-4)
     
-        
 
 def parse_arguments():
     import argparse
@@ -1066,7 +1151,8 @@ if __name__=='__main__':
     for _ in range(args.n_copies):
         src_ctx.read_h5(args.input_file)
     f = h5py.File(args.input_file, 'r')    
-    tgt_cld = downsample_cloud(f['demo1-seg00']['cloud_xyz'][:])
+    # tgt_cld = downsample_cloud(f['demo1-seg00']['cloud_xyz'][:])
+    tgt_cld = downsample_cloud(f.items()[0][1]['cloud_xyz'][:])
     f.close()
     tgt_ctx = TgtContext(src_ctx)
     tgt_ctx.set_cld(tgt_cld)

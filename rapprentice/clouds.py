@@ -15,14 +15,26 @@ def XYZ_to_xy(X,Y,Z,f=DEFAULT_F):
     return (x,y)
 
 def depth_to_xyz(depth,f=DEFAULT_F):
-    x,y = np.meshgrid(np.arange(640), np.arange(480))
-    assert depth.shape == (480, 640)
-    XYZ = np.empty((480,640,3))
+    import ipdb; ipdb.set_trace()
+    width, height = depth.shape
+    x,y = np.meshgrid(np.arange(width), np.arange(height))
+    # assert depth.shape == (480, 640)
+    XYZ = np.empty((height,width,3))
     Z = XYZ[:,:,2] = depth / 1000. # convert mm -> meters
     XYZ[:,:,0] = (x - cx)*(Z/f)
     XYZ[:,:,1] = (y - cy)*(Z/f)
 
     return XYZ
+
+# def depth_to_xyz(depth,f=DEFAULT_F):
+#     x,y = np.meshgrid(np.arange(640), np.arange(480))
+#     assert depth.shape == (480, 640)
+#     XYZ = np.empty((480,640,3))
+#     Z = XYZ[:,:,2] = depth / 1000. # convert mm -> meters
+#     XYZ[:,:,0] = (x - cx)*(Z/f)
+#     XYZ[:,:,1] = (y - cy)*(Z/f)
+
+#     return XYZ
     
 def downsample(xyz, v):
     import cloudprocpy

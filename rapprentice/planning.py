@@ -57,7 +57,7 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
                 "type" : "collision",
                 "params" : {
                   "continuous" : True,
-                  "coeffs" : [1000],  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
+                  "coeffs" : [10000],  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
                   "dist_pen" : [0.025]  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
                 }
             })

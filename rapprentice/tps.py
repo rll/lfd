@@ -220,6 +220,11 @@ def solve_eqp1(H, f, A):
     R = -N.T.dot(f)
     z = np.linalg.solve(L, R)
     x = N.dot(z)
+
+    # z = np.linalg.solve(N.T.dot(H.dot(N)), -N.T.dot(f))
+    assert(np.linalg.matrix_rank(L) == L.shape[0])
+    z_new = np.linalg.inv(L).dot(R) 
+    assert(np.allclose(z, z_new))
     
     return x
 # @profile
