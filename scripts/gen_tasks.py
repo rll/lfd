@@ -71,19 +71,15 @@ def sample_rope_state(demofile, sim, animation, human_check=False,
     return (rope_nodes, demo_id)
 
 
-def gen_task_file(args, sim, perturb_bounds=None,
-                  num_perturb_pts=7, rotation_angle = np.pi/4):
+def gen_task_file(args, sim, rotation_angle=0):
     """
     draw n_examples states from the initial state distribution defined by
-    do_task.sample_rope_state
-    using intial states from actionfile
+    sample_rope_state using random intial states from actionfile
 
-    writes results to fname
+    writes results to task file name
+
+    TODO: Add rotation angle to available perturbation
     """
-    if not perturb_bounds:
-        min_rad, max_rad = 0.1, 0.1
-    else:
-        min_rad, max_rad = perturb_bounds
     taskfile = h5py.File(args.gen_tasks.taskfile, 'w')
     actionfile = h5py.File(args.gen_tasks.actionfile, 'r')
     try:
@@ -92,8 +88,9 @@ def gen_task_file(args, sim, perturb_bounds=None,
             (rope_nodes, demo_id) = sample_rope_state(actionfile, sim,
                                                       args.animation,
                                                       human_check=args.interactive,
-                                                      perturb_points=num_perturb_pts,
-                                                      min_rad=min_rad, max_rad=max_rad)
+                                                      perturb_points=args.gen_tasks.n_perturb_pts,
+                                                      min_rad=args.gen_tasks.min_rad,
+                                                      max_rad=args.gen_tasks.max_rad)
             taskfile.create_group(str(i))
             taskfile[str(i)]['rope_nodes'] = rope_nodes
             taskfile[str(i)]['demo_id'] = str(demo_id)
@@ -101,8 +98,9 @@ def gen_task_file(args, sim, perturb_bounds=None,
         taskfile.create_group('args')
         taskfile['args']['num_examples'] = args.gen_tasks.n_examples
         taskfile['args']['actionfname'] = args.gen_tasks.actionfile
-        taskfile['args']['perturb_bounds'] = (min_rad, max_rad)
-        taskfile['args']['num_perturb_pts'] = num_perturb_pts
+        taskfile['args']['perturb_bounds'] = (args.gen_tasks.min_rad,
+                                              args.gen_tasks.max_rad)
+        taskfile['args']['num_perturb_pts'] = args.gen_tasks.n_perturb_pts
         taskfile['args']['rotation'] = float(rotation_angle)
         print ''
     except:
@@ -134,7 +132,7 @@ def parse_input_args():
     parser.add_argument("--animation", type=int, default=0,
                         help="animates if non-zero. viewer is stepped according to this number")
     parser.add_argument("--interactive", action="store_true",
-                        help="step animation and optimization if specified")
+                        help="Ask for human confirmation after each new rope state")
 
     parser.add_argument("--camera_matrix_file", type=str,
                         default='../.camera_matrix.txt')
@@ -158,7 +156,15 @@ def parse_input_args():
                              metavar=("tx","ty","tz","rx","ry","rz"),
                              default=[0,0,0,0,0,0],
                              help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
+
     parser_eval.add_argument("--n_examples", type=int, default=1000)
+    parser_eval.add_argument("--min_rad", type=float, default="0.1",
+                             help="min perturbation radius")
+    parser_eval.add_argument("--max_rad", type=float, default="0.1",
+                             help="max perturbation radius")
+    parser_eval.add_argument("--n_perturb_pts", type=int, default=7,
+                             help="number of points perturbed from demo start state")
+
 
     args = parser.parse_args()
     if not args.animation:
