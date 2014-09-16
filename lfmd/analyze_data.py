@@ -163,7 +163,7 @@ def analyze_data(args, demos, action_selection, reg_factory, lfd_env, sim):
         if demo.aug_traj.lr2torque_traj:
             if i_choice == 0:
                 n_dof += 3
-            torque_traj = demo.aug_traj.lr2torque_traj[lr] # TODO
+            torque_traj = reg.f.transform_vectors(ee_traj[:,:3,3], demo.aug_traj.lr2torque_traj[lr])
         traj = np.c_[ee_traj[:,:3,3], aas, force_traj, torque_traj]
         trajs.append(traj)
     
@@ -284,6 +284,7 @@ def setup_demos(args):
     
     demos = {}
     for action, seg_info in actions.iteritems():
+        if 'overhand' in args.eval.actionfile and 'seg00' not in action: continue #TODO
         full_cloud = seg_info['cloud_xyz'][()]
         scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
         lr2force_traj = {}
@@ -377,7 +378,7 @@ def setup_registration(args, demos, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(demos)
+            reg_factory = TpsRpmBijRegistrationFactory(demos, n_iter=10) #TODO
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
