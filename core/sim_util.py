@@ -805,11 +805,11 @@ def draw_grid(sim_env, old_xyz, f, color = (1,1,0,1)):
     return plotting_openrave.draw_grid(sim_env.env, f.transform_points, grid_mins, grid_maxs, 
                                        xres = .1, yres = .1, zres = .04, color = color)
 
-def draw_axis(sim_env, hmat):
+def draw_axis(sim_env, hmat, arrow_length=.1, arrow_width=0.005):
     handles = []
-    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,0]/10.0, 0.005, (1,0,0,1)))
-    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,1]/10.0, 0.005, (0,1,0,1)))
-    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,2]/10.0, 0.005, (0,0,1,1)))
+    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,0]*arrow_length, arrow_width, (1,0,0,1)))
+    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,1]*arrow_length, arrow_width, (0,1,0,1)))
+    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,2]*arrow_length, arrow_width, (0,0,1,1)))
     return handles
 
 def draw_finger_pts_traj(sim_env, flr2finger_pts_traj, color):

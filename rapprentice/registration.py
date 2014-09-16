@@ -41,6 +41,9 @@ class Transformation(): # ParallelPython can only handle old-style classes (i.e.
     def compute_jacobian(self, x_ma):
         raise NotImplementedError        
 
+    def transform_vectors(self, x_ma, v_ma):
+        grad_mga = self.compute_jacobian(x_ma)
+        return np.einsum('ijk,ik->ij', grad_mga, v_ma) # matrix multiply each jac with each vector
 
     def transform_bases(self, x_ma, rot_mad, orthogonalize=True, orth_method = "cross"):
         """
