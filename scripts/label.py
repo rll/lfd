@@ -178,6 +178,14 @@ def get_input(start_scene, action_name, next_scene, outfile, pred):
                            ['pred', str(len(outfile) - 1)]])
 
         success = True
+    elif response in ('Y', 'y'):
+        write_flush(outfile,
+                    items=[['cloud_xyz', start_scene.cloud],
+                           ['action', action_name],
+                           ['knot', 0], # additional flag to tell if this is a knot
+                           ['deadend', 0],
+                           ['pred', pred]])
+        success = True
     return (success, resample)
 
 
@@ -195,6 +203,8 @@ def manual_select_demo(args, transferer, sim, lfd_env, outfile, pred):
                                             plotting=args.plotting)
         feasible, misgrasp = lfd_env.execute_augmented_trajectory(
             test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
+        sim_util.reset_arms_to_side(sim)
+        sim.settle(step_viewer=args.animation)
         if not feasible or misgrasp:
             sim.set_state(start_state)
             continue
@@ -244,7 +254,7 @@ def load_random_start_segment(demofile):
     return (GlobalVars.actions[seg_name]['cloud_xyz'], seg_name)
 
 
-def sample_rope_state(rope_args, sim, animation, human_check=False):
+def sample_rope_state(rope_args, sim, animation, human_check=True):
     success = False
     while not success:
         # TODO: pick a random rope initialization
