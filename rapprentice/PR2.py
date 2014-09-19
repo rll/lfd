@@ -31,6 +31,7 @@ class TopicListener(object):
     "stores last message"
     last_msg = None
     def __init__(self,topic_name,msg_type):
+        rospy.init_node('joint_state_listener', anonymous=True)
         self.sub = rospy.Subscriber(topic_name,msg_type,self.callback)
 
         rospy.loginfo('waiting for the first message: %s'%topic_name)
