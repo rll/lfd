@@ -202,6 +202,7 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
             init_traj[:,dof_inds.index(joint_ind)] = self.sim.robot.GetDOFLimits([joint_ind])[0][0]
         
         print "planning finger trajectory following"
+
         test_traj, obj_value, rel_pts_costs = planning.plan_follow_finger_pts_trajs(self.sim.robot, manip_name, 
                                                                               flr2finger_link_names, flr2finger_rel_pts, 
                                                                               flr2transformed_finger_pts_trajs_rs, init_traj, 

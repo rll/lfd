@@ -132,15 +132,17 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
         reg_factory = TpsnRpmRegistrationFactory(GlobalVars.demos)
     elif args.eval.reg_type == 'bij':
         reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=20)
-    count = 0
-    a = None
-    traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
-    traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost, init_trajectory_transferer=traj_transferer)
+    reg_factory.bend_coef = 1e-9
+    reg_factory.normal_coef = 1e7
+
+    #traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
+    traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost)
+
+    a,count=0,0
     for b in np.linspace(1e-1,1e-10,10):
         for n in np.linspace(1,1e10,10):
             for offset in(-.25,):
                 sim_util.reset_arms_to_side(lfd_env.sim)
-
                 sim.remove_objects([box2,box3,box4,box5])
 
                 box2 = BoxSimulationObject("box2", np.r_[.45 + box_length1 + offset,0,table_height+box_depth/2-static_offset], [box_length/2, box_length, box_depth/2], dynamic=False)
@@ -148,21 +150,13 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
                 box4 = BoxSimulationObject("box4", np.r_[.45 + offset, -box_length1,table_height+box_depth/2-static_offset], [box_length, box_length/2, box_depth/2], dynamic=False)
                 box5 = BoxSimulationObject("box5", np.r_[.45 + offset, box_length1 ,table_height+box_depth/2-static_offset], [box_length, box_length/2, box_depth/2], dynamic=False)
 
-                lfd_env.box1pos_2=np.array([.45 + offset, 0])
+                lfd_env.box1pos_2=np.array([.45+offset, 0])
 
                 sim.add_objects([box2,box3,box4,box5])
-                #reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=10)
-
-                reg_factory.bend_coef = 1e-9
-                reg_factory.normal_coef = 1e7
 
                 reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-                if count == 0:
-                    a = d1.aug_traj.lr2arm_traj['r'].copy()
-                else:
-                    d1.aug_traj.lr2arm_traj['r'] = a
-                test_aug_traj = reg_and_traj_transferer.transfer(d1, lfd_env.observe_scene("test"), plotting=args.plotting)
 
+                test_aug_traj = reg_and_traj_transferer.transfer(d1, lfd_env.observe_scene("test"), plotting=args.plotting)
                 lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
 
                 bt_box0 = lfd_env.sim.bt_env.GetObjectByName('box0')
@@ -175,7 +169,10 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
                 sim.remove_objects([box0])
                 sim.add_objects([box0])
                 sim.viewer.Step()
-                count += 1
+                count=count+1
+
+                #WHAT CHANGES!??!?
+
     ipy.embed()
     print success,failure
     
@@ -208,6 +205,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
         sim.add_objects([rope])
         sim.settle(step_viewer=args.animation)
+        ipy.embed()
         
         for i_step in range(args.eval.num_steps):
             redprint("task %s step %i" % (i_task, i_step))
@@ -649,8 +647,8 @@ def setup_registration_and_trajectory_transferer(args, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=10) #TODO
-        if args.eval.reg_type == 'tpsn':
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=20) #TODO
+        elif args.eval.reg_type == 'tpsn':
             reg_factory = TpsnRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'tpsnrpm':
             reg_factory = TpsnRpmRegistrationFactory(GlobalVars.demos)
