@@ -89,22 +89,21 @@ def flipped_angle_axis(aa_trajs):
         angle_trajs.append(angle_traj)
         axis_trajs.append(axis_traj)
     # flip axes of first hmat for all the trajectories
-    for i, (axis_traj, angle_traj) in enumerate(zip(axis_trajs[1:], angle_trajs[1:])):
+    for axis_traj, angle_traj in zip(axis_trajs[1:], angle_trajs[1:]):
         if axis_traj[0].dot(axis_trajs[0][0]) < 0:
             axis_traj[0] *= -1
-            angle_traj[0] %= 2*np.pi
-            angle_traj[0] *= -1
-            angle_traj[0] += 2*np.pi
+            angle_traj[0] = -1 * (angle_traj[0] % 2*np.pi) + 2*np.pi
     # flip axes for the rest of the trajectory for each trajectory
     for axis_traj, angle_traj in zip(axis_trajs, angle_trajs):
-        for i in range(len(axis_traj)):
-            if i > 0 and axis_traj[i].dot(axis_traj[i-1]) < 0:
-                axis_traj[i] *= -1
-                angle_traj[i] %= 2*np.pi
-                angle_traj[i] *= -1
-                angle_traj[i] += 2*np.pi
+        dot_products = np.einsum('ij,ij->i', axis_traj[:-1], axis_traj[1:]) # pairwise dot products axis_traj[t].dot(axis_traj[t-1])
+        flip_inds = np.r_[False, dot_products < 0]
+        for flip_ind in  np.where(flip_inds)[0]:
+            if flip_ind != len(flip_inds)-1:
+                flip_inds[flip_ind+1:] = np.invert(flip_inds[flip_ind+1:])
+        axis_traj[flip_inds] *= -1
+        angle_traj[flip_inds] = -1 * (angle_traj[flip_inds] % 2*np.pi) + 2*np.pi
     # make all angles be between 0 and 2*np.pi
-    for i, angle_traj in enumerate(angle_trajs):
+    for angle_traj in angle_trajs:
         angle_traj[:] = np.unwrap(angle_traj)
     return angle_trajs, axis_trajs
 
