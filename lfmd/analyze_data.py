@@ -22,23 +22,30 @@ import IPython as ipy
 
 def dof_val_cost(dof_val1, dof_val2, coefs):
     """
-    Assumes that the values in dof_val and coefs corresponds to position, rotation, force and torque in that order
+    Assumes that the values in dof_val and coefs corresponds to position, rotation, position velocity, rotation velocity, force and torque in that order
     """
     assert len(dof_val1) == len(dof_val2)
-    assert len(dof_val1) >= 6
-    assert len(dof_val1) <= 12
+    assert len(dof_val1) >= 12
+    assert len(dof_val1) <= 18
     cost = 0.0
     if coefs[0] != 0:
         cost = coefs[0] * np.linalg.norm(dof_val2[:3] - dof_val1[:3])
     if coefs[1] != 0:
         rot1 = openravepy.rotationMatrixFromAxisAngle(dof_val1[3:6])
         rot2 = openravepy.rotationMatrixFromAxisAngle(dof_val2[3:6])
-        aa_diff = openravepy.axisAngleFromRotationMatrix(rot1.T.dot(rot2))
+        aa_diff = openravepy.axisAngleFromRotationMatrix(rot2.dot(rot1.T))
         cost += coefs[1] * np.linalg.norm(aa_diff)
-    if len(dof_val1) > 6 and coefs[2] != 0:
-        cost += coefs[2] * np.linalg.norm(dof_val2[6:9] - dof_val1[6:9])
-    if len(dof_val1) > 9 and coefs[3] != 0:
-        cost += coefs[3] * np.linalg.norm(dof_val2[9:12] - dof_val1[9:12])
+    if coefs[2] != 0:
+        cost = coefs[2] * np.linalg.norm(dof_val2[6:9] - dof_val1[6:9])
+    if coefs[3] != 0:
+        rot_vel1 = openravepy.rotationMatrixFromAxisAngle(dof_val1[9:12])
+        rot_vel2 = openravepy.rotationMatrixFromAxisAngle(dof_val2[9:12])
+        aa_diff = openravepy.axisAngleFromRotationMatrix(rot_vel2.dot(rot_vel1.T))
+        cost += coefs[3] * np.linalg.norm(aa_diff)
+    if len(dof_val1) > 12 and coefs[4] != 0:
+        cost += coefs[4] * np.linalg.norm(dof_val2[12:15] - dof_val1[12:15])
+    if len(dof_val1) > 15 and coefs[5] != 0:
+        cost += coefs[5] * np.linalg.norm(dof_val2[15:18] - dof_val1[15:18])
     return cost
 
 def dtw(traj1, traj2, dof_cost):
@@ -125,25 +132,32 @@ def transform_aug_trajs(lr, regs, aug_trajs, flip_rots=True):
     for i_choice, (reg, aug_traj) in enumerate(zip(regs, aug_trajs)):
         ee_traj = reg.f.transform_hmats(aug_traj.lr2ee_traj[lr])
         ee_trajs.append(ee_traj)
-        aas = np.empty((len(ee_traj), 3)) # angle axis rotations
+        aa_traj = np.empty((len(ee_traj), 3)) # angle axis rotations
         for t, hmat in enumerate(ee_traj):
             if flip_rots and i_choice > 0:
                 if t == 0:
                     hmat0 = ee_trajs[0][0]
-                    angle_diff = np.linalg.norm(openravepy.axisAngleFromRotationMatrix(math_utils.invertHmat(hmat0).dot(hmat)))
-                    angle_diff_flipped = np.linalg.norm(openravepy.axisAngleFromRotationMatrix(math_utils.invertHmat(hmat0).dot(hmat.dot(T_x))))
+                    angle_diff = np.linalg.norm(openravepy.axisAngleFromRotationMatrix(hmat[:3,:3].dot(hmat0[:3,:3].T)))
+                    angle_diff_flipped = np.linalg.norm(openravepy.axisAngleFromRotationMatrix((hmat.dot(T_x)[:3,:3]).dot(hmat0[:3,:3].T)))
                     flip_rot = angle_diff_flipped < angle_diff
                 if flip_rot: # rotate ee_traj by T_x
-                    hmat = hmat.dot(T_x)
-            aas[t,:] = openravepy.axisAngleFromRotationMatrix(hmat)
-            assert 0 <= np.linalg.norm(aas[t,3:]) and np.linalg.norm(aas[t,3:]) <= 2*np.pi
+                    ee_traj[t] = hmat.dot(T_x)
+            aa_traj[t,:] = openravepy.axisAngleFromRotationMatrix(hmat)
+            assert 0 <= np.linalg.norm(aa_traj[t,3:]) and np.linalg.norm(aa_traj[t,3:]) <= 2*np.pi
+        vel_traj = np.diff(ee_traj[:,:3,3], axis=0)
+        vel_traj = np.r_[vel_traj, vel_traj[-1][None,:]]
+        aa_vel_traj = np.empty((len(ee_traj)-1, 3))
+        for t in range(len(ee_traj)-1):
+            rot_diff = ee_traj[t+1,:3,:3].dot(ee_traj[t,:3,:3].T)
+            aa_vel_traj[t,:] = openravepy.axisAngleFromRotationMatrix(rot_diff)
+        aa_vel_traj = np.r_[aa_vel_traj, aa_vel_traj[-1][None,:]]
         force_traj = np.zeros((len(ee_traj),0))
         if aug_traj.lr2force_traj:
             force_traj = reg.f.transform_vectors(ee_traj[:,:3,3], aug_traj.lr2force_traj[lr])
         torque_traj = np.zeros((len(ee_traj),0))
         if aug_traj.lr2torque_traj:
             torque_traj = reg.f.transform_vectors(ee_traj[:,:3,3], aug_traj.lr2torque_traj[lr])
-        traj = np.c_[ee_traj[:,:3,3], aas, force_traj, torque_traj]
+        traj = np.c_[ee_traj[:,:3,3], aa_traj, vel_traj, aa_vel_traj, force_traj, torque_traj]
         trajs.append(traj)
     return trajs
         
@@ -192,15 +206,17 @@ def analyze_data(args, reg_factory, scene_state, plotting=False, sim=None):
     if plotting:
         plt.ion()
         fig = plt.figure()
-        for i_coord in range(n_dof):
-            plt.subplot(n_dof,1,i_coord+1)
-            for traj in trajs:
-                plt.plot(traj[:,i_coord])
+        for i_lr in range(len(lrs)):
+            i_offset = i_lr * n_dof//len(lrs)
+            for i_coord in range(n_dof//len(lrs)):
+                plt.subplot(n_dof//len(lrs), len(lrs), i_coord*len(lrs)+i_lr+1)
+                for traj in trajs:
+                    plt.plot(traj[:, i_offset+i_coord])
         plt.draw()
     
     sys.stdout.write("aligning trajectories... ")
     sys.stdout.flush()
-    coefs = np.r_[args.eval.pos_coef, args.eval.rot_coef, args.eval.force_coef, args.eval.torque_coef]
+    coefs = np.r_[args.eval.pos_coef, args.eval.rot_coef, args.eval.pos_vel_coef, args.eval.rot_vel_coef, args.eval.force_coef, args.eval.torque_coef]
     if args.eval.downsample_traj > 1:
         ds_trajs = [traj[::args.eval.downsample_traj] for traj in trajs]
     else:
@@ -237,10 +253,12 @@ def analyze_data(args, reg_factory, scene_state, plotting=False, sim=None):
     
     if plotting:
         fig = plt.figure()
-        for i_coord in range(n_dof):
-            plt.subplot(n_dof,1,i_coord+1)
-            for traj in aligned_trajs:
-                plt.plot(traj[:,i_coord])
+        for i_lr in range(len(lrs)):
+            i_offset = i_lr * n_dof//len(lrs)
+            for i_coord in range(n_dof//len(lrs)):
+                plt.subplot(n_dof//len(lrs), len(lrs), i_coord*len(lrs)+i_lr+1)
+                for traj in aligned_trajs:
+                    plt.plot(traj[:, i_offset+i_coord])
         plt.draw()
     
     dof_val_mus = np.empty((t_steps, n_dof))
@@ -327,6 +345,8 @@ def parse_input_args():
 
     parser_eval.add_argument("--pos_coef", type=float, default=1, help="coefficient for dtw position cost")
     parser_eval.add_argument("--rot_coef", type=float, default=.1, help="coefficient for dtw rotation cost")
+    parser_eval.add_argument("--pos_vel_coef", type=float, default=0, help="coefficient for dtw position velocity cost")
+    parser_eval.add_argument("--rot_vel_coef", type=float, default=0, help="coefficient for dtw rotation velocity cost")
     parser_eval.add_argument("--force_coef", type=float, default=1, help="coefficient for dtw force cost")
     parser_eval.add_argument("--torque_coef", type=float, default=1, help="coefficient for dtw torque cost")
 
