@@ -180,9 +180,9 @@ def analyze_data(args, reg_factory, scene_state, plotting=False, sim=None):
     q_values, regs, aug_trajs = zip(*sorted([(reg.f._bending_cost, reg, aug_traj) for (reg, aug_traj) in zip(regs, aug_trajs)]))
     print "done"
     
-    max_num_demos = min(args.eval.max_num_demos, len(demos))
-    regs = regs[:max_num_demos]
-    aug_trajs = aug_trajs[:max_num_demos]
+    n_demos = min(args.eval.max_num_demos, len(demos))
+    regs = regs[:n_demos]
+    aug_trajs = aug_trajs[:n_demos]
     
     trajs = None
     lrs = 'lr'
@@ -234,10 +234,20 @@ def analyze_data(args, reg_factory, scene_state, plotting=False, sim=None):
     aligned_aug_trajs = []
     trajs_timesteps_rs = []
     for aug_traj, ds_traj_timesteps_rs in zip(aug_trajs, ds_trajs_timesteps_rs):
-        traj_timesteps_rs = np.interp(np.arange(args.eval.downsample_traj*(len(ds_traj_timesteps_rs)-1)+1)/args.eval.downsample_traj, np.arange(len(ds_traj_timesteps_rs)), ds_traj_timesteps_rs*args.eval.downsample_traj)
+        traj_timesteps_rs0 = np.arange(args.eval.downsample_traj*(len(ds_traj_timesteps_rs)-1)+1)/args.eval.downsample_traj
+        ds_traj_timesteps_rs, ds_traj_timesteps_rs0 = np.unique(ds_traj_timesteps_rs, return_index=True)
+        ds_traj_timesteps_rs0 = ds_traj_timesteps_rs0.astype(float)
+        ds_traj_timesteps_rs0[:-1] += (np.diff(ds_traj_timesteps_rs0)-1)/2
+        traj_timesteps_rs = np.interp(traj_timesteps_rs0, ds_traj_timesteps_rs0, ds_traj_timesteps_rs*args.eval.downsample_traj)
         aligned_aug_trajs.append(aug_traj.get_resampled_traj(traj_timesteps_rs))
         trajs_timesteps_rs.append(traj_timesteps_rs)
     trajs_timesteps_rs = np.asarray(trajs_timesteps_rs)
+    
+#     if plotting:
+#         for i, (ds_traj_timesteps_rs, traj_timesteps_rs) in enumerate(zip(ds_trajs_timesteps_rs, trajs_timesteps_rs)):
+#             fig = plt.figure()
+#             plt.plot(np.arange(len(ds_traj_timesteps_rs))*args.eval.downsample_traj, ds_traj_timesteps_rs*args.eval.downsample_traj)
+#             plt.plot(traj_timesteps_rs)
     
     aligned_trajs = None
     for lr in lrs:
