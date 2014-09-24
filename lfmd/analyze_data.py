@@ -145,12 +145,12 @@ def transform_aug_trajs(lr, regs, aug_trajs, flip_rots=True):
             aa_traj[t,:] = openravepy.axisAngleFromRotationMatrix(hmat)
             assert 0 <= np.linalg.norm(aa_traj[t,3:]) and np.linalg.norm(aa_traj[t,3:]) <= 2*np.pi
         vel_traj = np.diff(ee_traj[:,:3,3], axis=0)
-        vel_traj = np.r_[vel_traj, vel_traj[-1][None,:]]
+        vel_traj = np.r_[vel_traj[0][None,:], vel_traj]
         aa_vel_traj = np.empty((len(ee_traj)-1, 3))
         for t in range(len(ee_traj)-1):
             rot_diff = ee_traj[t+1,:3,:3].dot(ee_traj[t,:3,:3].T)
             aa_vel_traj[t,:] = openravepy.axisAngleFromRotationMatrix(rot_diff)
-        aa_vel_traj = np.r_[aa_vel_traj, aa_vel_traj[-1][None,:]]
+        aa_vel_traj = np.r_[aa_vel_traj[0][None,:], aa_vel_traj]
         force_traj = np.zeros((len(ee_traj),0))
         if aug_traj.lr2force_traj:
             force_traj = reg.f.transform_vectors(ee_traj[:,:3,3], aug_traj.lr2force_traj[lr])
