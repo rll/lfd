@@ -5,6 +5,8 @@ from __future__ import division
 import argparse
 import sys, os, os.path, numpy as np, h5py
 import matplotlib.pyplot as plt
+import scipy
+from scipy import optimize
 
 import trajoptpy, openravepy
 from rapprentice import util
@@ -145,13 +147,16 @@ def transform_aug_trajs(lr, regs, aug_trajs, flip_rots=True):
                     ee_traj[t] = hmat.dot(T_x)
             aa_traj[t,:] = openravepy.axisAngleFromRotationMatrix(hmat)
             assert 0 <= np.linalg.norm(aa_traj[t,3:]) and np.linalg.norm(aa_traj[t,3:]) <= 2*np.pi
+        dt = 0.01
         vel_traj = np.diff(ee_traj[:,:3,3], axis=0)
         vel_traj = np.r_[vel_traj[0][None,:], vel_traj]
+        vel_traj /= dt
         aa_vel_traj = np.empty((len(ee_traj)-1, 3))
         for t in range(len(ee_traj)-1):
             rot_diff = ee_traj[t+1,:3,:3].dot(ee_traj[t,:3,:3].T)
             aa_vel_traj[t,:] = openravepy.axisAngleFromRotationMatrix(rot_diff)
         aa_vel_traj = np.r_[aa_vel_traj[0][None,:], aa_vel_traj]
+        aa_vel_traj /= dt
         force_traj = np.zeros((len(ee_traj),0))
         if aug_traj.lr2force_traj:
             force_traj = reg.f.transform_vectors(ee_traj[:,:3,3], aug_traj.lr2force_traj[lr])
@@ -390,10 +395,195 @@ def register_scenes(reg_factory, scene_state):
     
     return regs, demos
 
+def mass_calculate2(lr, robot, aligned_joint_traj):
+    manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+    arm = robot.GetManipulator(manip_name)
+    
+    joint_feedforward = [3.33, 1.16, 0.1, 0.25, 0.133, 0.0727, 0.0727]
+    M_joint_inv = np.linalg.inv(np.diag(joint_feedforward))
+    M_inv = []
+
+    cur_traj = aligned_joint_traj
+    M_inv = []
+    for j in range(cur_traj.shape[0]):
+        vals = cur_traj[j,:]
+        robot.SetDOFValues(vals, arm.GetArmIndices())
+        J = np.vstack((arm.CalculateJacobian(), arm.CalculateAngularVelocityJacobian()))
+        M_inv.append(J.dot(M_joint_inv).dot(np.transpose(J)))
+    M_inv = np.asarray(M_inv)
+    return M_inv
+
+def calculate_masses(test_aug_traj):
+    M_inv = {}
+    M_inv['l'] = []
+    M_inv['r'] = []
+    from rapprentice import PR2
+    import rospy
+    rospy.init_node("exec_task",disable_signals=True)
+    pr2 = PR2.PR2()
+    env = pr2.env
+    robot = pr2.robot
+
+    for lr in 'lr':
+        M_inv[lr] = mass_calculate2(lr, robot, test_aug_traj.lr2arm_traj[lr])
+    return M_inv
+
+def calculate_costs(test_aug_traj):
+    M_inv = calculate_masses(test_aug_traj)
+    
+    lr2Cts = {}
+    lr2cts = {}
+    for lr in 'lr':
+        t_steps, n_dof = test_aug_traj.lr2dof_mu_traj[lr].shape
+#         t_steps = test_aug_traj.n_steps #TODO
+        assert n_dof == 18
+        
+        Mts = np.zeros((t_steps,18,18))
+        mts = np.zeros((t_steps,18,1))
+        Sts = np.zeros((t_steps,12,12))
+        sts = np.zeros((t_steps,12,1))
+        Fts = np.zeros((t_steps,12,12)) 
+        fts = np.zeros((t_steps,12,1))
+        Bts = np.zeros((t_steps,18,18))
+        bts = np.zeros((t_steps,18,1))
+        Nts = np.zeros((t_steps,12,12))
+        Cts = np.zeros((t_steps,18,18))
+        cts = np.zeros((t_steps,18,1))
+        Lts = np.zeros((t_steps,18,18))
+        Dts = np.zeros((t_steps,12,18))
+        dt = 0.01
+        Dts[:,:12,:12] = np.eye(12)
+        Dts[:,:6,6:12] = dt
+        Dts[:,:6,12:18] = (dt**2)*M_inv[lr][:t_steps] #TODO
+        Dts[:,6:12,12:18] = dt*M_inv[lr][:t_steps]
+    
+        convergence = False
+        isUp = True
+        t = 0
+        iter = 0
+        while not convergence:
+            if t % 100 == 0:
+                print t
+            
+            empmu = np.zeros((18,1))
+            empsigma = test_aug_traj.lr2dof_sigma_traj[lr][t]
+            paddedCovs = test_aug_traj.lr2dof_sigma_traj[lr][t] + np.eye(18)*0.000001
+            #clip eigen values here
+            #Cts[t] = Mts[t] - Bts[t] #fix this clip eigen vluae
+            pM = np.linalg.inv((paddedCovs + np.transpose(paddedCovs))/2)
+            pm = -pM.dot(empmu)
+            
+            FtPadded = np.zeros((18,18))
+            FtPadded[0:12,0:12] = Fts[t]
+            pD = FtPadded + Bts[t]
+    
+            ftpadded = np.zeros((18,1))
+            ftpadded[0:12] = fts[t]
+            pd = ftpadded + bts[t]
+            
+            Cts[t], cts[t], Lts[t] = processFuncCt("LBFGS", pM, pm, empsigma, empmu, pD, pd, Cts[t], cts[t], Lts[t])
+            #cts[t] = processFuncct(bts[t], fts[t], "default") #TODO make this cov inv times mean(always 0)
+            
+            if t == 0:
+                Mts[t] = np.linalg.inv((paddedCovs + np.transpose(paddedCovs))/2) # true always
+                mts[t] = np.zeros((18,1))
+            else:
+                Mts[t] = FtPadded + Cts[t] + Bts[t]
+                mts[t] = ftpadded + cts[t] + bts[t]
+                #Use Ct to get Mt and mt
+                Mt = Mts[t]
+                Mxx = Mt[0:12, 0:12]
+                Muu = Mt[12:18, 12:18]
+                Mxu = Mt[0:12, 12:18]
+                Mux = Mt[12:18, 0:12]
+                Sts[t] = Mxx - Mxu.dot(np.linalg.inv(Muu)).dot(Mux)
+                sts[t] = mts[t][0:12] - Mxu.dot(np.linalg.inv(Muu)).dot(mts[t][12:18])
+                #Use Mt, mt to get St, st
+                Bts[t-1] = np.transpose(Dts[t-1]).dot(Sts[t] - Fts[t]).dot(Dts[t-1])
+                bts[t-1] = np.transpose(Dts[t-1]).dot(sts[t] - fts[t])
+    
+            if t < t_steps-1:
+                Fts[t+1] = np.linalg.inv(Dts[t].dot(np.linalg.inv(Mts[t] - Bts[t])).dot(np.transpose(Dts[t])) + Nts[t]) #TODO pick that manually
+                fts[t+1] = Fts[t+1].dot(Dts[t]).dot(np.linalg.inv(Mts[t] - Bts[t])).dot(mts[t] - bts[t])
+            
+            if t == t_steps-1:
+                isUp = False
+            if t == 0:
+                isUp = True
+                iter += 1
+            if isUp:
+                t += 1
+            else:
+                t -= 1
+            
+            #TODO norm of difference less than a value, fraction of differences, convergence on C's/M's
+            if iter == 4:
+                break
+        
+        lr2Cts[lr] = Cts
+        lr2cts[lr] = cts
+    return lr2Cts, lr2cts
+
+def processFuncCt(cliptype, pM, pm, empsig, empmu, pD, pd, Ct, ct, Lt):
+    if cliptype == "LBFGS":
+        def func_minimize(p, empsig, pD):
+            L = np.zeros(pD.shape)
+            tidx = np.triu_indices(pD.shape[0])
+            L[tidx] = p
+            Ct = L.T.dot(L)
+
+            prior_m_x = 1e-1
+            prior_m_u = 1e-2
+             
+            prior_wt = 1
+            prior_mat = np.diag(np.r_[prior_m_x*np.ones(12), prior_m_u*np.ones(6)])
+             
+            val = ((empsig + prior_wt*prior_mat)*Ct).sum() \
+                - prior_wt*np.log(max(1e-100,np.linalg.det(Ct))) \
+                - np.log(max(1e-100,np.linalg.det(Ct+pD)))
+            grad = 2*L.dot(-empsig - prior_wt*prior_mat + prior_wt*np.linalg.inv(Ct) + np.linalg.inv(Ct + pD))
+            grad = -grad[tidx]
+            return val, grad
+        
+        if not np.any(Ct):
+            Ct = pM - pD
+        ct = pm - pd;
+        
+        if not np.any(Lt):
+            nval = 1e-4
+            mval = 1e3
+            
+            val, vec = np.linalg.eig((Ct+Ct.T)/2.)
+            val = np.real(val)
+            vec = np.real(vec)
+            val = np.clip(val, nval, mval)
+            val = np.diag(val)
+            Ct = vec.dot(val).dot(vec.T)
+            Lt = scipy.linalg.cholesky((Ct+Ct.T)/2.)
+        
+        tidx = np.triu_indices(Ct.shape[0])
+        theta, _, _ = optimize.fmin_l_bfgs_b(func_minimize, Lt[tidx], fprime=None, args=(empsig, pD), maxfun=20, maxiter=20)
+        
+        Lt[tidx] = theta
+        Ct = Lt.T.dot(Lt)
+
+        ctm = np.linalg.solve(Lt, (np.linalg.solve(Lt.T,((Ct + pD).dot(empmu + np.linalg.solve(Ct + pD, pd))))))
+        ct = -Ct.dot(ctm)
+
+        return Ct, ct, Lt
+    else:
+        raise NotImplementedError
+    
 class ForceAugmentedTrajectory(AugmentedTrajectory):
     def __init__(self, lr2force_traj, lr2torque_traj, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
         super(ForceAugmentedTrajectory, self).__init__(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, 
                                                        lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
+        for lr2traj in [lr2force_traj, lr2torque_traj]:
+            if lr2traj is None:
+                continue
+            for lr in lr2traj.keys():
+                assert lr2traj[lr].shape[0] == self.n_steps
+        
         self.lr2force_traj = lr2force_traj
         self.lr2torque_traj = lr2torque_traj
     
@@ -574,6 +764,8 @@ def main():
                                                                   downsample_traj=args.eval.downsample_traj)
     n_demos = min(args.eval.max_num_demos, len(reg_factory.demos))
     test_aug_traj = trajectory_transferer.transfer(regs[:n_demos], demos[:n_demos], plotting=args.animation, plotting_std_dev=args.std_dev)
+
+    lr2Cts, lr2cts = calculate_costs(test_aug_traj)
     
     lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
 
