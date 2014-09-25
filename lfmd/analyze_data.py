@@ -60,6 +60,8 @@ def dtw(traj1, traj2, dof_cost):
     DTW[0, 0] = 0
     pointers = np.empty((n+1, m+1), dtype=object)
     pointers.fill(None)
+    t1_pen = np.zeros((n+1, m+1))
+    t2_pen = np.zeros((n+1, m+1))
     for t1, dof_val1 in enumerate(traj1):
         #if t1 % 100 == 0: print t1
         t1 = t1+1 # increase by one because we need to 1 index DTW
@@ -68,8 +70,17 @@ def dtw(traj1, traj2, dof_cost):
             best_next = min(DTW[t1-1, t2], DTW[t1, t2-1], DTW[t1-1, t2-1])
             best_next_ind = np.argmin([DTW[t1-1, t2], DTW[t1, t2-1], DTW[t1-1, t2-1]])
             pointers[t1, t2] = [(t1-1,t2), (t1,t2-1), (t1-1,t2-1)][best_next_ind]
-            DTW[t1, t2] = dof_cost(dof_val1, dof_val2) + best_next
-    return DTW, pointers
+            if best_next_ind == 0: #t2 is constant
+                t1_pen[t1, t2] = 0
+                t2_pen[t1, t2] = t2_pen[t1-1, t2] + 1
+            elif best_next_ind == 1: #t1 is constant
+                t1_pen[t1, t2] = t1_pen[t1, t2-1] + 1
+                t2_pen[t1, t2] = 0
+            else:
+                t1_pen[t1, t2] = 0
+                t2_pen[t1, t2] = 0
+            DTW[t1, t2] = dof_cost(dof_val1, dof_val2) + best_next# + t1_pen[t1, t2] + t2_pen[t1, t2]
+    return DTW, pointers, t1_pen, t2_pen
 
 def align_trajs(trajs, dof_cost):
     trajs_timesteps_rs = []
@@ -77,15 +88,20 @@ def align_trajs(trajs, dof_cost):
         if i_choice == 0:
             trajs_timesteps_rs.append(range(len(trajs[0])))
         else:
-            DTW, pointers = dtw(trajs[0], traj, dof_cost)
+            t1_pens = []
+            t2_pens = []
+            DTW, pointers, t1_pen, t2_pen = dtw(trajs[0], traj, dof_cost)
             traj_timesteps_rs = [[] for _ in range(len(trajs[0]))]
             next_ij = (len(trajs[0]), len(traj))
             while next_ij[0] > 0 and next_ij[0] > 0:
                 (i,j) = next_ij
                 traj_timesteps_rs[i-1].append(j-1)
                 next_ij = pointers[i,j]
+                t1_pens.append(t1_pen[i,j])
+                t2_pens.append(t2_pen[i,j])
             traj_timesteps_rs = [np.mean(j) for j in traj_timesteps_rs]
             trajs_timesteps_rs.append(np.asarray(traj_timesteps_rs))
+#             print np.max(t1_pens), np.max(t2_pens)
     trajs_timesteps_rs = np.asarray(trajs_timesteps_rs)
     return trajs_timesteps_rs
 
