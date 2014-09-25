@@ -109,8 +109,6 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
                                                                        beta_pos=self.beta_pos, beta_rot=self.beta_rot)
 
         # the finger trajectory is the same for the demo and the test trajectory
-        test_lr2open_finger_traj = {}
-        test_lr2close_finger_traj = {}
         for lr in active_lr:
             finger_name = "%s_gripper_l_finger_joint"%lr
             manip_name += "+" + finger_name
