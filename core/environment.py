@@ -104,50 +104,54 @@ class GroundTruthBoxLfdEnvironment(LfdEnvironment):
         self.box_top_height = box_top_height
         self.bottom_height = bottom_height
 
-    def observe_scene(self, scene):
-        pts = np.zeros((0,3))
-        box0_x,box0_y = self.box0pos[0],self.box0pos[1]
-        box1_x,box1_y = self.box1pos[0],self.box1pos[1]
-        box1_x_2,box1_y_2 = self.box1pos_2[0],self.box1pos_2[1]
-        box_width = self.box_width
-        box_top_height = self.box_top_height
+    def observe_scene(self, scene, ground_truth=False):
+        if ground_truth:
+            pts = np.zeros((0,3))
+            box0_x,box0_y = self.box0pos[0],self.box0pos[1]
+            box1_x,box1_y = self.box1pos[0],self.box1pos[1]
+            box1_x_2,box1_y_2 = self.box1pos_2[0],self.box1pos_2[1]
+            box_width = self.box_width
+            box_top_height = self.box_top_height
 
-        pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
-        [box0_x-box_width,box0_y+box_width,box_top_height],
-        [box0_x+box_width,box0_y-box_width,box_top_height],
-        [box0_x+box_width,box0_y+box_width,box_top_height]])]
+            pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
+            [box0_x-box_width,box0_y+box_width,box_top_height],
+            [box0_x+box_width,box0_y-box_width,box_top_height],
+            [box0_x+box_width,box0_y+box_width,box_top_height]])]
 
-        if scene == ("demonstration"):
-            pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
-            [box1_x-box_width,box1_y+box_width,box_top_height],
-            [box1_x+box_width,box1_y-box_width,box_top_height],
-            [box1_x+box_width,box1_y+box_width,box_top_height]])]
+            if scene == ("demonstration"):
+                pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
+                [box1_x-box_width,box1_y+box_width,box_top_height],
+                [box1_x+box_width,box1_y-box_width,box_top_height],
+                [box1_x+box_width,box1_y+box_width,box_top_height]])]
+            else:
+                pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
+                [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
+                [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
+                [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
+
+            box_top_height = self.bottom_height
+
+            pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
+            [box0_x-box_width,box0_y+box_width,box_top_height],
+            [box0_x+box_width,box0_y-box_width,box_top_height],
+            [box0_x+box_width,box0_y+box_width,box_top_height]])]
+
+            if scene == ("demonstration"):
+                pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
+                [box1_x-box_width,box1_y+box_width,box_top_height],
+                [box1_x+box_width,box1_y-box_width,box_top_height],
+                [box1_x+box_width,box1_y+box_width,box_top_height]])]
+            else:
+                pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
+                [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
+                [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
+                [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
+
+
+            return demonstration.SceneState(pts,downsample_size=0)
         else:
-            pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
-            [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
-            [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
-            [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
-
-        box_top_height = self.bottom_height
-
-        pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
-        [box0_x-box_width,box0_y+box_width,box_top_height],
-        [box0_x+box_width,box0_y-box_width,box_top_height],
-        [box0_x+box_width,box0_y+box_width,box_top_height]])]
-
-        if scene == ("demonstration"):
-            pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
-            [box1_x-box_width,box1_y+box_width,box_top_height],
-            [box1_x+box_width,box1_y-box_width,box_top_height],
-            [box1_x+box_width,box1_y+box_width,box_top_height]])]
-        else:
-            pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
-            [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
-            [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
-            [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
-
-
-        return demonstration.SceneState(pts,downsample_size=0)
+            full_cloud = self.world.observe_cloud()
+            return demonstration.SceneState(full_cloud, downsample_size=self.downsample_size)
 
 class RecordingLfdEnvironment(GroundTruthRopeLfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):

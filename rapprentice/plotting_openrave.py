@@ -44,7 +44,6 @@ def draw_grid(env, f, mins, maxes, xres = .1, yres = .1, zres = .04, color = (1,
             xyz[:,1] = yfine
             xyz[:,2] = z
             lines.append(f(xyz))
-
     handles = []
 
     for line in lines:

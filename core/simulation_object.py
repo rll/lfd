@@ -69,7 +69,7 @@ class XmlSimulationObject(SimulationObject):
         return "XmlSimulationObject(%s, dynamic=%r)" % (self.xml, self.dynamic)
 
 class BoxSimulationObject(XmlSimulationObject):
-    def __init__(self, name, translation, extents, dynamic=True):
+    def __init__(self, name, translation, extents, dynamic=True,rotationaxis=[0.0,0.0,0.0,0.0]):
         xml = """
         <Environment>
           <KinBody name="%s">
@@ -77,11 +77,12 @@ class BoxSimulationObject(XmlSimulationObject):
               <Translation>%f %f %f</Translation>
               <Geom type="box">
                 <extents>%f %f %f</extents>
+                <RotationAxis>%f %f %f %f</RotationAxis>
               </Geom>
             </Body>
           </KinBody>
         </Environment>
-        """ % (name, 'dynamic' if dynamic else 'static', name, translation[0], translation[1], translation[2], extents[0], extents[1], extents[2])
+        """ % (name, 'dynamic' if dynamic else 'static', name, translation[0], translation[1], translation[2], extents[0], extents[1], extents[2], rotationaxis[0],rotationaxis[1],rotationaxis[2],rotationaxis[3])
         super(BoxSimulationObject, self).__init__(xml, dynamic=dynamic)
         self.name = name
         self.translation = translation
@@ -94,7 +95,7 @@ class BoxSimulationObject(XmlSimulationObject):
     
     def __repr__(self):
         return "BoxSimulationObject(%s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.extents, self.dynamic)
-
+        
 class CylinderSimulationObject(XmlSimulationObject):
     def __init__(self, name, translation, radius, height, dynamic=True):
         xml = """

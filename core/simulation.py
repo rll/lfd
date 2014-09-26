@@ -287,14 +287,19 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         rayFroms = rayFroms.dot(self.T_w_k[:3,:3].T) + self.T_w_k[:3,3]
 
         cloud = []
+        import IPython as ipy
+        #CHANGEDTHIS
         for sim_obj in self.dyn_sim_objs:
-            for bt_obj in sim_obj.get_bullet_objects():
+            bull_objs = sim_obj.get_bullet_objects()
+            bull_objs.extend([self.bt_env.GetObjectByName("box2"),self.bt_env.GetObjectByName("box3"),self.bt_env.GetObjectByName("box4"),self.bt_env.GetObjectByName("box5")])
+            for bt_obj in bull_objs:
                 ray_collisions = self.bt_env.RayTest(rayFroms, rayTos, bt_obj)
                 
                 pts = np.empty((len(ray_collisions), 3))
                 for i, ray_collision in enumerate(ray_collisions):
                     pts[i,:] = ray_collision.pt
                 cloud.append(pts)
+
         cloud = np.concatenate(cloud)
 
         # hack to filter out point below the top of the table. TODO: fix this hack
