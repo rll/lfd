@@ -377,7 +377,6 @@ def split_trajectory_by_lr_gripper(seg_info, lr):
     return seg_starts, seg_ends
 
 def get_opening_closing_inds(finger_traj):
-    GRIPPER_OPEN_CLOSE_THRESH = 0.01 # TODO in constants
     
     mult = 5.0
     GRIPPER_L_FINGER_OPEN_CLOSE_THRESH = mult * GRIPPER_OPEN_CLOSE_THRESH

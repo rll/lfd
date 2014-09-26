@@ -5,10 +5,10 @@ from __future__ import division
 import copy
 import argparse
 from core import sim_util
-from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
+from core.constants import ROPE_RADIUS, ROPE_RADIUS_THICK, MAX_ACTIONS_TO_TRY
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
-from core.simulation import DynamicSimulationRobotWorld
+from core.simulation import DynamicRopeSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
 from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
 from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
@@ -20,6 +20,7 @@ from rapprentice import tps_registration
 
 from rapprentice import plotting_openrave, task_execution, \
     resampling, ropesim, rope_initialization
+from rapprentice.knot_classifier import remove_consecutive_crossings, remove_consecutive_cross_pairs, calculateCrossings, crossingsToString
 import pdb
 import time
 
@@ -48,6 +49,7 @@ STEPS = ['init', '0', '1', '2', '3', '4']
 def label_demos(args, transferer, lfd_env, sim):
 
     rope_params = sim_util.RopeParams()
+    rope_params.radius = ROPE_RADIUS_THICK
     if args.label.rope_param_radius is not None:
         rope_params.radius = args.label.rope_param_radius
     if args.label.rope_param_angStiffness is not None:
@@ -78,6 +80,7 @@ def label_demos(args, transferer, lfd_env, sim):
             sim_state = sim.get_state()
             sim.set_state(sim_state)
 
+            #ipy.embed()
             scene_state = lfd_env.observe_scene()
 
             # plot cloud of the test scene
@@ -136,6 +139,7 @@ def get_input(start_scene, action_name, next_scene, outfile, pred):
     response = raw_input("Use this demonstration?[y/N/d/x/i/r]")
     resample = False
     success = False
+
     if response in ('R', 'r'):
         remove_last_example(outfile)
         resample = True
@@ -159,6 +163,12 @@ def get_input(start_scene, action_name, next_scene, outfile, pred):
                            ['deadend', 0],
                            ['pred', str(len(outfile) - 1)]])
         success = True
+#        # Print out the rope crossings of this knot
+#        print "Rope Crossings of current knot: "
+#        (cross,b,c,d)= calculateCrossings(rope_initialization.find_path_through_point_cloud(next_scene.cloud))
+#        (cross, b, c) = remove_consecutive_crossings(cross, b, c)
+#        (cross, b, c) = remove_consecutive_cross_pairs(cross, b, c)
+#        print crossingsToString(cross)
     elif response in ('X', 'x'):
         resample = True
         # write the demonstration
@@ -198,6 +208,7 @@ def manual_select_demo(args, transferer, sim, lfd_env, outfile, pred):
     costs = transferer.registration_factory.batch_cost(scene_state)
     best_keys = sorted(costs, key=costs.get)
     for seg_name in best_keys:
+        print seg_name
         test_aug_traj = transferer.transfer(GlobalVars.demos[seg_name],
                                             scene_state,
                                             plotting=args.plotting)
@@ -205,10 +216,26 @@ def manual_select_demo(args, transferer, sim, lfd_env, outfile, pred):
             test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
         sim_util.reset_arms_to_side(sim)
         sim.settle(step_viewer=args.animation)
-        if not feasible or misgrasp:
-            sim.set_state(start_state)
-            continue
         new_scene = lfd_env.observe_scene()
+
+        # Print out current crossings
+        for sim_obj in lfd_env.sim.sim_objs:
+            if isinstance(sim_obj, RopeSimulationObject):
+                rope_sim_obj = sim_obj
+                break
+        rope_nodes = rope_sim_obj.rope.GetControlPoints()
+        (cross,b,c,d)= calculateCrossings(rope_nodes)
+        (cross, b, c) = remove_consecutive_crossings(cross, b, c)
+        (cross, b, c) = remove_consecutive_cross_pairs(cross, b, c)
+        print 'Crossings of rope currently: '
+        print crossingsToString(cross)
+        if not feasible or misgrasp:
+            print 'Feasible: ', feasible
+            print 'Misgrasp: ', misgrasp
+            if misgrasp:
+                sim.set_state(start_state)
+                continue
+
         (success, resample) = get_input(scene_state, str(seg_name), new_scene,
                                         outfile, pred)
         if resample or success:
@@ -248,17 +275,18 @@ def load_dagger_state(sampled_state, sim, animation):
 
 
 def load_random_start_segment(demofile):
-    start_keys = [seg for seg in GlobalVars.actions.keys() if seg.startswith(
-        'demo') and seg.endswith('00')]
+    start_keys = [seg for seg in GlobalVars.actions.keys() if 'seg00' in seg]
     seg_name = random.choice(start_keys)
     return (GlobalVars.actions[seg_name]['cloud_xyz'], seg_name)
 
 
 def sample_rope_state(rope_args, sim, animation, human_check=True):
+    print 'Sampling rope state'
     success = False
     while not success:
         # TODO: pick a random rope initialization
         new_xyz, demo_id = load_random_start_segment(GlobalVars.actions)
+        print demo_id
         perturb_radius = random.uniform(rope_args.min_rad, rope_args.max_rad)
         rope_nodes = rope_initialization.find_path_through_point_cloud(
             new_xyz,
@@ -348,8 +376,8 @@ def check_outfile(outfile, use_dagger=False):
             return False
         if 'deadend' in outfile[k].keys():
             deadend = outfile[k]['deadend'][()]
-            if deadend and not action.startswith('deadend'):
-                print "deadend states labelled improperly"
+            if deadend and not action.startswith('endstate'):
+                print "deadend states labelled improperly", k
                 outfile.close()
                 return False
     if i - prev_start < 3 and not use_dagger:
@@ -425,7 +453,7 @@ def parse_input_args():
     parser_eval.add_argument("--unified", type=int, default=0)
 
     parser_eval.add_argument("--downsample", type=int, default=1)
-    parser_eval.add_argument("--downsample_size", type=int, default=0.025)
+    parser_eval.add_argument("--downsample_size", type=float, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument(
         "--upsample_rad",
@@ -565,7 +593,8 @@ def setup_lfd_environment_sim(args):
     sim_objs.append(BoxSimulationObject(
         "table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
 
-    sim = DynamicSimulationRobotWorld()
+    print 'Setting up lfd environment'
+    sim = DynamicRopeSimulationRobotWorld()
     world = sim
     sim.add_objects(sim_objs)
     if args.label.ground_truth:
@@ -635,6 +664,7 @@ def setup_lfd_environment_sim(args):
 
 
 def setup_registration_and_trajectory_transferer(args, sim):
+    print 'Setting up registration'
     if args.label.gpu:
         if args.label.reg_type == 'rpm':
             reg_factory = GpuTpsRpmRegistrationFactory(
@@ -657,6 +687,7 @@ def setup_registration_and_trajectory_transferer(args, sim):
             raise RuntimeError(
                 "Invalid reg_type option %s" % args.label.reg_type)
 
+    print 'Setting up transferer'
     if args.label.transferopt == 'pose' or args.label.transferopt == 'finger':
         traj_transferer = PoseTrajectoryTransferer(
             sim,
@@ -699,6 +730,7 @@ def main():
     setup_log_file(args)
 
     set_global_vars(args)
+    print 'Setting Global Vars'
     trajoptpy.SetInteractive(args.interactive)
     lfd_env, sim = setup_lfd_environment_sim(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(

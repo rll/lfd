@@ -19,15 +19,15 @@ class Feature(object):
     def __init__(self, actionfile):
         raise NotImplementedError
 
-    def feature(self, state, segname):
+    def feature(self, state, **kwargs):
         """
         returns the feature for this state/segname
         """
-        feats = self.features(state)
+        feats = self.features(state, **kwargs)
         ind = self.get_ind(segname)
         return feats[ind]
 
-    def features(self, state):
+    def features(self, state, **kwargs):
         """
         returns a dictionary mapping segnames to features
         """
@@ -48,7 +48,9 @@ class Feature(object):
     def get_ind(self, a):
         raise NotImplementedError
 
-
+    def get_timestep(self, segname):
+        return int(re.search("seg(?P<demo_timestep>\d+)",
+                             segname).group('demo_timestep'))
 
 class BatchRCFeats(Feature):
 
@@ -63,7 +65,7 @@ class BatchRCFeats(Feature):
         self.indicators = np.eye(self.N)
         self.weights = np.r_[-1, np.zeros(self.N)]
 
-    def features(self, state):
+    def features(self, state, **kwargs):
         self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx)
@@ -89,7 +91,7 @@ class MulFeats(BatchRCFeats):
         x = np.array([-1 for _ in range(MulFeats.N_costs)])
         self.weights = np.r_[x, np.zeros(self.N)]
 
-    def features(self, state):
+    def features(self, state, **kwargs):
         self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)
@@ -109,8 +111,8 @@ class SimpleMulFeats(MulFeats):
         BatchRCFeats.__init__(self, actionfile)
         x = np.array([-1 for _ in range(SimpleMulFeats.N_costs)])
         self.weights = np.r_[x, np.zeros(self.N)]
-    
-    def features(self, state):
+ 
+    def features(self, state, **kwargs):
         self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
@@ -138,7 +140,7 @@ class LandmarkFeats(MulFeats):
         self.landmark_targ_ctx = TgtContext(self.landmark_ctx)
         self.weights = np.zeros(self.src_ctx.N + self.landmark_ctx.N + MulFeats.N_costs)
 
-    def features(self, state):
+    def features(self, state, **kwargs):
         mul_feats = MulFeats.features(self, state)
         self.landmark_targ_ctx.set_cld(state.cloud)
         landmark_feats = batch_tps_rpm_bij(self.landmark_ctx, self.landmark_targ_ctx)
@@ -161,7 +163,7 @@ class QuadMulFeats(BatchRCFeats):
         BatchRCFeats.__init__(self, actionfile)
         self.weights = np.zeros(QuadMulFeats.get_size(self.N))
 
-    def features(self, state):
+    def features(self, state, **kwargs):
         self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)
@@ -176,3 +178,61 @@ class QuadMulFeats(BatchRCFeats):
     @staticmethod
     def get_size(num_actions):
         return num_actions + QuadMulFeats.N_feats
+
+class TimestepFeats(BatchRCFeats):
+
+    N_timesteps = 7
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.weights = np.zeros(TimestepFeats.get_size(self.N))
+        self.ts_indicators = np.zeros([self.N, TimestepFeats.N_timesteps])
+
+    def features(self, state, timestep=-1, **kwargs):
+        if timestep == -1:
+            raise ValueError('timestep must be input')
+        if timestep < TimestepFeats.N_timesteps:
+            self.ts_indicators[:, timestep] = 1
+        return np.c_[self.ts_indicators, self.indicators]
+
+    @staticmethod
+    def get_size(num_actions):
+        return num_actions + TimestepFeats.N_timesteps
+
+
+class TimestepActionFeats(TimestepFeats):
+
+    def __init__(self, actionfile):
+        TimestepFeats.__init__(self, actionfile)
+        self.n_quad = self.N * TimestepFeats.N_timesteps
+        self.quad_feats = np.zeros([self.N, self.n_quad])
+        self.weights = np.zeros(TimestepActionFeats.get_size(self.N))
+
+    def features(self, state, timestep=-1, **kwargs):
+        TimestepFeats.features(self, state, timestep)
+        for i in range(self.N):
+            self.quad_feats[i,:] = np.reshape(np.dot(self.indicators[i][:,None], self.ts_indicators[0][None,:]), self.n_quad)
+        return np.c_[self.ts_indicators, self.indicators, self.quad_feats]
+
+    @staticmethod
+    def get_size(num_actions):
+        return num_actions + TimestepFeats.N_timesteps*(num_actions+1)
+
+class TimestepActionMulFeats(TimestepFeats, SimpleMulFeats):
+
+    def __init__(self, actionfile):
+        TimestepFeats.__init__(self, actionfile)
+        self.n_quad = self.N * TimestepFeats.N_timesteps
+        self.quad_feats = np.zeros([self.N, self.n_quad])
+        self.weights = np.zeros(TimestepActionMulFeats.get_size(self.N))
+
+    def features(self, state, timestep=-1, **kwargs):
+        TimestepFeats.features(self, state, timestep)
+        SimpleMulFeats.features(self, state)
+        for i in range(self.N):
+            self.quad_feats[i,:] = np.reshape(np.dot(self.indicators[i][:,None], self.ts_indicators[0][None,:]), self.n_quad)
+        return np.c_[self.costs, self.ts_indicators, self.indicators, self.quad_feats]
+
+    @staticmethod
+    def get_size(num_actions):
+        return SimpleMulFeats.get_size(num_actions) + TimestepFeats.N_timesteps*(num_actions+1)
+

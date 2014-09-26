@@ -5,6 +5,8 @@ Functions and classes to compute constraints for the optimizations in max_margin
 import numpy as np
 import sys, h5py
 
+import ipdb
+
 from features import BatchRCFeats
 
 class ConstraintGenerator(object):
@@ -17,18 +19,19 @@ class ConstraintGenerator(object):
         self.margin  = margin
         self.n_constrs = 0
 
-    def compute_constrs(self, state, exp_a):
+    def compute_constrs(self, state, exp_a, timestep=-1):
         """
         computes a single constraint
         i is the index of the expert action
         """
+        #ipdb.set_trace()
         feat_i           = self.feature.get_ind(exp_a)
         f_mask           = np.ones(self.feature.N, dtype=np.bool)
         f_mask[feat_i]   = 0
         margin_i         = self.margin.get_ind(exp_a)        
         m_mask           = np.ones(self.feature.N, dtype=np.bool)
         m_mask[margin_i] = 0
-        phi              = self.feature.features(state)
+        phi              = self.feature.features(state, timestep=timestep)
         margins          = self.margin.get_margins(state, exp_a)
 
         exp_phi = phi[feat_i]        

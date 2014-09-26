@@ -242,3 +242,46 @@ def isKnot(rope_nodes):
             return True
 
     return False
+
+
+def isFig8Knot(rope_nodes):
+    (crossings, crossings_links_inds, cross_pairs, rope_closed) = calculateCrossings(rope_nodes)
+    # simplify crossings a bit
+    crossings, crossings_links_inds, cross_pairs = remove_consecutive_crossings(crossings, crossings_links_inds, cross_pairs)
+    crossings, crossings_links_inds, cross_pairs = remove_consecutive_cross_pairs(crossings, crossings_links_inds, cross_pairs)
+    s = crossingsToString(crossings)
+    
+    knot_topologies = ['uouououo', 'ouuuoouuooou', 'ouuouuoouo']
+    for top in knot_topologies:
+        flipped_top = top.replace('u','t').replace('o','u').replace('t','o')
+        if top in s and crossings_match(cross_pairs, top, s):
+            return True
+        if top[::-1] in s and crossings_match(cross_pairs, top[::-1], s):
+            return True
+        if flipped_top in s and crossings_match(cross_pairs, flipped_top, s):
+            return True
+        if flipped_top[::-1] in s and crossings_match(cross_pairs, flipped_top[::-1], s):
+            return True
+
+    return False
+
+def isSqKnot(rope_nodes):
+    (crossings, crossings_links_inds, cross_pairs, rope_closed) = calculateCrossings(rope_nodes)
+    # simplify crossings a bit
+    crossings, crossings_links_inds, cross_pairs = remove_consecutive_crossings(crossings, crossings_links_inds, cross_pairs)
+    crossings, crossings_links_inds, cross_pairs = remove_consecutive_cross_pairs(crossings, crossings_links_inds, cross_pairs)
+    s = crossingsToString(crossings)
+    
+    knot_topologies = ['ouuoouoouoouuouu', 'uouoouuuooouuoouuuoo', 'ouououououou']
+    for top in knot_topologies:
+        flipped_top = top.replace('u','t').replace('o','u').replace('t','o')
+        if top in s and crossings_match(cross_pairs, top, s):
+            return True
+        if top[::-1] in s and crossings_match(cross_pairs, top[::-1], s):
+            return True
+        if flipped_top in s and crossings_match(cross_pairs, flipped_top, s):
+            return True
+        if flipped_top[::-1] in s and crossings_match(cross_pairs, flipped_top[::-1], s):
+            return True
+    return False
+

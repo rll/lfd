@@ -44,7 +44,7 @@ def replace_rope(sim, new_rope, animation):
 
 
 def load_random_start_segment(demofile):
-    start_keys = [seg for seg in GlobalVars.actions.keys() if seg.startswith('demo') and seg.endswith('00')]
+    start_keys = [seg for seg in GlobalVars.actions.keys() if 'seg00' in seg]
     seg_name = random.choice(start_keys)
     return (GlobalVars.actions[seg_name]['cloud_xyz'], seg_name)
 
@@ -157,12 +157,12 @@ def parse_input_args():
                              default=[0,0,0,0,0,0],
                              help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
 
-    parser_eval.add_argument("--n_examples", type=int, default=1000)
+    parser_eval.add_argument("--n_examples", type=int, default=100)
     parser_eval.add_argument("--min_rad", type=float, default="0.1",
                              help="min perturbation radius")
     parser_eval.add_argument("--max_rad", type=float, default="0.1",
                              help="max perturbation radius")
-    parser_eval.add_argument("--n_perturb_pts", type=int, default=7,
+    parser_eval.add_argument("--n_perturb_pts", type=int, default=5,
                              help="number of points perturbed from demo start state")
 
 

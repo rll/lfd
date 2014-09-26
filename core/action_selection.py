@@ -31,7 +31,7 @@ class ActionSelection(object):
         raise NotImplementedError
 
 class GreedyActionSelection(ActionSelection):
-    def plan_agenda(self, scene_state):
+    def plan_agenda(self, scene_state, timestep):
         action2q_value = self.registration_factory.batch_cost(scene_state)
         q_values, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
         return agenda, q_values
@@ -49,9 +49,9 @@ class FeatureActionSelection(ActionSelection):
         self.lfd_env = lfd_env
         super(FeatureActionSelection, self).__init__(registration_factory)
 
-    def plan_agenda(self, scene_state):
-        def evaluator(state):
-            return np.dot(self.features.features(state), self.features.weights)
+    def plan_agenda(self, scene_state, timestep):
+        def evaluator(state, ts):
+            return np.dot(self.features.features(state, timestep=ts), self.features.weights)
 
         def simulate_transfer(state, action, next_state_id):
             aug_traj=self.transferer.transfer(self.demos[action], state, plotting=False)
@@ -66,6 +66,6 @@ class FeatureActionSelection(ActionSelection):
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             return (result_state, next_state_id, rope_knot)
 
-        return beam_search(scene_state, self.actions, simulate_transfer,
+        return beam_search(scene_state, timestep, self.actions, simulate_transfer,
                            evaluator, self.lfd_env.sim, width=self.width,
                            depth=self.depth)

@@ -2,7 +2,7 @@
 scripts for build constraint files and models and for optimizing models
 """
 
-from features import BatchRCFeats, MulFeats, QuadMulFeats, SimpleMulFeats, LandmarkFeats
+from features import BatchRCFeats, MulFeats, QuadMulFeats, SimpleMulFeats, LandmarkFeats, TimestepActionMulFeats
 from constraints import ConstraintGenerator, BatchCPMargin
 from max_margin import MaxMarginModel, BellmanMaxMarginModel
 
@@ -31,6 +31,8 @@ def get_feat_cls(args):
         return QuadMulFeats
     elif args.feature_type == 'landmark':
         return LandmarkFeats
+    elif args.feature_type == 'timestep':
+        return TimestepActionMulFeats
 
 def get_model_cls(args):
     if args.model_type == 'bellman':
@@ -61,6 +63,9 @@ def get_actions(args):
     f.close()
     return actions
 
+def parse_key(key):
+    # parsing hackery to get a tuple of ints from its str representation
+    return [int(x) for x in key.strip('(').strip(')').strip(' ').split(',')]
 
 def build_constraints(args):
     print "Loading Constraints from {} to {}".format(args.demofile, args.constrfile)
@@ -81,7 +86,8 @@ def build_constraints(args):
         if exp_a.startswith('endstate'): # this is a knot
             continue
         state = State(i, demo_info['cloud_xyz'][:])
-        exp_phi, phi, margins = constr_generator.compute_constrs(state, exp_a)
+        demo, timestep = parse_key(demo_k)
+        exp_phi, phi, margins = constr_generator.compute_constrs(state, exp_a, timestep)
         constr_generator.store_constrs(exp_phi, phi, margins, exp_a, constrfile, constr_k=str(demo_k))
         constrfile.flush()
     print ""
@@ -113,20 +119,25 @@ def optimize_model(args):
     except TypeError:
         mm_model.scale_objective(args.C)
 
+    # Use dual simplex method
+    mm_model.model.setParam('method', 1)
+    #mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
+
     # mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
     # # barrier method (#2) is default for QP, but uses more memory and could lead to error
-    # # mm_model.model.setParam('method', 1)  # Use dual simplex method to solve model
-    # mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
-    try:
-        mm_model.model.setParam('method', 2)  # try solving model with barrier
-        mm_model.optimize_model()
-        mm_model.model.setParam('method', 2)  # Use dual simplex method to solve model
-        assert mm_model.model.status == 2
-    except grb.GurobiError, AssertionError:
-        print "model failure"
-        mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
-        mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
-        mm_model.optimize_model()
+    #mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
+    mm_model.optimize_model()
+
+#    try:
+#    mm_model.model.setParam('method', 2)  # try solving model with barrier
+#    mm_model.optimize_model()
+#    mm_model.model.setParam('method', 2)  # Use dual simplex method to solve model
+#        assert mm_model.model.status == 2
+#    except grb.GurobiError, AssertionError:
+#        print "model failure"
+#        mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
+#        mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
+#        mm_model.optimize_model()
     assert mm_model.model.status == 2
     mm_model.save_weights_to_file(args.weightfile)
 
@@ -148,7 +159,7 @@ def do_all(args):
 def parse_arguments():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("feature_type", type=str, choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'])
+    parser.add_argument("feature_type", type=str, choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark', 'timestep'])
     parser.add_argument("model_type", type=str, choices=['max-margin', 'bellman'])
     parser.add_argument("landmarkfile", type=str, nargs='?', default='../data/misc/landmarks.h5')
     subparsers = parser.add_subparsers()

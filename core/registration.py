@@ -168,13 +168,8 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         y_md = np.array(new_cloud)
         if len(old_cloud) > MAX_CLD_SIZE:
             x_nd = x_nd[np.random.choice(range(len(x_nd)), size=MAX_CLD_SIZE, replace=False)]
-            #x_nd = old_cloud[np.random.random_integers(len(old_cloud)-1, size=min(MAX_CLD_SIZE, len(old_cloud)))]
         if len(new_cloud) > MAX_CLD_SIZE:
             y_md = y_md[np.random.choice(range(len(y_md)), size=MAX_CLD_SIZE, replace=False)]
-            #y_md = new_cloud[np.random.random_integers(len(new_cloud)-1, size=min(MAX_CLD_SIZE, len(new_cloud)))]
-
-        # if len(x_nd) != len(old_cloud) or len(y_md) != len(new_cloud):
-        #     ipy.embed()
 
         scaled_x_nd, src_params = registration.unit_boxify(x_nd)
         scaled_y_md, targ_params = registration.unit_boxify(y_md)
@@ -208,7 +203,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
 
     def cost(self, demo, test_scene_state):
         raise NotImplementedError
-    
+
     def batch_cost(self, test_scene_state):
         tgt_ctx = TgtContext(self.src_ctx)
         cloud = test_scene_state.cloud

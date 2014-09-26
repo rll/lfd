@@ -298,7 +298,7 @@ def main():
             K_nn = inv_group[ds_key]['scaled_K_nn'][:]
         else:
             ds_g = inv_group.create_group(ds_key)
-            x_na = downsample_cloud(seg_info[args.cloud_name][:, :])
+            x_na = downsample_cloud(seg_info[args.cloud_name][:, :3])
             scaled_x_na, scale_params = unit_boxify(x_na)
             K_nn = tps_kernel_matrix(scaled_x_na)
             if args.fill_traj:

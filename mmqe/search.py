@@ -89,12 +89,12 @@ class MaxNode(SearchNode):
         return [SearchNode.ind2action[np.argmax(shifted_vals)]], [np.max(self.child_vals)]
 
 # env is for resetting the state at each step
-def beam_search(start_state, actions, expander, evaluator, sim, width=1, depth=1):
+def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=1, depth=1):
     id2simstate = {}
     SearchNode.set_actions(actions)
     root_id = SearchNode.get_UID()
     id2simstate[root_id] = sim.get_state()
-    root_vals = evaluator(start_state)
+    root_vals = evaluator(start_state, timestep)
     root = MaxNode(root_id, start_state, root_vals)
     agenda = [root]
     goal_found = False
@@ -129,7 +129,7 @@ def beam_search(start_state, actions, expander, evaluator, sim, width=1, depth=1
             #elif not res.feasible or res.misgrasp:
             #    parent.update(-np.inf, next_s_id)
             #    continue
-            child_vals = evaluator(next_s)
+            child_vals = evaluator(next_s, timestep+d+1)
             child_node = MaxNode(next_s_id, next_s, child_vals, parent=parent)
             parent.update(child_node.value, next_s_id)
             agenda.append(child_node)

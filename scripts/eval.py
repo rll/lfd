@@ -9,7 +9,7 @@ from core import demonstration, registration, transfer, sim_util
 from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
-from core.simulation import DynamicSimulationRobotWorld
+from core.simulation import DynamicSimulationRobotWorld, DynamicRopeSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
 from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
@@ -31,7 +31,7 @@ import pdb, time
 from mmqe import search
 
 import trajoptpy, openravepy
-from rapprentice.knot_classifier import isKnot as is_knot, calculateCrossings
+from rapprentice.knot_classifier import isKnot as is_knot, isFig8Knot as is_fig8knot, calculateCrossings
 import os, os.path, numpy as np, h5py
 from rapprentice.util import redprint, yellowprint
 import atexit
@@ -97,7 +97,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             
             start_time = time.time()
             try:
-                agenda, q_values_root = action_selection.plan_agenda(scene_state)
+                agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 redprint("**Raised Value Error during action selection")
                 break
@@ -114,7 +114,11 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 best_root_action = str(agenda[i_choice])
 
                 start_time = time.time()
-                test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
+                try:
+                    test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, plotting=args.plotting)
+                except ValueError: # If something is cloud/traj is empty or something
+                    redprint("**Raised value error during traj transfer")
+                    break
                 eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
                 eval_stats.exec_elapsed_time += time.time() - start_time
                 
@@ -146,6 +150,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
+        redprint('Success Rate: ' + str(float(num_successes)/num_total))
 
 def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
@@ -330,7 +335,7 @@ def parse_input_args():
 
     parser_eval.add_argument('action_selection', type=str, nargs='?', choices=['greedy', 'feature'])
     parser_eval.add_argument('--weightfile', type=str, default='')
-    parser_eval.add_argument('--feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'], default='base')
+    parser_eval.add_argument('--feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark', 'timestep'], default='base')
 
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger'], default='finger')
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
@@ -338,7 +343,7 @@ def parse_input_args():
     
     parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
     parser_eval.add_argument("--downsample", type=int, default=1)
-    parser_eval.add_argument("--downsample_size", type=int, default=0.025)
+    parser_eval.add_argument("--downsample_size", type=float, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
     parser_eval.add_argument("--ground_truth", type=int, default=1)
@@ -445,7 +450,7 @@ def setup_lfd_environment_sim(args):
         sim_objs.append(CylinderSimulationObject("cylinder2", [.4,.2,table_height+(.01+.65)], .06, .5, dynamic=False))
         sim_objs.append(CylinderSimulationObject("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5, dynamic=False))
     
-    sim = DynamicSimulationRobotWorld()
+    sim = DynamicRopeSimulationRobotWorld()
     world = sim
     sim.add_objects(sim_objs)
     if args.eval.ground_truth:
@@ -543,6 +548,8 @@ def get_features(args):
         from mmqe.features import SimpleMulFeats as feat
     elif feat_type == 'landmark':
         from mmqe.features import LandmarkFeats as feat
+    elif feat_type == 'timestep':
+        from mmqe.features import TimestepActionMulFeats as feat
     else:
         raise ValueError('Incorrect Feature Type')
 
@@ -572,7 +579,8 @@ def main():
     setup_log_file(args)
 
     set_global_vars(args)
-    get_features(args)
+    if args.eval.action_selection == 'feature':
+        get_features(args)
     trajoptpy.SetInteractive(args.interactive)
     lfd_env, sim = setup_lfd_environment_sim(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, sim)
