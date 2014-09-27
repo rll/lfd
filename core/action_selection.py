@@ -9,7 +9,7 @@ from rapprentice.knot_classifier import isKnot as is_knot
 from registration import TpsRpmBijRegistrationFactory
 from transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
-from ropesimulation.transfer_simulate import BatchTransferSimulate
+from core.transfer_simulate import BatchTransferSimulate
 
 import IPython as ipy
 
