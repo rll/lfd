@@ -127,11 +127,15 @@ class AugmentedTrajectory(object):
         self.lr2ee_traj = lr2ee_traj
         
         if lr2open_finger_traj is None:
-            self.lr2open_finger_traj = np.zeros(self.n_steps, dtype=bool)
+            self.lr2open_finger_traj = {}
+            for lr in 'lr':
+                self.lr2open_finger_traj[lr] = np.zeros(self.n_steps, dtype=bool)
         else:
             self.lr2open_finger_traj = lr2open_finger_traj
         if lr2close_finger_traj is None:
-            self.lr2close_finger_traj = np.zeros(self.n_steps, dtype=bool)
+            self.lr2close_finger_traj = {}
+            for lr in 'lr':
+                self.lr2close_finger_traj[lr] = np.zeros(self.n_steps, dtype=bool)
         else:
             self.lr2close_finger_traj = lr2close_finger_traj
     
