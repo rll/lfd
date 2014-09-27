@@ -1,7 +1,7 @@
 from tpsopt.constants import *
 import numpy as np
 
-GRIPPER_OPEN_CLOSE_THRESH = 0.07
+GRIPPER_OPEN_CLOSE_THRESH = 0.04 # .07 for thick rope, but buggy??
 COLLISION_DIST_THRESHOLD = 0.0
 MAX_ACTIONS_TO_TRY = 10  # Number of actions to try (ranked by cost), if TrajOpt trajectory is infeasible
 TRAJOPT_MAX_ACTIONS = 5  # Number of actions to compute full feature (TPS + TrajOpt) on
