@@ -11,3 +11,5 @@ DS_SIZE            = 0.025
 N_STREAMS          = 10
 DEFAULT_NORM_ITERS = 10
 BEND_COEF_DIGITS   = 6
+GRIPPER_OPEN_CLOSE_THRESH = 0.04 # 0.07 for thick rope...
+

@@ -40,6 +40,7 @@ from itertools import combinations
 import IPython as ipy
 import random
 import hashlib
+import ipdb
 
 class GlobalVars:
     exec_log = None
@@ -121,6 +122,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 except ValueError: # If something is cloud/traj is empty or something
                     redprint("**Raised value error during traj transfer")
                     break
+                #ipdb.set_trace()
                 eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
                 sim.settle()
                 eval_stats.exec_elapsed_time += time.time() - start_time
@@ -340,7 +342,7 @@ def parse_input_args():
 
     parser_eval.add_argument('action_selection', type=str, nargs='?', choices=['greedy', 'feature'])
     parser_eval.add_argument('--weightfile', type=str, default='')
-    parser_eval.add_argument('--feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark', 'timestep'], default='base')
+    parser_eval.add_argument('--feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_quad_ind', 'mul_quad_bendind', 'mul_quad_mapind', 'mul_s', 'mul_grip', 'mul_s_map', 'landmark', 'timestep'], default='base')
 
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger'], default='finger')
     parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
@@ -549,9 +551,19 @@ def get_features(args):
     elif feat_type == 'mul':
         from mmqe.features import MulFeats as feat
     elif feat_type == 'mul_quad':
-        from mmqe.features import QuadMulFeats as feat
+        from mmqe.features import QuadSimpleMulFeats as feat
+    elif feat_type == 'mul_quad_ind':
+        from mmqe.features import QuadSimpleMulIndFeats as feat
+    elif feat_type == 'mul_quad_mapind':
+        from mmqe.features import QuadSimpleMulMapIndFeats as feat
+    elif feat_type == 'mul_quad_bendind':
+        from mmqe.features import QuadSimpleMulBendIndFeats as feat
     elif feat_type == 'mul_s':
         from mmqe.features import SimpleMulFeats as feat
+    elif feat_type == 'mul_grip':
+        from mmqe.features import SimpleMulGripperFeats as feat
+    elif feat_type == 'mul_s_map':
+        from mmqe.features import SimpleMulMapIndFeats as feat
     elif feat_type == 'landmark':
         from mmqe.features import LandmarkFeats as feat
     elif feat_type == 'timestep':
@@ -585,11 +597,11 @@ def main():
     setup_log_file(args)
 
     set_global_vars(args)
-    if args.eval.action_selection == 'feature':
-        get_features(args)
     trajoptpy.SetInteractive(args.interactive)
     lfd_env, sim = setup_lfd_environment_sim(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, sim)
+    if args.eval.action_selection == 'feature':
+        get_features(args)
     if args.eval.action_selection == 'greedy':
         action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
     elif args.eval.search_parallel:

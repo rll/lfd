@@ -8,8 +8,10 @@ import numpy as np
 from tpsopt.batchtps import SrcContext, TgtContext, batch_tps_rpm_bij, GPUContext
 from tpsopt.registration import unit_boxify
 
+import ipdb
 import IPython as ipy
 from pdb import pm, set_trace
+from scipy.spatial.distance import cdist
 
 
 class Feature(object):
@@ -125,6 +127,42 @@ class SimpleMulFeats(MulFeats):
     def get_size(num_actions):
         return BatchRCFeats.get_size(num_actions) +SimpleMulFeats.N_costs - 1
 
+class SimpleMulGripperFeats(MulFeats):
+    
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.load_closing_inds(actionfile)
+        x = np.array([-1 for _ in range(SimpleMulFeats.N_costs)])
+        self.weights = np.r_[x, np.zeros(self.N+1)]
+ 
+    def features(self, state, **kwargs):
+        self.tgt_cld = state.cloud
+        self.tgt_ctx.set_cld(self.tgt_cld)
+        rloc = state.cloud[0] # the location to set if the left/right gripper doesn't close for an action
+        self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
+        #ipdb.set_trace()
+        self.src_ctx.get_unscaled_trajs(self.tgt_ctx)
+        l_gripper_locs = [self.src_ctx.l_traj_w[i].get()[self.l_ind[i]] if self.l_ind[i]>=0 else rloc for i in range(self.src_ctx.N)]
+        l_gripper_dists = np.min(cdist(np.asarray(l_gripper_locs), np.asarray(state.cloud)), axis=1)
+        r_gripper_locs = [self.src_ctx.r_traj_w[i].get()[self.r_ind[i]] if self.r_ind[i]>=0 else rloc for i in range(self.src_ctx.N)]
+        r_gripper_dists = np.min(cdist(np.asarray(r_gripper_locs), np.asarray(state.cloud)), axis=1)
+        dist_to_rope = np.max(np.array([r_gripper_dists,l_gripper_dists]), axis=0)[:,None]
+        return np.c_[self.costs, self.indicators, dist_to_rope]
+
+    @staticmethod
+    def get_size(num_actions):
+        return SimpleMulFeats.get_size(num_actions) + 1
+
+    def load_closing_inds(self, actionfile):
+        actions = h5py.File(actionfile, 'r')
+        # Each entry in this list is a list of indicies at which that gripper closes
+        l_inds = [actions[key]['l_closing_inds'] for key in self.src_ctx.seg_names]
+        r_inds = [actions[key]['r_closing_inds'] for key in self.src_ctx.seg_names]
+        # replace False with -1 and [1,2,12] with 12 -- we want the last index
+        self.l_ind = [int(inds[-1]) if inds[()] else -1 for inds in l_inds]
+        self.r_ind = [int(inds[-1]) if inds[()] else -1 for inds in r_inds]
+        actions.close()
+
 def get_quad_terms(vec):
     N = vec.shape[0]
     v_t_v = np.dot(vec[:, None], vec[None, :])
@@ -181,6 +219,133 @@ class QuadMulFeats(BatchRCFeats):
     @staticmethod
     def get_size(num_actions):
         return num_actions + QuadMulFeats.N_feats
+
+class SimpleMulMapIndFeats(BatchRCFeats):
+
+    # Same as SimpleMulIndFeats except it computes indicators for the
+    # mapping registration cost.
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.n_regindicators = self.N * 1
+        self.regind_feats = np.zeros([self.N, self.n_regindicators])
+        self.weights = np.zeros(SimpleMulMapIndFeats.get_size(self.N))
+
+    def features(self, state, **kwargs):
+        self.tgt_cld = state.cloud
+        self.tgt_ctx.set_cld(self.tgt_cld)
+        self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
+        for i in range(self.N):
+            self.regind_feats[i,:] = self.indicators[i]*self.costs[i,0]
+
+        return np.c_[self.costs, self.indicators, self.regind_feats]
+
+    @staticmethod
+    def get_size(num_actions):
+        return SimpleMulFeats.get_size(num_actions) + num_actions
+
+
+class QuadSimpleMulFeats(BatchRCFeats):
+
+    N_feats = sum([x+1 for x in range(SimpleMulFeats.N_costs)]) + SimpleMulFeats.N_costs
+
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.weights = np.zeros(QuadSimpleMulFeats.get_size(self.N))
+ 
+    def features(self, state, **kwargs):
+        self.tgt_cld = state.cloud
+        self.tgt_ctx.set_cld(self.tgt_cld)
+        costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
+        self.costs = np.zeros((self.N, QuadSimpleMulFeats.N_feats))
+        for i in range(self.N):
+            self.costs[i, :] = get_quad_terms(costs[i])
+        return np.c_[self.costs, self.indicators]
+
+    def get_ind(self, a):
+        return self.name2ind[a]
+
+    @staticmethod
+    def get_size(num_actions):
+        return num_actions + QuadSimpleMulFeats.N_feats
+
+
+class QuadSimpleMulIndFeats(BatchRCFeats):
+
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.n_regindicators = self.N * SimpleMulFeats.N_costs
+        self.regind_feats = np.zeros([self.N, self.n_regindicators])
+        self.weights = np.zeros(QuadSimpleMulIndFeats.get_size(self.N))
+
+    def features(self, state, **kwargs):
+        self.tgt_cld = state.cloud
+        self.tgt_ctx.set_cld(self.tgt_cld)
+        costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
+        for i in range(self.N):
+            self.regind_feats[i,:] = np.reshape(np.dot(self.indicators[i][:,None], costs[i][None,:]), self.n_regindicators)
+        self.costs = np.zeros((self.N, QuadSimpleMulFeats.N_feats))
+        for i in range(self.N):
+            self.costs[i, :] = get_quad_terms(costs[i])
+
+        return np.c_[self.costs, self.indicators, self.regind_feats]
+
+    @staticmethod
+    def get_size(num_actions):
+        return QuadSimpleMulFeats.get_size(num_actions) + num_actions*SimpleMulFeats.N_costs
+
+class QuadSimpleMulMapIndFeats(BatchRCFeats):
+
+    # Same as QuadSimpleMulIndFeats except it only computes indicators for the
+    # mapping registration cost.
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.n_regindicators = self.N * 1
+        self.regind_feats = np.zeros([self.N, self.n_regindicators])
+        self.weights = np.zeros(QuadSimpleMulMapIndFeats.get_size(self.N))
+
+    def features(self, state, **kwargs):
+        self.tgt_cld = state.cloud
+        self.tgt_ctx.set_cld(self.tgt_cld)
+        costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
+        for i in range(self.N):
+            self.regind_feats[i,:] = self.indicators[i]*costs[i,0]
+        self.costs = np.zeros((self.N, QuadSimpleMulFeats.N_feats))
+        for i in range(self.N):
+            self.costs[i, :] = get_quad_terms(costs[i])
+
+        return np.c_[self.costs, self.indicators, self.regind_feats]
+
+    @staticmethod
+    def get_size(num_actions):
+        return QuadSimpleMulFeats.get_size(num_actions) + num_actions
+
+class QuadSimpleMulBendIndFeats(BatchRCFeats):
+
+    # Same as QuadSimpleMulIndFeats except it only computes indicators for the
+    # sum of forward/backward bending cost.
+    def __init__(self, actionfile):
+        BatchRCFeats.__init__(self, actionfile)
+        self.n_regindicators = self.N * 1
+        self.regind_feats = np.zeros([self.N, self.n_regindicators])
+        self.weights = np.zeros(QuadSimpleMulBendIndFeats.get_size(self.N))
+
+    def features(self, state, **kwargs):
+        self.tgt_cld = state.cloud
+        self.tgt_ctx.set_cld(self.tgt_cld)
+        costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]
+        for i in range(self.N):
+            self.regind_feats[i,:] = self.indicators[i]*np.sum(costs[i,1:2])
+        self.costs = np.zeros((self.N, QuadSimpleMulFeats.N_feats))
+        for i in range(self.N):
+            self.costs[i, :] = get_quad_terms(costs[i])
+
+        return np.c_[self.costs, self.indicators, self.regind_feats]
+
+    @staticmethod
+    def get_size(num_actions):
+        return QuadSimpleMulFeats.get_size(num_actions) + num_actions
+
+
 
 class TimestepFeats(BatchRCFeats):
 

@@ -2,7 +2,7 @@
 scripts for build constraint files and models and for optimizing models
 """
 
-from features import BatchRCFeats, MulFeats, QuadMulFeats, SimpleMulFeats, LandmarkFeats, TimestepActionMulFeats
+from features import BatchRCFeats, MulFeats, QuadMulFeats, QuadSimpleMulFeats, QuadSimpleMulIndFeats, QuadSimpleMulMapIndFeats, QuadSimpleMulBendIndFeats, SimpleMulFeats, SimpleMulGripperFeats, SimpleMulMapIndFeats, LandmarkFeats, TimestepActionMulFeats
 from constraints import ConstraintGenerator, BatchCPMargin
 from max_margin import MaxMarginModel, BellmanMaxMarginModel
 
@@ -27,8 +27,18 @@ def get_feat_cls(args):
         return MulFeats
     elif args.feature_type == 'mul_s':
         return SimpleMulFeats
+    elif args.feature_type == 'mul_grip':
+        return SimpleMulGripperFeats
+    elif args.feature_type == 'mul_s_map':
+        return SimpleMulMapIndFeats
     elif args.feature_type == 'mul_quad':
-        return QuadMulFeats
+        return QuadSimpleMulFeats
+    elif args.feature_type == 'mul_quad_ind':
+        return QuadSimpleMulIndFeats
+    elif args.feature_type == 'mul_quad_mapind':
+        return QuadSimpleMulMapIndFeats
+    elif args.feature_type == 'mul_quad_bendind':
+        return QuadSimpleMulBendIndFeats
     elif args.feature_type == 'landmark':
         return LandmarkFeats
     elif args.feature_type == 'timestep':
@@ -160,7 +170,7 @@ def do_all(args):
 def parse_arguments():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("feature_type", type=str, choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark', 'timestep'])
+    parser.add_argument("feature_type", type=str, choices=['base', 'mul', 'mul_quad', 'mul_s', 'mul_grip', 'mul_s_map', 'mul_quad_ind', 'mul_quad_mapind', 'mul_quad_bendind', 'landmark', 'timestep'])
     parser.add_argument("model_type", type=str, choices=['max-margin', 'bellman'])
     parser.add_argument("landmarkfile", type=str, nargs='?', default='../data/misc/landmarks.h5')
     subparsers = parser.add_subparsers()
