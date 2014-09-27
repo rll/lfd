@@ -5,6 +5,7 @@ import trajoptpy
 from rapprentice import ropesim, resampling
 from rapprentice import math_utils as mu
 import sim_util # TODO fold in sim_util function into LfdEnvironment
+from tpsopt.constants import MAX_CLD_SIZE
 
 import IPython as ipy
 
@@ -49,6 +50,9 @@ class SceneState(object):
                 self.color = cloud_color[:,3:]
             else:
                 self.cloud = clouds.downsample(full_cloud, downsample_size)
+                while self.cloud.shape[0] > MAX_CLD_SIZE:
+                    downsample_size += .001
+                    self.cloud = clouds.downsample(full_cloud, downsample_size)
                 self.color = None
         else:
             self.cloud = full_cloud

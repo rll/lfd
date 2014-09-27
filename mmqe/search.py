@@ -3,6 +3,7 @@ classes and methods to do a tree search to find the best option
 """
 
 import numpy as np
+import IPython as ipy
 
 class SearchNode(object):
 
@@ -118,7 +119,7 @@ def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=
             child_node = ExpandingNode(child_id, parent_node)
         agenda = []
         for res in expand_res:
-            next_s, next_s_id, is_goal = res
+            next_s, next_s_id, is_goal, is_fail = res
             parent = SearchNode.id_map[next_s_id].parent
             del SearchNode.id_map[next_s_id]
 
@@ -126,12 +127,75 @@ def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=
                 goal_found = True
                 parent.update(np.inf, next_s_id)
                 break
-            #elif not res.feasible or res.misgrasp:
-            #    parent.update(-np.inf, next_s_id)
-            #    continue
+            elif is_fail:
+               parent.update(-np.inf, next_s_id)
+               continue
             child_vals = evaluator(next_s, timestep+d+1)
             child_node = MaxNode(next_s_id, next_s, child_vals, parent=parent)
             parent.update(child_node.value, next_s_id)
+            agenda.append(child_node)
+        if goal_found:
+            break
+    # Reset back to the original state before returning
+    sim.set_state(id2simstate[root_id])
+    return root.select_best()
+# assumes expander is a list of expand instances
+def beam_search_parallel(start_state, timestep, actions, expander, evaluator, sim, width=1, depth=1, debug=False):
+    id2simstate = {}
+    SearchNode.set_actions(actions)
+    root_id = SearchNode.get_UID()
+    id2simstate[root_id] = sim.get_state()
+    root_vals = evaluator(start_state, timestep)
+    root = MaxNode(root_id, start_state, root_vals)
+    agenda = [root]
+    goal_found = False
+    for d in range(depth):
+        next_states = []
+        for s in agenda:
+            if len(agenda) >= 3:
+                next_states.extend(s.best_k(width/2))#only expand at most half from the same child
+            else:
+                next_states.extend(s.best_k(width))#unless there are only a couple options
+        agenda = sorted(next_states, key=lambda x:-x[0])[:width]        
+        for v, a, P_ID in agenda:
+            print 'parent ID:\t{}'.format(P_ID)
+            parent_node = SearchNode.id_map[P_ID]
+            parent_state = parent_node.state
+            child_id = parent_node.child_ids[SearchNode.action2ind[a]]
+            sim.set_state(id2simstate[P_ID])
+            expander.queue_transfer_simulate(id2simstate[P_ID], parent_state, a, child_id)
+            child_node = ExpandingNode(child_id, parent_node)
+        expander.wait_while_queue_is_nonempty()
+        expand_res = expander.get_results()
+        agenda = []
+        for res in expand_res:
+            next_s, next_s_id, is_goal, is_fail, simstate = res
+            id2simstate[next_s_id] = simstate
+            parent = SearchNode.id_map[next_s_id].parent
+            del SearchNode.id_map[next_s_id]
+
+            if is_goal:
+                print 'Goal Found!'
+                goal_found = True
+                parent.update(np.inf, next_s_id)
+                break
+            elif is_fail:
+                print 'Failure Detected!!'
+                parent.update(-np.inf, next_s_id)
+                continue
+            child_vals = evaluator(next_s, timestep+d+1)
+            child_node = MaxNode(next_s_id, next_s, child_vals, parent=parent)
+
+            if debug:
+                sim.set_state(id2simstate[parent.ID])
+                print "parent state current value: {}".format(parent.value)
+                sim.viewer.Idle()        
+            parent.update(child_node.value, next_s_id)
+            if debug:
+                sim.set_state(simstate)
+                print "parent state current value: {}".format(parent.value)
+                print "child value: {}".format(child_node.value)                
+                sim.viewer.Idle()                        
             agenda.append(child_node)
         if goal_found:
             break

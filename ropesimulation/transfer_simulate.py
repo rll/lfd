@@ -390,9 +390,7 @@ class TransferSimulate(object):
         return TransferSimulateResult(success, feasible, misgrasp, full_trajs, self.sim_env.observe_scene(id=next_state_id, **vars(args_eval)))
 
 class BatchTransferSimulate(object):
-    def __init__(self, transfer, sim_env, max_queue_size = 100, profile='ssh'):
-        self.transfer = transfer
-        self.sim_env = sim_env
+    def __init__(self, args, demos, max_queue_size = 100, profile='ssh'):
         self.max_queue_size = max_queue_size
 
         # create clients and views
@@ -401,40 +399,81 @@ class BatchTransferSimulate(object):
         self.v = self.rc.load_balanced_view()
  
         # add module paths to the engine paths
-        modules = ['lfd', 'reinforcement-lfd']
-        module_paths = []
-        for module in modules:
-            paths = [path for path in sys.path if module == os.path.split(path)[1]]
-            assert len(paths) > 0
-            module_paths.append(paths[0]) # add the first module path only
- 
-        @interactive
-        def engine_add_module_paths(module_paths):
-            import sys
-            sys.path.extend(module_paths)
-        self.dv.map_sync(engine_add_module_paths, [module_paths]*len(self.dv))
+        # modules = ['lfd']
+        # module_paths = []
+        # for module in modules:
+        #     paths = [path for path in sys.path if module == os.path.split(path)[1]]
+        #     assert len(paths) > 0
+        #     module_paths.append(paths[0]) # add the first module path only
+        # module_paths=['~/src/lfd']
+        # @interactive
+        # def engine_add_module_paths(module_paths):
+        #     import sys
+        #     sys.path.extend(module_paths)
+        # self.dv.map_sync(engine_add_module_paths, [module_paths]*len(self.dv))
 
         @interactive
-        def engine_initialize(id, transfer, sim_env):
-            from ropesimulation.transfer_simulate import TransferSimulate
-            global transfer_simulate
-            transfer_simulate = TransferSimulate(transfer, sim_env)
-            transfer_simulate.transfer.initialize()
-            transfer_simulate.sim_env.initialize()
-        transfer.args_eval.actionfile = os.path.abspath(transfer.args_eval.actionfile)
-        self.dv.map_sync(engine_initialize, self.rc.ids, [transfer]*len(self.dv), [sim_env]*len(self.dv))
-        
+        def engine_initialize(id, args, demos):
+            from core.simulation import DynamicRopeSimulationRobotWorld
+            from core.environment import LfdEnvironment
+            from core.registration import TpsRpmBijRegistrationFactory
+            from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+            from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
+            global lfd_env, reg_and_traj_transferer
+            sim = DynamicRopeSimulationRobotWorld()
+            world = sim
+            lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
+            reg_factory = TpsRpmBijRegistrationFactory(demos)
+            traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, 
+                                                       args.eval.gamma, args.eval.use_collision_cost)
+            traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, 
+                                                         args.eval.use_collision_cost, 
+                                                         init_trajectory_transferer=traj_transferer)
+            reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+        self.dv.map_sync(engine_initialize, self.rc.ids, [args]*len(self.dv), [demos]*len(self.dv))
+        from core.simulation import DynamicRopeSimulationRobotWorld
+        from core.environment import LfdEnvironment
+        from core.registration import TpsRpmBijRegistrationFactory
+        from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+        from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
+        from rapprentice.knot_classifier import isKnot as is_knot
+        from core import simulation_object, sim_util
+        sim = DynamicRopeSimulationRobotWorld()
+        world = sim
+        lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
+        reg_factory = TpsRpmBijRegistrationFactory(demos)
+        traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, 
+                                                   args.eval.gamma, args.eval.use_collision_cost)
+        traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, 
+                                                     args.eval.use_collision_cost, 
+                                                     init_trajectory_transferer=traj_transferer)
+        reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+        self.lfd_env = lfd_env
+        self.reg_and_traj_transferer = reg_and_traj_transferer
         self.pending = set()
         
-    def queue_transfer_simulate(self, state, action, next_state_id): # TODO optional arguments
+    def queue_transfer_simulate(self, simstate, state, action, next_state_id): # TODO optional arguments
         self.wait_while_queue_is_full()
-        
         @interactive
-        def engine_transfer_simulate(state, action, next_state_id):
-            global transfer_simulate
-            return transfer_simulate.transfer_simulate(state, action, next_state_id)
-        
-        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [state, action, next_state_id]])
+        def engine_transfer_simulate(simstate, state, action, next_state_id):            
+            from rapprentice.knot_classifier import isKnot as is_knot
+            from core import simulation_object, sim_util
+            global lfd_env, reg_and_traj_transferer
+            lfd_env.sim.set_state(simstate)
+            demo = reg_and_traj_transferer.registration_factory.demos[action]
+            aug_traj = reg_and_traj_transferer.transfer(demo, state, plotting=False)
+            (feas, misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0)
+            lfd_env.sim.settle()
+            result_state = lfd_env.observe_scene()
+            for sim_obj in lfd_env.sim.sim_objs:
+                if isinstance(sim_obj, simulation_object.RopeSimulationObject):
+                    rope_sim_obj = sim_obj
+                    break
+            rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
+            fail = not(feas) or misgrasp or result_state.cloud.shape[0] < 10
+            return (result_state, next_state_id, rope_knot, fail, lfd_env.sim.get_state())
+
+        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action, next_state_id]])
         self.pending.update(amr.msg_ids)
 
     def wait_while_queue_size_above_size(self, queue_size):

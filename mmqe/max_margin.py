@@ -176,6 +176,9 @@ class MaxMarginModel(object):
             xi_var.Obj *= C
         self.model.update()
 
+    def margin_err(self):
+        return sum(xi.X for xi in self.xi)
+
     def optimize_model(self):
         self.model.update()
         self.model.optimize()
@@ -214,6 +217,9 @@ class BellmanMaxMarginModel(MaxMarginModel):
         mm_model.gamma = param_f['gamma'][()]
         return mm_model
 
+    def bellman_err(self):
+        return sum(yi.X for yi in self.yi)
+
     def populate_slacks(self):
         self.xi = [var for var in self.model.getVars() if var.VarName.startswith('xi')]
         self.xi_val = []
@@ -232,6 +238,8 @@ class BellmanMaxMarginModel(MaxMarginModel):
         rhs_coeffs.append((-1, yi_neg_var)) 
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
+        if final_transition:
+            rhs += self.goal_reward
         # w'*curr_phi == -1 + yi_pos - yi_neg + gammma * w'*next_phi
         self.model.addConstr(lhs == rhs)
         #store the constraint so we can store them to a file later

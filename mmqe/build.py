@@ -140,6 +140,7 @@ def optimize_model(args):
 #        mm_model.optimize_model()
     assert mm_model.model.status == 2
     mm_model.save_weights_to_file(args.weightfile)
+    ipy.embed()
 
 def do_all(args):
     model_dir = '../data/models'

@@ -16,7 +16,7 @@ from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFa
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
-from core.action_selection import FeatureActionSelection
+from core.action_selection import FeatureActionSelection, ParallelFeatureActionSelection
 
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
@@ -76,7 +76,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
         sim.add_objects([rope])
         sim.settle(step_viewer=args.animation)
-        
+        task_start = time.time()
+        task_time = 0
         for i_step in range(args.eval.num_steps):
             redprint("task %s step %i" % (i_task, i_step))
             
@@ -96,11 +97,12 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_stats = eval_util.EvalStats()
             
             start_time = time.time()
-            try:
-                agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
-            except ValueError: #e.g. if cloud is empty - any action is hopeless
-                redprint("**Raised Value Error during action selection")
-                break
+            agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
+            # try:
+            #     agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
+            # except ValueError: #e.g. if cloud is empty - any action is hopeless
+            #     redprint("**Raised Value Error during action selection")
+            #     break
             eval_stats.action_elapsed_time += time.time() - start_time
             
             eval_stats.generalized = True
@@ -120,6 +122,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                     redprint("**Raised value error during traj transfer")
                     break
                 eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
+                sim.settle()
                 eval_stats.exec_elapsed_time += time.time() - start_time
                 
                 if not args.eval.check_feasible or eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action and we care about feasibility
@@ -148,9 +151,11 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         
         sim.remove_objects([rope])
         
+        task_time = (.8) * (time.time() - task_start)  + (.2) * task_time if task_time else time.time() - task_start
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
         redprint('Success Rate: ' + str(float(num_successes)/num_total))
+        redprint('Estimated Time Left: {}'.format((len(holdout_items) - num_total) * task_time))
 
 def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     raise NotImplementedError
@@ -331,7 +336,7 @@ def parse_input_args():
     
     parser_eval.add_argument('actionfile', type=str, nargs='?', default='../bigdata/misc/overhand_actions.h5')
     parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='../bigdata/misc/holdout_set_Jun20_0.10.h5')
-    parser.add_argument("--landmarkfile", type=str, default='../data/misc/landmarks.h5')
+    parser.add_argument("--landmarkfile", type=str, default='../mmqe_data/landmarks.h5')
 
     parser_eval.add_argument('action_selection', type=str, nargs='?', choices=['greedy', 'feature'])
     parser_eval.add_argument('--weightfile', type=str, default='')
@@ -373,6 +378,7 @@ def parse_input_args():
 
 
     parser_eval.add_argument("--parallel", action="store_true")
+    parser_eval.add_argument("--search_parallel", action="store_true")
     parser_eval.add_argument("--gpu", action="store_true", default=False)
 
     parser_replay = subparsers.add_parser('replay')
@@ -586,8 +592,10 @@ def main():
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, sim)
     if args.eval.action_selection == 'greedy':
         action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
+    elif args.eval.search_parallel:
+        action_selection = ParallelFeatureActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, args=args, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
     else:
-        action_selection = FeatureActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
+        action_selection = FeatureActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth, debug=2)
 
     if args.subparser_name == "eval":
         start = time.time()
