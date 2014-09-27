@@ -375,10 +375,20 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
             test_traj = np.c_[test_traj, ds_aug_trajs[0].lr2finger_traj[lr]]
 
         full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
-        test_aug_traj = ForceAugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, ds_aug_trajs[0].lr2force_traj, ds_aug_trajs[0].lr2force_ext_traj, lr2open_finger_traj=ds_aug_trajs[0].lr2open_finger_traj, lr2close_finger_traj=ds_aug_trajs[0].lr2close_finger_traj)
+        test_aug_traj = ForceAugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, None, None)
         
         if self.downsample_traj > 1:
             test_aug_traj = test_aug_traj.get_resampled_traj(np.arange(self.downsample_traj*(test_aug_traj.n_steps-1)+1)/self.downsample_traj)
+        
+        test_aug_traj.lr2open_finger_traj = aligned_aug_trajs[0].lr2open_finger_traj
+        test_aug_traj.lr2close_finger_traj = aligned_aug_trajs[0].lr2close_finger_traj
+        test_aug_traj.lr2force_traj = {}
+        test_aug_traj.lr2force_ext_traj = {}
+        for lr in active_lr:
+            assert lr2dof_mu_traj[lr].shape[0] == test_aug_traj.n_steps
+            assert lr2dof_mu_traj[lr].shape[1] == 24
+            test_aug_traj.lr2force_traj[lr] = lr2dof_mu_traj[lr][:,12:18]
+            test_aug_traj.lr2force_ext_traj[lr] = lr2dof_mu_traj[lr][:,18:24]
         
         test_aug_traj.lr2dof_mu_traj = lr2dof_mu_traj
         test_aug_traj.lr2dof_sigma_traj = lr2dof_sigma_traj
