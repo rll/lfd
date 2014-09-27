@@ -698,17 +698,17 @@ def setup_demos(args, robot):
         M_inv = calculate_masses(lr2arm_traj, robot)
         lr2force_ext_traj = {}
         for lr in 'lr':
-            M = np.linalg.inv(M_inv[lr])
             accel = np.c_[np.diff(np.diff(lr2ee_traj[lr][:,:3,3], axis=0), axis=0),
                           axisAngleFromRotationMatrix(diff_rotation_matrix(diff_rotation_matrix(lr2ee_traj[lr][:,:3,:3])))]
             accel = np.r_[accel[0,:][None,:], accel[0,:][None,:], accel]
             accel /= DT*DT
             lr2force_ext_traj[lr] = np.empty((len(lr2force_traj[lr]), 6))
             for t in range(len(lr2force_traj[lr])):
+                M = np.linalg.inv(M_inv[lr][t])
                 if t == 0:
-                    lr2force_ext_traj[lr][t,:] = M[t,:,:].dot(accel[t,:]) - lr2force_traj[lr][t,:]
+                    lr2force_ext_traj[lr][t,:] = M.dot(accel[t,:]) - lr2force_traj[lr][t,:]
                 else:
-                    lr2force_ext_traj[lr][t,:] = M[t,:,:].dot(accel[t,:]) - lr2force_traj[lr][t-1,:]
+                    lr2force_ext_traj[lr][t,:] = M.dot(accel[t,:]) - lr2force_traj[lr][t-1,:]
         aug_traj = ForceAugmentedTrajectory(lr2force_traj, lr2force_ext_traj, lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
         demo = Demonstration(action, scene_state, aug_traj)
         demos[action] = demo
