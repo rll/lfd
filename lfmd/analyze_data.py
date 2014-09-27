@@ -23,10 +23,11 @@ from core.transfer import TrajectoryTransferer
 
 import IPython as ipy
 
+DT = 0.01
+
 def dof_val_cost(aug_traj1, aug_traj2, t1, t2, lr, coefs):
     t1_v = t1+1 if t1 == 0 else t1
     t2_v = t2+1 if t2 == 0 else t2
-    dt = 0.01
     cost = 0.0
     if coefs[0] != 0:
         cost = coefs[0] * np.linalg.norm(aug_traj2.lr2ee_traj[lr][t2,:3,3] - aug_traj1.lr2ee_traj[lr][t1,:3,3])
@@ -36,14 +37,14 @@ def dof_val_cost(aug_traj1, aug_traj2, t1, t2, lr, coefs):
         aa_diff = openravepy.axisAngleFromRotationMatrix(rot2.dot(rot1.T))
         cost += coefs[1] * np.linalg.norm(aa_diff)
     if coefs[2] != 0:
-        vel1 = (aug_traj1.lr2ee_traj[lr][t1_v,:3,3] - aug_traj1.lr2ee_traj[lr][t1_v-1,:3,3]) / dt
-        vel2 = (aug_traj2.lr2ee_traj[lr][t2_v,:3,3] - aug_traj2.lr2ee_traj[lr][t2_v-1,:3,3]) / dt
+        vel1 = (aug_traj1.lr2ee_traj[lr][t1_v,:3,3] - aug_traj1.lr2ee_traj[lr][t1_v-1,:3,3]) / DT
+        vel2 = (aug_traj2.lr2ee_traj[lr][t2_v,:3,3] - aug_traj2.lr2ee_traj[lr][t2_v-1,:3,3]) / DT
         cost = coefs[2] * np.linalg.norm(vel2 - vel1)
     if coefs[3] != 0:
         t1_v = t1+1 if t1 == 0 else t1
         t2_v = t2+1 if t2 == 0 else t2
-        rot_vel1 = (aug_traj1.lr2ee_traj[lr][t1_v,:3,:3].dot(aug_traj1.lr2ee_traj[lr][t1_v-1,:3,:3].T)) / dt
-        rot_vel2 = (aug_traj2.lr2ee_traj[lr][t2_v,:3,:3].dot(aug_traj2.lr2ee_traj[lr][t2_v-1,:3,:3].T)) / dt
+        rot_vel1 = (aug_traj1.lr2ee_traj[lr][t1_v,:3,:3].dot(aug_traj1.lr2ee_traj[lr][t1_v-1,:3,:3].T)) / DT
+        rot_vel2 = (aug_traj2.lr2ee_traj[lr][t2_v,:3,:3].dot(aug_traj2.lr2ee_traj[lr][t2_v-1,:3,:3].T)) / DT
         aa_diff = openravepy.axisAngleFromRotationMatrix(rot_vel2.dot(rot_vel1.T))
         cost += coefs[3] * np.linalg.norm(aa_diff)
     if aug_traj1.lr2force_traj and aug_traj2.lr2force_traj:
@@ -141,31 +142,35 @@ def flip_angle_axis_in_place(aa_trajs):
         aa_traj[:,:] = axis_traj * angle_traj[:,None]
     return aa_trajs
 
+def axisAngleFromRotationMatrix(rots):
+    aa_diffs = np.empty((len(rots), 3))
+    for t, rot in enumerate(rots):
+        aa_diffs[t,:] = openravepy.axisAngleFromRotationMatrix(rot)
+    return aa_diffs
+
+def diff_rotation_matrix(rots):
+    rot_diffs = np.empty((len(rots)-1, 3, 3))
+    for t in range(len(rots)-1):
+        rot_diffs[t,:,:] = rots[t+1,:3,:3].dot(rots[t,:3,:3].T)
+    return rot_diffs
+
 def stack_traj(aug_traj):
     """
-    Stacks trajectory in the following order: position, rotation, position velocity, rotation velocity, force and torque
+    Stacks trajectory in the following order: position, velocity, force and external force
     """
     lr2traj = {}
     for lr in aug_traj.lr2ee_traj.keys():
-        ee_traj = aug_traj.lr2ee_traj[lr]
-        aa_traj = np.empty((len(ee_traj), 3)) # angle axis rotations
-        for t, hmat in enumerate(ee_traj):
-            aa_traj[t,:] = openravepy.axisAngleFromRotationMatrix(hmat)
-            assert 0 <= np.linalg.norm(aa_traj[t,3:]) and np.linalg.norm(aa_traj[t,3:]) <= 2*np.pi
-        dt = 0.01
-        vel_traj = np.diff(ee_traj[:,:3,3], axis=0)
+        pos_traj = np.c_[aug_traj.lr2ee_traj[lr][:,:3,3], axisAngleFromRotationMatrix(aug_traj.lr2ee_traj[lr][:,:3,:3])]
+        vel_traj = np.c_[np.diff(aug_traj.lr2ee_traj[lr][:,:3,3], axis=0),
+                         axisAngleFromRotationMatrix(diff_rotation_matrix(aug_traj.lr2ee_traj[lr][:,:3,:3]))]
         vel_traj = np.r_[vel_traj[0][None,:], vel_traj]
-        vel_traj /= dt
-        aa_vel_traj = np.empty((len(ee_traj)-1, 3))
-        for t in range(len(ee_traj)-1):
-            rot_diff = ee_traj[t+1,:3,:3].dot(ee_traj[t,:3,:3].T)
-            aa_vel_traj[t,:] = openravepy.axisAngleFromRotationMatrix(rot_diff)
-        aa_vel_traj = np.r_[aa_vel_traj[0][None,:], aa_vel_traj]
-        aa_vel_traj /= dt
-        force_traj = np.zeros((len(ee_traj),0))
-        if aug_traj.lr2force_traj:
+        vel_traj /= DT
+        force_traj = np.zeros((aug_traj.n_steps,0))
+        force_ext_traj = np.zeros((aug_traj.n_steps,0))
+        if aug_traj.lr2force_traj and aug_traj.lr2force_ext_traj:
             force_traj = aug_traj.lr2force_traj[lr]
-        lr2traj[lr] = np.c_[ee_traj[:,:3,3], aa_traj, vel_traj, aa_vel_traj, force_traj]
+            force_ext_traj = aug_traj.lr2force_ext_traj[lr]
+        lr2traj[lr] = np.c_[pos_traj, vel_traj, force_traj, force_ext_traj]
     return lr2traj
         
 def flip_wrist_rotations(aug_trajs):
@@ -370,7 +375,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
             test_traj = np.c_[test_traj, ds_aug_trajs[0].lr2finger_traj[lr]]
 
         full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
-        test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=ds_aug_trajs[0].lr2open_finger_traj, lr2close_finger_traj=ds_aug_trajs[0].lr2close_finger_traj)
+        test_aug_traj = ForceAugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, ds_aug_trajs[0].lr2force_traj, ds_aug_trajs[0].lr2force_ext_traj, lr2open_finger_traj=ds_aug_trajs[0].lr2open_finger_traj, lr2close_finger_traj=ds_aug_trajs[0].lr2close_finger_traj)
         
         if self.downsample_traj > 1:
             test_aug_traj = test_aug_traj.get_resampled_traj(np.arange(self.downsample_traj*(test_aug_traj.n_steps-1)+1)/self.downsample_traj)
@@ -418,23 +423,14 @@ def mass_calculate2(lr, robot, aligned_joint_traj):
     M_inv = np.asarray(M_inv)
     return M_inv
 
-def calculate_masses(test_aug_traj):
+def calculate_masses(lr2arm_traj, robot):
     M_inv = {}
-    M_inv['l'] = []
-    M_inv['r'] = []
-    from rapprentice import PR2
-    import rospy
-    rospy.init_node("exec_task",disable_signals=True)
-    pr2 = PR2.PR2()
-    env = pr2.env
-    robot = pr2.robot
-
     for lr in 'lr':
-        M_inv[lr] = mass_calculate2(lr, robot, test_aug_traj.lr2arm_traj[lr])
+        M_inv[lr] = mass_calculate2(lr, robot, lr2arm_traj[lr])
     return M_inv
 
-def calculate_costs(test_aug_traj):
-    M_inv = calculate_masses(test_aug_traj)
+def calculate_costs(test_aug_traj, robot):
+    M_inv = calculate_masses(test_aug_traj.lr2arm_traj, robot)
     
     lr2Cts = {}
     lr2cts = {}
@@ -456,11 +452,10 @@ def calculate_costs(test_aug_traj):
         cts = np.zeros((t_steps,18,1))
         Lts = np.zeros((t_steps,18,18))
         Dts = np.zeros((t_steps,12,18))
-        dt = 0.01
         Dts[:,:12,:12] = np.eye(12)
-        Dts[:,:6,6:12] = dt
-        Dts[:,:6,12:18] = (dt**2)*M_inv[lr][:t_steps] #TODO
-        Dts[:,6:12,12:18] = dt*M_inv[lr][:t_steps]
+        Dts[:,:6,6:12] = DT
+        Dts[:,:6,12:18] = (DT**2)*M_inv[lr][:t_steps] #TODO
+        Dts[:,6:12,12:18] = DT*M_inv[lr][:t_steps]
     
         convergence = False
         isUp = True
@@ -580,14 +575,22 @@ def processFuncCt(cliptype, pM, pm, empsig, empmu, pD, pd, Ct, ct, Lt):
         raise NotImplementedError
     
 class ForceAugmentedTrajectory(AugmentedTrajectory):
-    def __init__(self, lr2force_traj, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
+    def __init__(self, lr2force_traj, lr2force_ext_traj, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
         super(ForceAugmentedTrajectory, self).__init__(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, 
                                                        lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
-        if lr2force_traj is not None:
-            for lr in lr2force_traj.keys():
-                assert lr2force_traj[lr].shape[0] == self.n_steps
+        for lr2traj in [lr2force_traj, lr2force_ext_traj]:
+            if lr2traj is None:
+                continue
+            for lr in lr2traj.keys():
+                assert lr2traj[lr].shape[0] == self.n_steps
         
         self.lr2force_traj = lr2force_traj
+        self.lr2force_ext_traj = lr2force_ext_traj
+    
+    @staticmethod
+    def create_from_full_traj(robot, full_traj, lr2force_traj, lr2force_ext_traj, lr2open_finger_traj=None, lr2close_finger_traj=None):
+        aug_traj = AugmentedTrajectory.create_from_full_traj(robot, full_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
+        return ForceAugmentedTrajectory(lr2force_traj, lr2force_ext_traj, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, lr2open_finger_traj=aug_traj.lr2open_finger_traj, lr2close_finger_traj=aug_traj.lr2close_finger_traj)
     
     def get_resampled_traj(self, timesteps_rs):
         """
@@ -596,10 +599,13 @@ class ForceAugmentedTrajectory(AugmentedTrajectory):
         """
         aug_traj = super(ForceAugmentedTrajectory, self).get_resampled_traj(timesteps_rs)
         lr2force_traj_rs = None if self.lr2force_traj is None else {}
-        if self.lr2force_traj is not None:
-            for lr in self.lr2force_traj.keys():
-                lr2force_traj_rs[lr] = math_utils.interp2d(timesteps_rs, np.arange(len(self.lr2force_traj[lr])), self.lr2force_traj[lr])
-        return ForceAugmentedTrajectory(lr2force_traj_rs, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, 
+        lr2force_ext_traj_rs = None if self.lr2force_ext_traj is None else {}
+        for (lr2traj_rs, self_lr2traj) in [(lr2force_traj_rs, self.lr2force_traj), (lr2force_ext_traj_rs, self.lr2force_ext_traj)]:
+            if self_lr2traj is None:
+                continue
+            for lr in self_lr2traj.keys():
+                lr2traj_rs[lr] = math_utils.interp2d(timesteps_rs, np.arange(len(self_lr2traj[lr])), self_lr2traj[lr])
+        return ForceAugmentedTrajectory(lr2force_traj_rs, lr2force_ext_traj_rs, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, 
                                  lr2open_finger_traj=aug_traj.lr2open_finger_traj, lr2close_finger_traj=aug_traj.lr2close_finger_traj)
     
     def get_transformed_traj(self, reg):
@@ -609,6 +615,9 @@ class ForceAugmentedTrajectory(AugmentedTrajectory):
         for lr in self.lr2force_traj.keys(): # should use the original position for the jacobians
             aug_traj.lr2force_traj[lr] = np.c_[reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_traj[lr][:,:3]), \
                                                reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_traj[lr][:,3:])]
+        for lr in self.lr2force_ext_traj.keys():
+            aug_traj.lr2force_ext_traj[lr] = np.c_[reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_ext_traj[lr][:,:3]), \
+                                                   reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_ext_traj[lr][:,3:])]
         return aug_traj
 
 def parse_input_args():
@@ -650,7 +659,7 @@ def parse_input_args():
     args = parser.parse_args()
     return args
 
-def setup_demos(args):
+def setup_demos(args, robot):
     actions = h5py.File(args.eval.actionfile, 'r')
     
     demos = {}
@@ -676,12 +685,26 @@ def setup_demos(args):
             lr2close_finger_traj[lr][closing_inds] = True
             if "%s_gripper_force"%lr in seg_info:
                 lr2force_traj[lr] = np.asarray(seg_info["%s_gripper_force"%lr])
-        aug_traj = ForceAugmentedTrajectory(lr2force_traj, lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
+        M_inv = calculate_masses(lr2arm_traj, robot)
+        lr2force_ext_traj = {}
+        for lr in 'lr':
+            M = np.linalg.inv(M_inv[lr])
+            accel = np.c_[np.diff(np.diff(lr2ee_traj[lr][:,:3,3], axis=0), axis=0),
+                          axisAngleFromRotationMatrix(diff_rotation_matrix(diff_rotation_matrix(lr2ee_traj[lr][:,:3,:3])))]
+            accel = np.r_[accel[0,:][None,:], accel[0,:][None,:], accel]
+            accel /= DT*DT
+            lr2force_ext_traj[lr] = np.empty((len(lr2force_traj[lr]), 6))
+            for t in range(len(lr2force_traj[lr])):
+                if t == 0:
+                    lr2force_ext_traj[lr][t,:] = M[t,:,:].dot(accel[t,:]) - lr2force_traj[lr][t,:]
+                else:
+                    lr2force_ext_traj[lr][t,:] = M[t,:,:].dot(accel[t,:]) - lr2force_traj[lr][t-1,:]
+        aug_traj = ForceAugmentedTrajectory(lr2force_traj, lr2force_ext_traj, lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
         demo = Demonstration(action, scene_state, aug_traj)
         demos[action] = demo
     return demos
 
-def setup_lfd_environment_sim(args, demos):
+def setup_lfd_environment_sim(args):
     actions = h5py.File(args.eval.actionfile, 'r')
         
     init_rope_xyz, init_joint_names, init_joint_values = sim_util.load_fake_data_segment(actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
@@ -754,9 +777,9 @@ def setup_registration(args, demos, sim):
 def main():
     args = parse_input_args()
 
-    demos = setup_demos(args)
     trajoptpy.SetInteractive(args.interactive)
-    lfd_env, sim = setup_lfd_environment_sim(args, demos)
+    lfd_env, sim = setup_lfd_environment_sim(args)
+    demos = setup_demos(args, sim.robot)
     reg_factory = setup_registration(args, demos, sim)
     
     # for now, use the cloud of the first demo as the current cloud
@@ -771,7 +794,7 @@ def main():
     n_demos = min(args.eval.max_num_demos, len(reg_factory.demos))
     test_aug_traj = trajectory_transferer.transfer(regs[:n_demos], demos[:n_demos], plotting=args.animation, plotting_std_dev=args.std_dev)
 
-    lr2Cts, lr2cts = calculate_costs(test_aug_traj)
+    #lr2Cts, lr2cts = calculate_costs(test_aug_traj, sim.robot)
     
     lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
 
