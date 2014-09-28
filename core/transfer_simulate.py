@@ -58,7 +58,7 @@ class BatchTransferSimulate(object):
                                                          args.eval.use_collision_cost, 
                                                          init_trajectory_transferer=traj_transferer)
             reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-        self.dv.map_sync(engine_initialize, self.rc.ids, [args]*len(self.dv), [demos]*len(self.dv))
+        self.dv.map_sync(engine_initialize, self.rc.ids, [args]*len(self.dv.targets), [demos]*len(self.dv.targets))
         sim = DynamicRopeSimulationRobotWorld()
         world = sim
         lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
