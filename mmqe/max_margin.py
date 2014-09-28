@@ -131,6 +131,8 @@ class MaxMarginModel(object):
             if n_added > max_constrs:
                 break
             constr = infile[str(key_i)]
+            if constr['exp_action_name'][()] not in self.actions:
+                continue
             exp_phi = constr['exp_phi'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = constr['margin'][:]
@@ -242,15 +244,15 @@ class BellmanMaxMarginModel(MaxMarginModel):
     def add_deadend_constraint(self, phi, update=True):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, phi) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
-        yi_pos_var, yi_neg_var = self.add_yi()
-        rhs_coeffs = [(1, yi_pos_var), (-1, yi_neg_var)]
+        yi_pos_var = self.add_yi(pos_only=True)
+        rhs_coeffs = [(1, yi_pos_var)]
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.dead_end_value
-        self.model.addConstr(lhs == rhs)
+        self.model.addConstr(lhs <= rhs)
         if update:
             self.model.update()
 
-    def add_yi(self):
+    def add_yi(self, neg_only=False):
         yi_pos_name = 'yi_pos_{}'.format(len(self.yi))
         yi_neg_name = 'yi_neg_{}'.format(len(self.yi))
         yi_pos = self.model.addVar(lb = 0, name = yi_pos_name, obj = 1)
@@ -277,6 +279,11 @@ class BellmanMaxMarginModel(MaxMarginModel):
         for key in infile:
             task_i, step_i = BellmanMaxMarginModel.parse_key(key)
             constr = infile[key]            
+            if constr['exp_action_name'][()] == 'failure':
+                phi = constr['rhs_phi'][:]
+                n_constrs = rhs_phi.shape[0]
+                for i in range(n_constrs):
+                    self.add_deadend_constraint(phi[i], update=False)                
             lhs_phi = constr['exp_phi'][:]
             final_transition = False
             try:

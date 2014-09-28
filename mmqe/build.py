@@ -87,18 +87,18 @@ def build_constraints(args):
     constrfile = h5py.File(args.constrfile, 'w')
     n_constraints = len([k for k in exp_demofile.keys() if k.startswith('(')])        
     for i, demo_k in enumerate(exp_demofile):
-        if demo_k.startswith('f'):
-            continue
-        ## we expect states to be an identifier and a 
-        ## point cloud, we won't use the identifier here
-        sys.stdout.write('\rcomputing constraints {}/{}       '.format(i, n_constraints))
+        sys.stdout.write('\rcomputing constraints {}/{}\t\t\t\t'.format(i, n_constraints))
         sys.stdout.flush()
         demo_info = exp_demofile[demo_k]
-        exp_a = demo_info['action'][()]
-        if exp_a.startswith('endstate'): # this is a knot
-            continue
         state = State(i, demo_info['cloud_xyz'][:])
-        demo, timestep = parse_key(demo_k)
+        if demo_k.startswith('f'):
+            exp_a = 'failure'
+        else:
+            ## we expect states to be an identifier and a 
+            ## point cloud, we won't use the identifier here
+            exp_a = demo_info['action'][()]
+            if exp_a.startswith('endstate'): # this is a knot
+                continue
         exp_phi, phi, margins = constr_generator.compute_constrs(state, exp_a, timestep)
         constr_generator.store_constrs(exp_phi, phi, margins, exp_a, constrfile, constr_k=str(demo_k))
         constrfile.flush()
