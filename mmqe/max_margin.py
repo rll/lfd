@@ -200,6 +200,7 @@ class BellmanMaxMarginModel(MaxMarginModel):
         MaxMarginModel.__init__(self, actions, N)
         self.action_reward = -1
         self.goal_reward = 10
+        self.dead_end_value = -10
         self.yi = []
         self.yi_val = []
         self.gamma = gamma
@@ -243,6 +244,17 @@ class BellmanMaxMarginModel(MaxMarginModel):
         # w'*curr_phi == -1 + yi_pos - yi_neg + gammma * w'*next_phi
         self.model.addConstr(lhs == rhs)
         #store the constraint so we can store them to a file later
+        if update:
+            self.model.update()
+
+    def add_deadend_constraint(self, phi, update=True):
+        lhs_coeffs = [(p, w) for w, p in zip(self.w, phi) if abs(p) >= eps]
+        lhs = grb.LinExpr(lhs_coeffs)
+        yi_pos_var, yi_neg_var = self.add_yi()
+        rhs_coeffs = [(1, yi_pos_var), (-1, yi_neg_var)]
+        rhs = grb.LinExpr(rhs_coeffs)
+        rhs += self.dead_end_value
+        self.model.addConstr(lhs == rhs)
         if update:
             self.model.update()
 
