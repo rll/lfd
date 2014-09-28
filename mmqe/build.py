@@ -153,8 +153,8 @@ def optimize_model(args):
     ipy.embed()
 
 def do_all(args):
-    model_dir = '../data/models'
-    weights_dir = '../data/weights'
+    model_dir = '../mmqe_data/models'
+    weights_dir = '../mmqe_data/weights'
     _, demofname = osp.split(args.demofile)
     labels = osp.splitext(demofname)[0]
     args.constrfile = '{}/{}_{}.h5'.format(model_dir, labels, args.feature_type)
