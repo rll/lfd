@@ -97,6 +97,22 @@ class BatchTransferSimulate(object):
         amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action, next_state_id]])
         self.pending.update(amr.msg_ids)
 
+    def queue_transfer(self, simstate, state, action, next_state_id): # TODO optional arguments
+        self.wait_while_queue_is_full()
+        @interactive
+        def engine_transfer_simulate(simstate, state, action, next_state_id):            
+            from rapprentice.knot_classifier import isKnot as is_knot
+            from core import simulation_object, sim_util
+            global lfd_env, reg_and_traj_transferer
+            lfd_env.sim.set_state(simstate)
+            demo = reg_and_traj_transferer.registration_factory.demos[action]
+            aug_traj = reg_and_traj_transferer.transfer(demo, state, plotting=False)
+            return (aug_traj, simstate, next_state_id)
+
+        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action, next_state_id]])
+        self.pending.update(amr.msg_ids)
+
+
     def wait_while_queue_size_above_size(self, queue_size):
         pending = self.pending.copy()
         while len(pending) > queue_size:
