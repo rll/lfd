@@ -87,7 +87,7 @@ def build_constraints(args):
     constrfile = h5py.File(args.constrfile, 'w')
     n_constraints = len([k for k in exp_demofile.keys() if k.startswith('(')])        
     for i, demo_k in enumerate(exp_demofile):
-        if i.startswith('f'):
+        if demo_k.startswith('f'):
             continue
         ## we expect states to be an identifier and a 
         ## point cloud, we won't use the identifier here
