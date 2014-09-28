@@ -14,6 +14,7 @@ from tpsopt.tps import tps_kernel_matrix
 from tpsopt.registration import loglinspace
 from tpsopt.batchtps import GPUContext, TgtContext, SrcContext, batch_tps_rpm_bij
 from tpsopt.transformations import EmptySolver, TPSSolver
+from tn_rapprentice import math_utils as math_utils
 
 import IPython as ipy
 
@@ -118,7 +119,6 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                     return_corr = True,
                                     plotting = plotting,
                                     plot_cb = plot_cb)
-        
         f = registration.fit_ThinPlateSpline(x_nd,corr.dot(y_md),bend_coef=self.bend_coef)
         #bending_cost = registration.tps_reg_cost(f)
         f_tmp = f
@@ -318,7 +318,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     """
     TPS-RPM using normals information
     """
-    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=0.5, temp_final=.00002, 
+    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=0.5, temp_final=.02, 
         bend_init=1, bend_final=.01, outlierfrac=1e-15, outlierprior=1e-15, normal_weight_init=5, 
         normal_weight_final=.5, normal_coef_init=1, normal_coef_final=.001, sim=None):
         """
@@ -372,26 +372,58 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         from rapprentice import berkeley_pr2
         T_w_k = berkeley_pr2.get_kinect_transform(self.sim.robot)
 
+        if x_nd.shape[0]>y_md.shape[0]:
+            x_nd = x_nd[:y_md.shape[0],]
+        else:
+            y_md = y_md[:x_nd.shape[0],]
+
         Epts = x_nd
         Exs = tps_utils.find_all_normals_naive(x_nd,orig_cloud = demo.scene_state.full_cloud,wsize=0.02,flip_away=True, origin=T_w_k[:3,3])
         #test_scene_state.full_cloud
-        Eys = Exs
-        
+        Eys = tps_utils.find_all_normals_naive(y_md,orig_cloud = test_scene_state.full_cloud,wsize=0.02,flip_away=True, origin=T_w_k[:3,3])
+        Eys=Exs
         handles = []
         for i in range(Epts.shape[0]):
             handles.append(self.sim.env.drawlinestrip(np.array([Epts[i],np.array(Epts[i]+Exs[i]/20)]),2,(0,1,0,1)))
         self.sim.viewer.Step()
-        self.sim.viewer.Idle()
-        
+        #for i in range(Epts.shape[0]):
+            #handles.append(self.sim.env.drawlinestrip(np.array([y_md[i],np.array(y_md[i]+Eys[i]/20)]),2,(1,0,0,1)))
+        self.sim.viewer.Step()
+        #self.sim.viewer.Idle()
+        #ipy.embed()
+    
+        Epts = np.r_[x_nd[0:8],x_nd[0:8],x_nd[0:8]]
+        Exs = np.r_[np.tile(np.array([[-1,0,0],[-1,0,0],[1,0,0],[1,0,0]]), (2,1))]
+        Exs = np.r_[Exs, np.tile(np.array([[0,-1,0],[0,1,0]]),(4,1))]
+        Exs = np.r_[Exs,np.tile(np.array([0,0,1]), (16,1))]
+        Eys = Exs
+        ipy.embed()
+        """
+        ipy.embed()
+        z = open("inputs.txt",'w')
+        np.set_printoptions(threshold=np.nan)
+        z.write("x_nd=np."+repr(x_nd)+"\n\n")
+        z.write("y_md=np."+repr(y_md)+"\n\n")
+        z.write("Epts=np."+repr(Epts)+"\n\n")
+        z.write("Exs=np."+repr(Exs)+"\n\n")
+        z.write("Eys=np."+repr(Eys)+"\n\n")
+        """
         #f,corr1,_ = tn_registration.tps_n_rpm_final_hopefully(x_nd, y_md, Exs, Eys, temp_init=self.temp_init,  temp_final=self.temp_final, bend_init=self.bend_init, bend_final=self.bend_final,
         #            outlierfrac = self.outlierfrac, outlierprior = self.outlierprior, normal_coef = self.normal_coef_init, normal_temp = .05)
-    
+        
+        f,corr1,corr_nm_edge = tn_registration.tps_n_rpm_final_hopefully(x_nd, y_md, Exs, Eys, Epts, temp_init=1,  temp_final=.0005, bend_init=1e2, bend_final=1e-2,
+                     outlierfrac = 1e-2, outlierprior = .01, normal_coef = 1e-1,  normal_temp = 0.001, beta=0)
+        f = registration.fit_ThinPlateSpline(x_nd,corr1.dot(y_md),bend_coef=1)
+        ipy.embed()
+        #f,corr1,_ = tn_registration.tps_rpm_double_corr(x_nd, y_md, Exs, Eys, temp_init=self.temp_init,  temp_final=self.temp_final, bend_init=self.bend_init, bend_final=self.bend_final,
+        #            outlierfrac = self.outlierfrac, outlierprior = self.outlierprior, normal_coef_init = self.normal_coef_init, normal_coef_final = self.normal_coef_init)
+        
         
         #a,b,c = ku.krig_fit1Normal1(1.5, x_nd, y_md, Epts, Exs, Eys, bend_coef = 1e-9, normal_coef = 1e7, wt_n = None, rot_coefs = 1e-5)
 
-        f = tn_registration.fit_KrigingSpline(x_nd, Epts, Exs, y_md, Eys, bend_coef = 1e-12,normal_coef = 1e30, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
+        #f = tn_registration.fit_KrigingSpline(x_nd, Epts, Exs, corr1.dot(y_md), Eys, bend_coef = 1e-12,normal_coef = 1e30, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
         #bend_coef=1e-13,normal_coef=1e7
-        f = tn_registration.fit_KrigingSpline(x_nd, Etps, Exs, y_md, Eys, bend_coef = self.bend_coef,normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
+        #f = tn_registration.fit_KrigingSpline(x_nd, Etps, Exs, corr1.dot(y_md), Eys, bend_coef = self.bend_coef,normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
         #f1 = tn_registration.fit_KrigingSpline(x_nd.copy(), Epts.copy(), Exs.copy(), y_md.copy(), Eys.copy(), bend_coef = 1e-9,normal_coef = 1e7, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
         
         #f = tn_registration.fit_KrigingSpline(x_nd.copy(), Epts, Exs, y_md, Eys, bend_coef = 1e-9,normal_coef = 1e7, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
@@ -447,22 +479,29 @@ class TpsnRegistrationFactory(RegistrationFactory):
             x_nd = x_nd[:y_md.shape[0],]
         else:
             y_md = y_md[:x_nd.shape[0],]
-        ipy.embed()
 
         Epts = x_nd
         Exs = tps_utils.find_all_normals_naive(x_nd, orig_cloud = demo.scene_state.full_cloud,wsize=0.02,flip_away=True, origin=T_w_k[:3,3])
         #test_scene_state.full_cloud
         Eys = Exs
+
+        Epts = np.r_[x_nd[0:8],x_nd[0:8],x_nd[0:8]]
+        Exs = np.r_[np.tile(np.array([[-1,0,0],[-1,0,0],[1,0,0],[1,0,0]]), (2,1))]
+        Exs = np.r_[Exs, np.tile(np.array([[0,-1,0],[0,1,0]]),(4,1))]
+        Exs = np.r_[Exs,np.tile(np.array([0,0,1]), (8,1))]
+        Eys = Exs
+
         
         handles = []
         for i in range(Epts.shape[0]):
             handles.append(self.sim.env.drawlinestrip(np.array([Epts[i],np.array(Epts[i]+Exs[i]/20)]),2,(0,1,0,1)))
         self.sim.viewer.Step()
-        self.sim.viewer.Idle()
+        #self.sim.viewer.Idle()
 
-        f = tn_registration.fit_KrigingSpline(x_nd.copy(), Epts.copy(), Exs.copy(), y_md.copy(), Eys.copy(), bend_coef = self.bend_coef, normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
+        #f = tn_registration.fit_KrigingSpline(x_nd.copy(), Epts.copy(), Exs.copy(), y_md.copy(), Eys.copy(), bend_coef = self.bend_coef, normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
         f = tn_registration.fit_KrigingSpline(x_nd.copy(), Epts.copy(), Exs.copy(), y_md.copy(), Eys.copy(), bend_coef = self.bend_coef, normal_coef = self.normal_coef, wt_n=None, alpha = 1.5, rot_coefs = 1e-5)
         f_tmp = f
+
 
         #f._old = f_tmp
         f._bending_cost = 0 # TODO: do this properly
