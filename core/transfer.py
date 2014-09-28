@@ -53,7 +53,7 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
             test_cloud = reg.test_scene_state.cloud
             demo_color = demo.scene_state.color
             test_color = reg.test_scene_state.color
-            handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
+            handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, demo_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
             self.sim.viewer.Step()
         
@@ -135,7 +135,7 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
             test_cloud = reg.test_scene_state.cloud
             demo_color = demo.scene_state.color
             test_color = reg.test_scene_state.color
-            handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, test_color if demo_color is not None else (1,0,0)))
+            handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, demo_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
             self.sim.viewer.Step()
         
