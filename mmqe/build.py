@@ -85,8 +85,10 @@ def build_constraints(args):
     if not check_exists(args.constrfile):
         return
     constrfile = h5py.File(args.constrfile, 'w')
-    n_constraints = len(exp_demofile)        
+    n_constraints = len([k for k in exp_demofile.keys() if k.startswith('(')])        
     for i, demo_k in enumerate(exp_demofile):
+        if i.startswith('f'):
+            continue
         ## we expect states to be an identifier and a 
         ## point cloud, we won't use the identifier here
         sys.stdout.write('\rcomputing constraints {}/{}       '.format(i, n_constraints))
@@ -153,8 +155,8 @@ def optimize_model(args):
     ipy.embed()
 
 def do_all(args):
-    model_dir = '../mmqe_data/models'
-    weights_dir = '../mmqe_data/weights'
+    model_dir = '../data/models'
+    weights_dir = '../data/weights'
     _, demofname = osp.split(args.demofile)
     labels = osp.splitext(demofname)[0]
     args.constrfile = '{}/{}_{}.h5'.format(model_dir, labels, args.feature_type)
