@@ -248,7 +248,7 @@ class BellmanMaxMarginModel(MaxMarginModel):
             self.model.update()
 
     def add_deadend_constraint(self, phi, update=True):
-        lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
+        lhs_coeffs = [(p, w) for w, p in zip(self.w, phi) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
         yi_pos_var, yi_neg_var = self.add_yi()
         rhs_coeffs = [(1, yi_pos_var), (-1, yi_neg_var)]
