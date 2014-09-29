@@ -5,12 +5,17 @@ def estimate_performance(results_file):
 
     num_knots = 0
     num_tasks = len(results_file)-1
+
+    failures = []
     for i in range(num_tasks):
         num_steps = len(results_file[str(i)])
 
         is_knot = results_file[str(i)][str(num_steps-1)]['results']['knot'][()]
         if is_knot:
             num_knots += 1
+        else:
+            failures.append(i)
+    print 'Failures:', failures
     return num_knots, num_tasks
 
 if __name__ == '__main__':
