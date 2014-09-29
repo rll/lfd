@@ -11,7 +11,7 @@ from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedT
 from core.simulation import DynamicSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment, GroundTruthBoxLfdEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory, TpsnRpmRegistrationFactory, TpsnRegistrationFactory
+from core.registration import TpsnRpmGTRegistrationFactory, TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory, TpsnRpmRegistrationFactory, TpsnRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
@@ -36,6 +36,8 @@ from itertools import combinations
 import IPython as ipy
 import random
 import hashlib
+
+import tn_rapprentice as tn_rapprentice
 
 class GlobalVars:
     exec_log = None
@@ -72,7 +74,7 @@ def generate_box_demonstration(lfd_env,box0_pos, box1_pos, move_height, box_dept
     t1, h1 = get_move_traj(box0_pos + np.r_[0,0,move_height], box0_pos + np.r_[0,0,box_depth/2-0.03], False, lfd_env, 'r', rotaxis)
     t2, h2 = get_move_traj(box0_pos + np.r_[0,0,box_depth/2-0.03], box0_pos + np.r_[0,0,move_height], False, lfd_env, 'r', rotaxis)
     t3, h3 = get_move_traj(box0_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,move_height], False, lfd_env, 'r', rotaxis)
-    t4, h4 = get_move_traj(box1_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,box_depth*3/8+box_depth/2-0.02+0.001], False, lfd_env, 'r', rotaxis)
+    t4, h4 = get_move_traj(box1_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,box_depth/2+box_depth/2-0.02+0.001], False, lfd_env, 'r', rotaxis)
     t5, h5 = get_move_traj(box1_pos + np.r_[0,0,box_depth+box_depth/2-0.02+0.001], box1_pos + np.r_[0,0,move_height], False, lfd_env, 'r', rotaxis)
 
     full_traj_r = np.r_[t1,t2,t3,t4,t5]
@@ -100,8 +102,8 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     table_height = 0.78
     box_length = 0.04
     box_depth = 0.12
-    x_start_dist = 0.5
-    box0_pos = np.r_[x_start_dist, -.3, table_height+box_depth/2]
+    x_start_dist = 0.55
+    box0_pos = np.r_[x_start_dist, -.25, table_height+box_depth/2]
     box1_pos = np.r_[x_start_dist, 0, table_height+box_depth/2]
     box1_pos_2 = np.r_[.6, 0, table_height+box_depth/2]
     move_height = .3
@@ -111,13 +113,13 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     #sim_objs.append(box0)
     static_offset = 0.008
     #z_offset = box_depth-0.08
-    z_offset = box_depth*5/8
+    z_offset = 0
 
     success,failure=0,0
     succeeds = []
     offset=0
-    rotaxis=[0,0,1,45]
-    #rotaxis=[0,0,0,0]
+    #rotaxis=[0,0,1,45]
+    rotaxis=[0,0,0,0]
 
     if rotaxis!=[0,0,0,0]:
         box2 = BoxSimulationObject("box2", np.r_[x_start_dist + offset + (box_length+static_offset)/np.sqrt(2),0 + (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length/2, box_length*3/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
@@ -128,18 +130,35 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     else:
         box2 = BoxSimulationObject("box2", np.r_[x_start_dist + offset + (box_length+static_offset),0,table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
         box3 = BoxSimulationObject("box3", np.r_[x_start_dist + offset - (box_length+static_offset),0,table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box4 = BoxSimulationObject("box4", np.r_[x_start_dist + offset,0 - (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box5 = BoxSimulationObject("box5", np.r_[x_start_dist + offset,0 + (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
+        box4 = BoxSimulationObject("box4", np.r_[x_start_dist + offset, 0 - (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
+        box5 = BoxSimulationObject("box5", np.r_[x_start_dist + offset, 0 + (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
         box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
 
     sim.add_objects([box0,box2,box3,box4,box5])
+    gt=False
+    reg_factory=None
+    if args.eval.reg_type == 'tpsn':
+        reg_factory = TpsnRegistrationFactory(GlobalVars.demos, sim=sim)
+    elif args.eval.reg_type == 'tpsnrpm':
+        reg_factory = TpsnRpmRegistrationFactory(GlobalVars.demos, sim=sim)
+    elif args.eval.reg_type == 'bij':
+        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=20)
+    elif args.eval.reg_type == 'rpm':
+        reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
+    elif args.eval.reg_type == 'tpsnrpmgt':
+        gt=True
+        reg_factory = TpsnRpmGTRegistrationFactory(GlobalVars.demos)
 
     bt_box0 = sim.bt_env.GetObjectByName("box0")
     T = openravepy.matrixFromAxisAngle(np.array([0,0,np.pi/4]))
     T[:3,3] = bt_box0.GetTransform()[:3,3]
     bt_box0.SetTransform(T)
     d_traj = generate_box_demonstration(lfd_env, box0_pos, box1_pos, move_height, box_depth, sim, rotaxis)
-    sc_dem, i0 = lfd_env.observe_scene("demonstration",ground_truth=False)
+    if gt:
+        sc_dem = lfd_env.observe_scene("demonstration",ground_truth=gt)
+    else:
+        sc_dem, i0 = lfd_env.observe_scene("demonstration",ground_truth=gt)
+        reg_factory.i0=i0
     d1 = Demonstration("d1",sc_dem,d_traj)
     """
     bt_box2 = sim.bt_env.GetObjectByName("box2")
@@ -157,18 +176,12 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     bt_box5.SetTransform(T)
     sim.update()
     """
+    lfd_env.box0pos = box0_pos
+    lfd_env.box1pos = box1_pos
 
-    if args.eval.reg_type == 'tpsn':
-        reg_factory = TpsnRegistrationFactory(GlobalVars.demos, sim=sim)
-    elif args.eval.reg_type == 'tpsnrpm':
-        reg_factory = TpsnRpmRegistrationFactory(GlobalVars.demos, sim=sim)
-    elif args.eval.reg_type == 'bij':
-        reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=20)
-    elif args.eval.reg_type == 'rpm':
-        reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
     #traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
+    
     traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost)
-    reg_factory.i0=i0
     a,count=0,0
     #for b in np.linspace(1e-7,1e-13,15):
         #for n in np.linspace(1e6,1e8,15):
@@ -236,9 +249,11 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
 
                 reg_factory.bend_coef_final = 1.0000000000000001e-05
                 reg_factory.normal_coef_final = 9.9999999999999995e-08
-
-                sc_test,i1 = lfd_env.observe_scene("test",ground_truth=False)
-                reg_factory.i1=i1
+                if gt:
+                    sc_test = lfd_env.observe_scene("test",ground_truth=gt)
+                else:
+                    sc_test,i1 = lfd_env.observe_scene("test",ground_truth=gt)
+                    reg_factory.i1=i1
                 reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
                 test_aug_traj = reg_and_traj_transferer.transfer(d1, sc_test, plotting=args.plotting)
                 #lfd_env.execute_augmented_trajectory(d1.aug_traj,step_viewer=args.animation, interactive=args.interactive)
@@ -547,7 +562,7 @@ def parse_input_args():
     parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='../bigdata/misc/holdout_set_Jun20_0.10.h5')
 
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger'], default='finger')
-    parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij','tpsn','tpsnrpm'], default='bij')
+    parser_eval.add_argument("reg_type", type=str, choices=['segment', 'tpsnrpmgt', 'rpm', 'bij','tpsn','tpsnrpm'], default='bij')
     parser_eval.add_argument("--unified", type=int, default=0)
     
     parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
@@ -643,17 +658,21 @@ def setup_lfd_environment_sim(args):
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
 
     #BOX PARAMETERS
-    x_start_dist=0.55
     table_height = 0.78
     box_length = 0.04
     box_depth = 0.12
-    box0_pos = np.r_[x_start_dist, -.26, table_height+box_depth/2]
+    x_start_dist = 0.55
+    box0_pos = np.r_[x_start_dist, -.25, table_height+box_depth/2]
     box1_pos = np.r_[x_start_dist, 0, table_height+box_depth/2]
-    box_length1 = 0.047
+    box1_pos_2 = np.r_[.6, 0, table_height+box_depth/2]
+    move_height = .3
+
     x_offset = .15
     #box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
     #sim_objs.append(box0)
-    static_offset = 0.02
+    static_offset = 0.008
+    #z_offset = box_depth-0.08
+    z_offset = 0
         
     if 'bookshelve' in args.eval.obstacles:
         sim_objs.append(XmlSimulationObject("../data/bookshelve.env.xml", dynamic=False))
@@ -743,6 +762,8 @@ def setup_registration_and_trajectory_transferer(args, sim):
             reg_factory = TpsnRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'tpsnrpm':
             reg_factory = TpsnRpmRegistrationFactory(GlobalVars.demos)
+        elif args.eval.reg_type == 'tpsnrpmgt':
+            reg_factory = TpsnRpmGTRegistrationFactory(GlobalVars.demos)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
