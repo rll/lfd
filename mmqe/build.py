@@ -94,6 +94,7 @@ def build_constraints(args):
         if demo_k.startswith('f'):
             exp_a = 'failure'
         else:
+            demo, timestep = parse_key(demo_k)
             ## we expect states to be an identifier and a 
             ## point cloud, we won't use the identifier here
             exp_a = demo_info['action'][()]
@@ -164,10 +165,13 @@ def do_all(args):
     build_constraints(args)
     build_model(args)
     c_vals = args.C
+    d_vals = args.D
     for c in c_vals:
-        args.weightfile='{}/{}_{}_c={}_{}.h5'.format(weights_dir, labels, args.feature_type, c, args.model_type)        
-        args.C = c
-        optimize_model(args)
+        for d in d_vals:
+            args.weightfile='{}/{}_{}_c={}_d={}_{}.h5'.format(weights_dir, labels, args.feature_type, c, d, args.model_type)        
+            args.C = c
+            args.D = d
+            optimize_model(args)
 
 def parse_arguments():
     import argparse
@@ -206,7 +210,7 @@ def parse_arguments():
     parser_all.add_argument('actionfile', nargs='?', default='../data/misc/actions.h5')
     parser_all.add_argument('--max_constraints', type=int, default=1000)
     parser_all.add_argument('--C', '-c', type=float, nargs='*', default=[1])
-    parser_all.add_argument('--D', '-d', type=float, default=1)
+    parser_all.add_argument('--D', '-d', type=float, nargs='*', default=[1])
     parser_all.add_argument('--F', '-f', type=float, default=1)
     parser_all.set_defaults(func=do_all)
     return parser.parse_args()
