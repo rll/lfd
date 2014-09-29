@@ -17,15 +17,10 @@ from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
 from core.action_selection import FeatureActionSelection, ParallelFeatureActionSelection
+from core.transfer_simulate import BatchTransferSimulate
 
-from rapprentice import eval_util, util
-from rapprentice import tps_registration, planning
+from rapprentice import eval_util, util, task_execution
 
-from rapprentice import berkeley_pr2, \
-     animate_traj, ros2rave, plotting_openrave, task_execution, \
-     tps, func_utils, resampling, ropesim, rope_initialization
-from rapprentice import math_utils as mu
-from rapprentice.yes_or_no import yes_or_no
 import pdb, time
 
 from mmqe import search
@@ -38,9 +33,7 @@ import atexit
 import importlib
 from itertools import combinations
 import IPython as ipy
-import random
-import hashlib
-import ipdb
+import random, hashlib, ipdb, sys
 
 class GlobalVars:
     exec_log = None
@@ -159,10 +152,11 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         redprint('Success Rate: ' + str(float(num_successes)/num_total))
         redprint('Estimated Time Left: {}'.format((len(holdout_items) - num_total) * task_time))
 
-def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
-    raise NotImplementedError
+def eval_on_holdout_parallel(args, action_selection, lfd_env, sim):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_indexed_items(holdoutfile, task_list=args.tasks, task_file=args.taskfile, i_start=args.i_start, i_end=args.i_end)
+
+    bts = BatchTransferSimulate(args, GlobalVars.demos)
 
     rope_params = sim_util.RopeParams()
     if args.eval.rope_param_radius is not None:
@@ -170,100 +164,62 @@ def eval_on_holdout_parallel(args, action_selection, transfer, lfd_env, sim):
     if args.eval.rope_param_angStiffness is not None:
         rope_params.angStiffness = args.eval.rope_param_angStiffness
 
-    batch_transfer_simulate = BatchTransferSimulate(transfer, lfd_env)
-
-    states = {}
-    q_values_roots = {}
-    best_root_actions = {}
-    state_id2i_task = {}
     results = {}
     successes = {}
-    for i_step in range(args.eval.num_steps):
-        for i_task, demo_id_rope_nodes in holdout_items:
-            if i_task in successes:
-                # task already finished
-                continue
+    blank_state = sim.get_state()
+    for i_task, demo_id_rope_nodes in holdout_items:
+        redprint("task %s" % i_task)
+        sim.set_state(blank_state)
+        init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
+        rope = RopeSimulationObject("rope", init_rope_nodes, rope_params)
 
-            redprint("task %s step %i" % (i_task, i_step))
+        sim.add_objects([rope])
+        sim.settle(step_viewer=args.animation)
+        sim_util.reset_arms_to_side(sim)
+        scene_state = lfd_env.observe_scene()
+        sim_state = sim.get_state()
+        agenda, q_values_root = action_selection.plan_agenda(scene_state)
+        results[i_task] = {'scene_state':scene_state, 'best_action':agenda[0], 'sim_state':sim_state, 'values':q_values_root}
+        bts.queue_transfer_simulate(sim_state, scene_state, agenda[0], (i_task, 0))
 
-            if i_step == 0:
-                sim_util.reset_arms_to_side(lfd_env)
-
-                init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
-                lfd_env.set_rope_state(RopeState(init_rope_nodes, rope_params))
-                states[i_task] = {}
-                states[i_task][i_step] = lfd_env.observe_scene(**vars(args.eval))
-                best_root_actions[i_task] = {}
-                q_values_roots[i_task] = {}
-                results[i_task] = {}
-                
-                if args.animation:
-                    lfd_env.viewer.Step()
-            
-            state = states[i_task][i_step]
-
-            num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
-
-            agenda, q_values_root = select_best(args.eval, state, batch_transfer_simulate) # TODO fix select_best to handle batch_transfer_simulate
-            q_values_roots[i_task][i_step] = q_values_root
-
-            i_choice = 0
-            if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
-                successes[i_task] = False
-                continue
-
-            best_root_action = agenda[i_choice]
-            best_root_actions[i_task][i_step] = best_root_action
-
-            next_state_id = SceneState.get_unique_id()
-            batch_transfer_simulate.queue_transfer_simulate(state, best_root_action, next_state_id)
-
-            state_id2i_task[next_state_id] = i_task
-
-        batch_transfer_simulate.wait_while_queue_is_nonempty()
-        for result in batch_transfer_simulate.get_results():
-            i_task = state_id2i_task[result.state.id]
-            results[i_task][i_step] = result
-        
-        for i_task, demo_id_rope_nodes in holdout_items:
-            if i_task in successes:
-                # task already finished
-                continue
-
-            result = results[i_task][i_step]
-            eval_stats = eval_util.EvalStats()
-            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
-            # TODO eval_stats.exec_elapsed_time
-
-            if not eval_stats.feasible:  # If not feasible, restore state
-                next_state = states[i_task][i_step]
-            
-            state = states[i_task][i_step]
-            best_root_action = best_root_actions[i_task][i_step]
-            q_values_root = q_values_roots[i_task][i_step]
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, full_trajs, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes)
-            
-            states[i_task][i_step+1] = next_state
-            
-            if not eval_stats.feasible:
-                successes[i_task] = False
-                # Skip to next knot tie if the action is infeasible -- since
-                # that means all future steps (up to 5) will have infeasible trajectories
-                continue
-            
-            if is_knot(next_state.rope_nodes):
+    while results:
+        cur_expansions = bts.get_results()
+        for transfer_data in cur_expansions:
+            (next_scene, old_key, knot_success, next_simstate, aug_traj) = (transfer_data['result_state'],
+                                                                            transfer_data['metadata'],
+                                                                            transfer_data['is_knot'],
+                                                                            transfer_data['next_simstate'],
+                                                                            transfer_data['aug_traj'])
+            sys.stdout.write("\rReceived results for key {}\tmax_steps is {}\t{} successes of {} total                    ".format(old_key, args.eval.num_steps, np.sum(successes.values()), len(holdout_items)))
+            sys.stdout.flush()
+            i_task, i_step = old_key
+            results[i_task]['aug_traj'] = aug_traj
+            results[i_task]['knot'] = knot_success
+            eval_util.save_task_results_step(args.resultfile, i_task, i_step, results[i_task])
+            if knot_success:
                 successes[i_task] = True
+                del results[i_task]
                 continue
-        
-        if i_step == args.eval.num_steps - 1:
-            for i_task, demo_id_rope_nodes in holdout_items:
-                if i_task not in successes:
-                    # task ran out of steps
+            next_i_step = i_step + 1
+            if next_i_step < args.eval.num_steps:
+                sim.set_state(next_simstate)
+                scene_state = lfd_env.observe_scene() # re-observe scene in case we're doing a different
+                # type of lfd_env (e.g. GroundTruth)
+                try:
+                    agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
+                except ValueError: #e.g. if cloud is empty - any action is hopeless
+                    del results[i_task]
                     successes[i_task] = False
+                    continue
+                results[i_task] = {'scene_state':next_scene, 'best_action':agenda[0], 'sim_state':next_simstate, 'values':q_values_root}
+                bts.queue_transfer_simulate(next_simstate, scene_state, agenda[0], (i_task, next_i_step))
+            else:
+                del results[i_task]
+                successes[i_task] = False
 
-        num_successes = np.sum(successes.values())
-        num_total = len(successes)
-        redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
+    num_successes = np.sum(successes.values())
+    num_total = len(successes)
+    redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
@@ -612,7 +568,7 @@ def main():
     if args.subparser_name == "eval":
         start = time.time()
         if args.eval.parallel:
-            eval_on_holdout_parallel(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
+            eval_on_holdout_parallel(args, action_selection, lfd_env, sim)
         else:
             eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, sim)
         print "eval time is:\t{}".format(time.time() - start)

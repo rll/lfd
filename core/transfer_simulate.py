@@ -77,7 +77,7 @@ class BatchTransferSimulate(object):
     def queue_transfer_simulate(self, simstate, state, action, next_state_id): # TODO optional arguments
         self.wait_while_queue_is_full()
         @interactive
-        def engine_transfer_simulate(simstate, state, action, next_state_id):            
+        def engine_transfer_simulate(simstate, state, action, metadata):            
             from rapprentice.knot_classifier import isKnot as is_knot
             from core import simulation_object, sim_util
             global lfd_env, reg_and_traj_transferer
@@ -93,7 +93,12 @@ class BatchTransferSimulate(object):
                     break
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             fail = not(feas) or misgrasp or result_state.cloud.shape[0] < 10
-            return (result_state, next_state_id, rope_knot, fail, lfd_env.sim.get_state())
+            return {'result_state': result_state, 
+                    'metadata': metadata, 
+                    'is_knot':rope_knot, 
+                    'is_failure':fail, 
+                    'next_simstate': lfd_env.sim.get_state(), 
+                    'aug_traj': aug_traj}
 
         amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action, next_state_id]])
         self.pending.update(amr.msg_ids)

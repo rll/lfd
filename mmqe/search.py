@@ -90,6 +90,7 @@ class MaxNode(SearchNode):
         return [SearchNode.ind2action[np.argmax(shifted_vals)]], [np.max(self.child_vals)]
 
 # env is for resetting the state at each step
+
 def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=1, depth=1):
     id2simstate = {}
     SearchNode.set_actions(actions)
@@ -169,7 +170,11 @@ def beam_search_parallel(start_state, timestep, actions, expander, evaluator, si
         expand_res = expander.get_results()
         agenda = []
         for res in expand_res:
-            next_s, next_s_id, is_goal, is_fail, simstate = res
+            next_s, next_s_id, is_goal, is_fail, simstate = (res['result_state'],
+                                                             res['metadata'],
+                                                             res['is_knot'],
+                                                             res['is_failure'],
+                                                             res['next_simstate'])
             id2simstate[next_s_id] = simstate
             parent = SearchNode.id_map[next_s_id].parent
             del SearchNode.id_map[next_s_id]

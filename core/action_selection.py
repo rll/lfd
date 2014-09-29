@@ -34,7 +34,7 @@ class ActionSelection(object):
         raise NotImplementedError
 
 class GreedyActionSelection(ActionSelection):
-    def plan_agenda(self, scene_state, timestep):
+    def plan_agenda(self, scene_state, timestep=-1):
         action2q_value = self.registration_factory.batch_cost(scene_state)
         q_values, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
         return agenda, q_values
@@ -53,13 +53,11 @@ class FeatureActionSelection(ActionSelection):
         self.debug = debug
         super(FeatureActionSelection, self).__init__(registration_factory)
 
-    def plan_agenda(self, scene_state, timestep):
+    def plan_agenda(self, scene_state, timestep=-1):
         def evaluator(state, ts):
             fv = self.features.features(state,timestep=ts)
             val = np.dot(fv, self.features.weights)
             opt = np.argmax(val)
-            print 'Worst distance from gripper to rope:', np.max([fv[i][-1] for i in range(len(self.actions))])
-            print 'Chosen distance from gripper to rope: ', fv[opt][-1]
             return np.dot(fv, self.features.weights)
 
         def simulate_transfer(state, action, next_state_id):
@@ -100,7 +98,7 @@ class ParallelFeatureActionSelection(ActionSelection):
         self.lfd_env = lfd_env
         super(ParallelFeatureActionSelection, self).__init__(registration_factory)
 
-    def plan_agenda(self, scene_state, timestep):
+    def plan_agenda(self, scene_state, timestep=-1):
         def evaluator(state, ts):
             score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
             # if np.max(score) > -.2:
