@@ -272,43 +272,52 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                 from rapprentice import berkeley_pr2
                 self.T_w_k = berkeley_pr2.get_kinect_transform(self.robot)
         
-        # camera's parameters
-        cx = 320.-.5
-        cy = 240.-.5
-        f = 525. # focal length
-        w = 640.
-        h = 480.
-        
-        pixel_ij = np.array(np.meshgrid(np.arange(w), np.arange(h))).T.reshape((-1,2)) # all pixel positions
-        rayTos = self.range_k * np.c_[(pixel_ij - np.array([cx, cy])) / f, np.ones(pixel_ij.shape[0])]
-        rayFroms = np.zeros_like(rayTos)
-        # transform the rays from the camera frame to the world frame
-        rayTos = rayTos.dot(self.T_w_k[:3,:3].T) + self.T_w_k[:3,3]
-        rayFroms = rayFroms.dot(self.T_w_k[:3,:3].T) + self.T_w_k[:3,3]
+        T_z = np.eye(4)
+        T_z[:3,:3] = openravepy.rotationMatrixFromAxisAngle(np.r_[0,0,np.pi])
+        T_z[0,3] = 1.25
+        cloud2 = []
+        for T_w_k in [self.T_w_k, T_z.dot(self.T_w_k)]:
+            # camera's parameters
+            cx = 320.-.5
+            cy = 240.-.5
+            f = 525. # focal length
+            w = 640.
+            h = 480.
+            
+            pixel_ij = np.array(np.meshgrid(np.arange(w), np.arange(h))).T.reshape((-1,2)) # all pixel positions
+            rayTos = self.range_k * np.c_[(pixel_ij - np.array([cx, cy])) / f, np.ones(pixel_ij.shape[0])]
+            rayFroms = np.zeros_like(rayTos)
+            # transform the rays from the camera frame to the world frame
+            rayTos = rayTos.dot(T_w_k[:3,:3].T) + T_w_k[:3,3]
+            rayFroms = rayFroms.dot(T_w_k[:3,:3].T) + T_w_k[:3,3]
 
-        cloud = []
-        import IPython as ipy
-        #CHANGEDTHIS
-        for sim_obj in self.dyn_sim_objs:
-            bull_objs = sim_obj.get_bullet_objects()
-            bull_objs.extend([self.bt_env.GetObjectByName("box2"),self.bt_env.GetObjectByName("box3"),self.bt_env.GetObjectByName("box4"),self.bt_env.GetObjectByName("box5")])
-            for bt_obj in bull_objs:
-                ray_collisions = self.bt_env.RayTest(rayFroms, rayTos, bt_obj)
-                
-                pts = np.empty((len(ray_collisions), 3))
-                for i, ray_collision in enumerate(ray_collisions):
-                    pts[i,:] = ray_collision.pt
-                cloud.append(pts)
+            cloud = []
+            import IPython as ipy
+            #CHANGEDTHIS
+            for sim_obj in self.dyn_sim_objs:
+                bull_objs = sim_obj.get_bullet_objects()
+                bull_objs.extend([self.bt_env.GetObjectByName("box2"),self.bt_env.GetObjectByName("box3"),self.bt_env.GetObjectByName("box4"),self.bt_env.GetObjectByName("box5")])
+                #bull_objs.extend([self.bt_env.GetObjectByName("box3"),self.bt_env.GetObjectByName("box5")])
+                for bt_obj in bull_objs:
+                    ray_collisions = self.bt_env.RayTest(rayFroms, rayTos, bt_obj)
+                    
+                    pts = np.empty((len(ray_collisions), 3))
+                    for i, ray_collision in enumerate(ray_collisions):
+                        pts[i,:] = ray_collision.pt
+                    cloud.append(pts)
 
-        cloud = np.concatenate(cloud)
+            cloud = np.concatenate(cloud)
 
-        # hack to filter out point below the top of the table. TODO: fix this hack
-        table_sim_objs = [sim_obj for sim_obj in self.sim_objs if "table" in sim_obj.names]
-        assert len(table_sim_objs) == 1
-        table_sim_obj = table_sim_objs[0]
-        table_height = table_sim_obj.translation[2] + table_sim_obj.extents[2]
-        cloud = cloud[cloud[:,2] > table_height, :]
-        return cloud
+            # hack to filter out point below the top of the table. TODO: fix this hack
+            table_sim_objs = [sim_obj for sim_obj in self.sim_objs if "table" in sim_obj.names]
+            assert len(table_sim_objs) == 1
+            table_sim_obj = table_sim_objs[0]
+            table_height = table_sim_obj.translation[2] + table_sim_obj.extents[2]
+            cloud = cloud[cloud[:,2] > table_height, :]
+            cloud2.append(cloud)
+        a = cloud2[0].shape[0]
+        #cloud2 = np.concatenate(cloud2)
+        return cloud2
 
     def open_gripper(self, lr, target_val=None, step_viewer=1, max_vel=.02):
         self._remove_constraints(lr)
@@ -327,7 +336,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         if self.viewer and step_viewer:
             self.viewer.Step()
     
-    def close_gripper(self, lr, step_viewer=1, max_vel=.02, close_dist_thresh=0.004, grab_dist_thresh=0.005):
+    def close_gripper(self, lr, step_viewer=1, max_vel=.02, close_dist_thresh=0.003, grab_dist_thresh=0.004):
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = self.robot.GetDOFValues([joint_ind])[0]

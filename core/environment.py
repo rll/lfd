@@ -53,7 +53,7 @@ class LfdEnvironment(object):
             # don't execute trajectory for finger joint if the corresponding gripper is closed
             active_inds = np.ones(len(dof_inds), dtype=bool)
             for lr in 'lr':
-                if not lr2gripper_open[lr]:
+                if True or not lr2gripper_open[lr]: #TODO
                     joint_ind = self.sim.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
                     if joint_ind in dof_inds:
                         active_inds[dof_inds.index(joint_ind)] = False
@@ -146,13 +146,14 @@ class GroundTruthBoxLfdEnvironment(LfdEnvironment):
                 [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
                 [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
                 [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
-
-
             return demonstration.SceneState(pts,downsample_size=0)
         else:
             full_cloud = self.world.observe_cloud()
-            return demonstration.SceneState(full_cloud, downsample_size=self.downsample_size)
-
+            s1 = demonstration.SceneState(full_cloud[0], downsample_size=self.downsample_size)
+            s2 = demonstration.SceneState(full_cloud[1], downsample_size=self.downsample_size)
+            s = demonstration.SceneState(np.concatenate(full_cloud), downsample_size=self.downsample_size)
+            s.cloud = np.r_[s1.cloud,s2.cloud]
+            return s,s1.cloud.shape[0]
 class RecordingLfdEnvironment(GroundTruthRopeLfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):
         super(RecordingLfdEnvironment, self).__init__(world, sim, upsample=upsample, upsample_rad=upsample_rad, downsample_size=downsample_size)

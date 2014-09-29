@@ -221,5 +221,5 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
                 flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
                 handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
             self.sim.viewer.Step()
-        
+        #self.sim.viewer.Idle()
         return test_aug_traj
