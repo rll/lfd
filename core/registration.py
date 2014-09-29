@@ -241,7 +241,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
     """
     # TODO Dylan
     def __init__(self, demos, n_iter=N_ITER_EXACT, reg_init=EXACT_LAMBDA[0], reg_final=EXACT_LAMBDA[1],
-        rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], cost_type='bending'):
+        rad_init=.05, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], cost_type='bending'):
         super(TpsRpmRegistrationFactory,self).__init__(demos)
         self.n_iter = n_iter
         self.reg_init = reg_init
@@ -326,8 +326,8 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     #            bend_init=1e4, bend_final=8e-4, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-15, normal_coef_final=1e-4, normal_temp_init=1,normal_temp_final=.01, sim=None):
     
 
-    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.00008, 
-                bend_init=1e6, bend_final=5e-3, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-5, normal_coef_final=1e-5, normal_temp_init=.1,normal_temp_final=.1, sim=None):
+    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.0002, 
+                bend_init=1e4, bend_final=.1, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-8, normal_coef_final=0.001, normal_temp_init=.1,normal_temp_final=.1, sim=None):
         """
         TODO: do something better for default parameters and write comment
         """
@@ -352,7 +352,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         """
         TODO: use em_iter
         """
-        p=True
+        p=False
         if self.prior_fn is not None:
             vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
         else:
