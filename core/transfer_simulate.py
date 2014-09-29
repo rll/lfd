@@ -52,7 +52,7 @@ class BatchTransferSimulate(object):
             world = sim
             lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
             #reg_factory = None
-            reg_factory = TpsRpmBijRegistrationFactory(demos, args.eval.actionfile)
+            reg_factory = TpsRpmBijRegistrationFactory(demos)
             traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, 
                                                        args.eval.gamma, args.eval.use_collision_cost)
             traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, 
