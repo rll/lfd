@@ -51,7 +51,8 @@ class BatchTransferSimulate(object):
             sim = DynamicRopeSimulationRobotWorld()
             world = sim
             lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
-            reg_factory = TpsRpmBijRegistrationFactory(demos)
+            #reg_factory = None
+            reg_factory = TpsRpmBijRegistrationFactory(demos, args.eval.actionfile)
             traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, 
                                                        args.eval.gamma, args.eval.use_collision_cost)
             traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, 
@@ -97,19 +98,19 @@ class BatchTransferSimulate(object):
         amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action, next_state_id]])
         self.pending.update(amr.msg_ids)
 
-    def queue_transfer(self, simstate, state, action, next_state_id): # TODO optional arguments
+    def queue_transfer(self, simstate, state, action): # TODO optional arguments
         self.wait_while_queue_is_full()
         @interactive
-        def engine_transfer_simulate(simstate, state, action, next_state_id):            
+        def engine_transfer_simulate(simstate, state, action):            
             from rapprentice.knot_classifier import isKnot as is_knot
             from core import simulation_object, sim_util
             global lfd_env, reg_and_traj_transferer
             lfd_env.sim.set_state(simstate)
             demo = reg_and_traj_transferer.registration_factory.demos[action]
             aug_traj = reg_and_traj_transferer.transfer(demo, state, plotting=False)
-            return (aug_traj, simstate, next_state_id)
+            return (aug_traj, simstate, action)
 
-        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action, next_state_id]])
+        amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action]])
         self.pending.update(amr.msg_ids)
 
 
