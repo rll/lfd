@@ -349,7 +349,7 @@ def parse_input_args():
     parser_eval.add_argument("--downsample_size", type=float, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
-    parser_eval.add_argument("--ground_truth", type=int, default=1)
+    parser_eval.add_argument("--ground_truth", type=int, default=0)
     
     parser_eval.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser_eval.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
