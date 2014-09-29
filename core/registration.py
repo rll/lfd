@@ -320,8 +320,14 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     """
     #def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.0001, 
     #    bend_init=1e2, bend_final=1e-3, outlierfrac=1e-2, outlierprior=1e-2, normal_coef_init=1e-8, normal_coef_final=3e-4, normal_temp_init=.5,normal_temp_final=.02, sim=None):
-    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.0001, 
-        bend_init=1e8, bend_final=1e-3, outlierfrac=1e-2, outlierprior=1e-2, normal_coef_init=1e-15, normal_coef_final=1e-4, normal_temp_init=.4,normal_temp_final=.01, sim=None):
+    #def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.0001, 
+    #    bend_init=1e2, bend_final=5e-4, outlierfrac=1e-2, outlierprior=1e-2, normal_coef_init=1e-15, normal_coef_final=1e-4, normal_temp_init=.4,normal_temp_final=.01, sim=None):
+    #def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.00008, 
+    #            bend_init=1e4, bend_final=8e-4, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-15, normal_coef_final=1e-4, normal_temp_init=1,normal_temp_final=.01, sim=None):
+    
+
+    def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.00008, 
+                bend_init=1e4, bend_final=1e-3, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-15, normal_coef_final=1e-4, normal_temp_init=.5,normal_temp_final=.5, sim=None):
         """
         TODO: do something better for default parameters and write comment
         """
@@ -346,6 +352,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         """
         TODO: use em_iter
         """
+        p=False
         if self.prior_fn is not None:
             vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -415,7 +422,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         z = open("inputs.txt",'w')
         np.set_printoptions(threshold=np.nan)
         z.write("x_nd=np."+repr(x_nd)+"\n\n")
-        z.write("y_md=np."+repr(y_md)+"\n\n")
+        z.write("y_md=np."+repr(y_mds)+"\n\n")
         z.write("Epts=np."+repr(Epts)+"\n\n")
         z.write("Exs=np."+repr(Exs)+"\n\n")
         z.write("Eys=np."+repr(Eys)+"\n\n")
@@ -426,9 +433,10 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         #             wsize=.1, normal_coef = 1e-1,  normal_temp = 1e2, beta=0
 
         f,corr1,corr_nm_edge = tn_registration.tps_n_rpm_final_hopefully(x_nd, y_md, Exs, Eys, Epts, temp_init=self.temp_init,  temp_final=self.temp_final, bend_init=self.bend_init, bend_final=self.bend_final,
-                     normal_coef_init = self.normal_coef_init, n_iter=20, normal_coef_final = self.normal_coef_final, normal_temp_init = self.normal_temp_init, normal_temp_final = self.normal_temp_final, beta=0, sim=self.sim, plotting=True)
+                     normal_coef_init = self.normal_coef_init, n_iter=20, normal_coef_final = self.normal_coef_final, normal_temp_init = self.normal_temp_init, normal_temp_final = self.normal_temp_final, beta=0, sim=self.sim, plotting=p,
+                     outlierprior=self.outlierprior,outlierfrac=self.outlierfrac)
         #ipy.embed()
-        #f = tn_registration.fit_ThinPlateSpline(x_nd,corr1.dot(y_md),bend_coef=1)
+        ##f = tn_registration.fit_ThinPlateSpline(x_nd,corr1.dot(y_md),bend_coef=1)
         #ipy.embed()
         #ipy.embed()
         print np.sum(corr1),np.sum(corr_nm_edge)
