@@ -70,7 +70,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research 
         (ISRR), 2013.
     """
-    def __init__(self, demos, actionfile, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], 
+    def __init__(self, demos, actionfile=None, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], 
         reg_final=EXACT_LAMBDA[1], rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
         outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
         """
@@ -89,12 +89,14 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.cost_type = cost_type
         self.prior_fn = prior_fn
 
-        self.bend_coefs = np.around(loglinspace(DEFAULT_LAMBDA[0], DEFAULT_LAMBDA[1], N_ITER_CHEAP), BEND_COEF_DIGITS)
-        self.exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
-        self.f_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
-        self.g_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
-        self.src_ctx = GPUContext(self.bend_coefs)
-        self.src_ctx.read_h5(actionfile)
+        self.actionfile = actionfile
+        if self.actionfile:
+            self.bend_coefs = np.around(loglinspace(DEFAULT_LAMBDA[0], DEFAULT_LAMBDA[1], N_ITER_CHEAP), BEND_COEF_DIGITS)
+            self.exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
+            self.f_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
+            self.g_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
+            self.src_ctx = GPUContext(self.bend_coefs)
+            self.src_ctx.read_h5(actionfile)
 
        
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
@@ -144,6 +146,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
             raise NotImplementedError
 
     def batch_cost(self, test_scene_state):
+        if not(self.actionfile):
+            raise ValueError('No actionfile provided for gpu context')
         tgt_ctx = TgtContext(self.src_ctx)
         cloud = test_scene_state.cloud
         if len(cloud) > MAX_CLD_SIZE:
