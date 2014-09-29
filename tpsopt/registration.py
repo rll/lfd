@@ -78,10 +78,13 @@ def tps_rpm_bij(x_nd, y_md, fsolve, gsolve,n_iter = 20, reg_init = .1, reg_final
     rads = loglinspace(rad_init, rad_final, n_iter)
 
     f = ThinPlateSpline(d)
-    f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0)
-
+    scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
+    f.lin_ag = np.diag(scale) # align the mins and max
+    f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
+    
     g = ThinPlateSpline(d)
-    g.trans_g = -f.trans_g
+    g.lin_ag = np.diag(1./scale)
+    g.trans_g = -np.diag(1./scale).dot(f.trans_g)
 
 
     # r_N = None

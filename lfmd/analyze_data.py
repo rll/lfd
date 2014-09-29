@@ -172,7 +172,7 @@ def stack_traj(aug_traj):
             force_ext_traj = aug_traj.lr2force_ext_traj[lr]
         lr2traj[lr] = np.c_[pos_traj, vel_traj, force_traj, force_ext_traj]
     return lr2traj
-        
+
 def flip_wrist_rotations(aug_trajs):
     T_x = np.eye(4) # transformation that rotates by pi around the x axis
     T_x[:3,:3] = openravepy.rotationMatrixFromAxisAngle(np.r_[1, 0, 0] * np.pi)
@@ -220,7 +220,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         if plotting:
             for aug_traj in aug_trajs:
                 color = np.r_[np.random.random(3),1]
-                for lr in aug_traj.lr2ee_traj.keys():
+                for lr in active_lr:
                     handles.append(self.sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
             self.sim.viewer.Step()
             
@@ -778,7 +778,9 @@ def setup_registration(args, demos, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(demos, n_iter=10) #TODO
+            reg_factory = TpsRpmBijRegistrationFactory(demos, n_iter=20, em_iter=1, reg_init=10.0, #TODO
+                reg_final=.01, rad_init=.01, rad_final=.001, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                outlierprior=.01, outlierfrac=1e-2)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 

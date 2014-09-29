@@ -2,6 +2,7 @@ from __future__ import division
 
 from constants import EXACT_LAMBDA, DEFAULT_LAMBDA, N_ITER_EXACT, N_ITER_CHEAP
 import numpy as np
+import scipy.spatial.distance as ssd
 from rapprentice import registration
 
 import tpsopt
@@ -95,10 +96,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         new_cloud = test_scene_state.cloud
         x_nd = old_cloud[:,:3]
         y_md = new_cloud[:,:3]
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
-        scaled_y_md, targ_params = registration.unit_boxify(y_md)
         x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
-        (f,g), corr = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md,
+        (f,g), corr = registration.tps_rpm_bij(x_nd, y_md,
                                     x_weights = x_weights,
                                     n_iter = self.n_iter,
                                     reg_init = self.reg_init,
@@ -113,7 +112,6 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                     plotting = plotting,
                                     plot_cb = plot_cb)
         bending_cost = registration.tps_reg_cost(f)
-        f = registration.unscale_tps(f, src_params, targ_params)
         f._bending_cost = bending_cost # TODO: do this properly
         return Registration(demo, test_scene_state, f, corr, g=g)
 
@@ -176,16 +174,13 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         # if len(x_nd) != len(old_cloud) or len(y_md) != len(new_cloud):
         #     ipy.embed()
 
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
-        scaled_y_md, targ_params = registration.unit_boxify(y_md)
-
-        x_K_nn = tps_kernel_matrix(scaled_x_nd)
-        fsolve = self.f_empty_solver.get_solver(scaled_x_nd, x_K_nn, self.exact_bend_coefs)
-        y_K_nn = tps_kernel_matrix(scaled_y_md)
-        gsolve = self.g_empty_solver.get_solver(scaled_y_md, y_K_nn, self.exact_bend_coefs)
+        x_K_nn = tps_kernel_matrix(x_nd)
+        fsolve = self.f_empty_solver.get_solver(x_nd, x_K_nn, self.exact_bend_coefs)
+        y_K_nn = tps_kernel_matrix(y_md)
+        gsolve = self.g_empty_solver.get_solver(y_md, y_K_nn, self.exact_bend_coefs)
 
         x_weights = np.ones(len(x_nd)) * 1.0/len(x_nd)
-        (f,g), corr = tpsopt.registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, fsolve, gsolve,
+        (f,g), corr = tpsopt.registration.tps_rpm_bij(x_nd, y_md, fsolve, gsolve,
                                     n_iter = N_ITER_EXACT,
                                     reg_init = EXACT_LAMBDA[0],
                                     reg_final = EXACT_LAMBDA[1],
@@ -198,7 +193,6 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
                                     return_corr = True,
                                     check_solver = False)
         bending_cost = registration.tps_reg_cost(f)
-        f = registration.unscale_tps(f, src_params, targ_params)
         f._bending_cost = bending_cost # TODO: do this properly
         return Registration(demo, test_scene_state, f, corr, g=g)
 
@@ -228,48 +222,117 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
     As in:
         H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
     """
-    # TODO Dylan
-    def __init__(self, demos, n_iter=N_ITER_EXACT, reg_init=EXACT_LAMBDA[0], reg_final=EXACT_LAMBDA[1],
-        rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], cost_type='bending'):
-        super(TpsRpmRegistrationFactory,self).__init__(demos)
+    def __init__(self, demos, n_iter=20, em_iter=1, reg_init=10, 
+        reg_final=.1, rad_init=.04, rad_final=.00004, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+        outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
+        """Inits TpsRpmRegistrationFactory with demonstrations
+        
+        Args:
+            demos: dict that maps from demonstration name to Demonstration
+            reg_init/reg_final: regularization on curvature
+            rad_init/rad_final: radius for correspondence calculation (meters)
+            plotting: 0 means don't plot. integer n means plot every n iterations
+        
+        Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
+        """
+        super(TpsRpmRegistrationFactory, self).__init__(demos)
         self.n_iter = n_iter
+        self.em_iter = em_iter
         self.reg_init = reg_init
         self.reg_final = reg_final
         self.rad_init = rad_init
         self.rad_final = rad_final
         self.rot_reg = rot_reg
+        self.outlierprior = outlierprior
+        self.outlierfrac = outlierfrac
         self.cost_type = cost_type
+        self.prior_fn = prior_fn
+    
+    @staticmethod
+    def fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, rot_reg, x_weights = None):
+        wt_n = corr_nm.sum(axis=1)
+    
+        if np.any(wt_n == 0):
+            inlier = wt_n != 0
+            x_nd = x_nd[inlier,:]
+            wt_n = wt_n[inlier,:]
+            x_weights = x_weights[inlier]
+            xtarg_nd = (corr_nm[inlier,:]/wt_n[:,None]).dot(y_md)
+        else:
+            xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
+    
+        if x_weights is not None:
+            if x_weights.ndim > 1:
+                wt_n=wt_n[:,None]*x_weights
+            else:
+                wt_n=wt_n*x_weights
+        
+        f = registration.fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
+        f._bend_coef = l
+        f._wt_n = wt_n
+        f._rot_coef = rot_reg
+        
+        return f, xtarg_nd, wt_n
 
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
-        """
-        TODO: use em_iter?
-        """
+        if self.prior_fn is not None:
+            vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
+        else:
+            vis_cost_xy = None
         old_cloud = demo.scene_state.cloud
         new_cloud = test_scene_state.cloud
         x_nd = old_cloud[:,:3]
         y_md = new_cloud[:,:3]
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
-        scaled_y_md, targ_params = registration.unit_boxify(y_md)
-        f, corr = registration.tps_rpm(scaled_x_nd, scaled_y_md,
-                                    n_iter = self.n_iter,
-                                    reg_init = self.reg_init,
-                                    reg_final = self.reg_final,
-                                    rad_init = self.rad_init,
-                                    rad_final = self.rad_final,
-                                    rot_reg = self.rot_reg,
-                                    return_corr = True,
-                                    plotting = plotting,
-                                    plot_cb = plot_cb)
-        bending_cost = registration.tps_reg_cost(f)
-        f = registration.unscale_tps(f, src_params, targ_params)
-        f._bending_cost = bending_cost # TODO: do this properly
-        return Registration(demo, test_scene_state, f, corr)
-
+        
+        x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
+        
+        n,d = x_nd.shape
+        m,_ = y_md.shape
+        regs = loglinspace(self.reg_init, self.reg_final, self.n_iter)
+        rads = loglinspace(self.rad_init, self.rad_final, self.n_iter)
+        
+        f = registration.ThinPlateSpline(d)
+        scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
+        f.lin_ag = np.diag(scale).T # align the mins and max
+        f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
+        
+        for i, (l,T) in enumerate(zip(regs, rads)):
+            for _ in range(self.em_iter):
+                xwarped_nd = f.transform_points(x_nd)
+    
+                dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
+                prob_nm = np.exp( -dist_nm / (2*T) ) / np.sqrt(2 * np.pi * T) # divide by constant term so that outlierprior makes sense as a pr
+                if vis_cost_xy != None:
+                    pi = np.exp( -vis_cost_xy )
+                    pi /= pi.max() # rescale the maximum probability to be 1. effectively, the outlier priors are multiplied by a visual prior of 1 (since the outlier points have a visual prior of 1 with any point)
+                    prob_nm *= pi
+                
+                x_priors = np.ones(n)*self.outlierprior    
+                y_priors = np.ones(m)*self.outlierprior    
+                corr_nm, r_N, _ =  registration.balance_matrix3(prob_nm, 10, x_priors, y_priors, self.outlierfrac)
+                corr_nm += 1e-9
+                
+                f, xtarg_nd, wt_n = self.fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, self.rot_reg)
+            
+            if plotting and (i%plotting==0 or i==(n_iter-1)):
+                plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
+        
+        return Registration(demo, test_scene_state, f, corr_nm)
+    
     # def batch_register(self, test_scene_state):
     #     raise NotImplementedError
     
     def cost(self, demo, test_scene_state):
-        raise NotImplementedError #same as others? should this be higher-level?
+        reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
+        f = reg.f
+        res_cost, bend_cost, res_bend_cost = tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, regs[i], wt_n=wt_n, return_tuple=True)
+        if self.cost_type == 'residual':
+            cost = res_cost
+        elif self.cost_type == 'bending':
+            cost = bend_cost
+        else:
+            raise NotImplementedError
+        return cost
     
     # def batch_cost(self, test_scene_state):
     #     raise NotImplementedError
