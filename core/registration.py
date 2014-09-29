@@ -327,7 +327,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     
 
     def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.005, temp_final=.00008, 
-                bend_init=1e4, bend_final=1e-3, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-15, normal_coef_final=1e-4, normal_temp_init=.5,normal_temp_final=.5, sim=None):
+                bend_init=1e6, bend_final=5e-3, outlierfrac=1e-3, outlierprior=1e-3, normal_coef_init=1e-5, normal_coef_final=1e-5, normal_temp_init=.1,normal_temp_final=.1, sim=None):
         """
         TODO: do something better for default parameters and write comment
         """
@@ -352,7 +352,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         """
         TODO: use em_iter
         """
-        p=False
+        p=True
         if self.prior_fn is not None:
             vis_cost_xy = self.prior_fn(demo.scene_state, test_scene_state)
         else:
