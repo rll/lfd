@@ -97,6 +97,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_stats = eval_util.EvalStats()
             
             start_time = time.time()
+            #agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
             try:
                 agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
@@ -521,7 +522,7 @@ def setup_registration_and_trajectory_transferer(args, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
-            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, n_iter=10) #TODO
+            reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
