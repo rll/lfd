@@ -128,7 +128,7 @@ class GroundTruthBoxLfdEnvironment(LfdEnvironment):
                 [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
                 [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
                 [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
-
+                """
             box_top_height = self.bottom_height
 
             pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
@@ -146,6 +146,7 @@ class GroundTruthBoxLfdEnvironment(LfdEnvironment):
                 [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
                 [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
                 [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
+"""
             return demonstration.SceneState(pts,downsample_size=0)
         else:
             full_cloud = self.world.observe_cloud()
