@@ -74,7 +74,7 @@ class FeatureActionSelection(ActionSelection):
                     break
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             fail = not(feas) or misgrasp
-            return (result_state, next_state_id, rope_knot, fail)
+            return (result_state, next_state_id, rope_knot, fail, aug_traj)
 
         return beam_search(scene_state, timestep, self.actions, simulate_transfer,
                            evaluator, self.lfd_env.sim, width=self.width,

@@ -94,7 +94,8 @@ class BatchTransferSimulate(object):
                     break
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             fail = not(feas) or misgrasp or result_state.cloud.shape[0] < 10
-            return {'result_state': result_state, 
+            return {'result_state': result_state,
+		    'action': action, 
                     'metadata': metadata, 
                     'is_knot':rope_knot, 
                     'is_failure':fail, 

@@ -93,12 +93,12 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_stats = eval_util.EvalStats()
             
             start_time = time.time()
-            #agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
-            try:
-                agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
-            except ValueError: #e.g. if cloud is empty - any action is hopeless
-                redprint("**Raised Value Error during action selection")
-                break
+            agenda, q_values_root, trajs = action_selection.plan_agenda(scene_state, i_step)
+            #try:
+            #    agenda, q_values_root, trajs = action_selection.plan_agenda(scene_state, i_step)
+            #except ValueError: #e.g. if cloud is empty - any action is hopeless
+            #    redprint("**Raised Value Error during action selection")
+            #    break
             eval_stats.action_elapsed_time += time.time() - start_time
             
             eval_stats.generalized = True
@@ -113,7 +113,9 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
                 start_time = time.time()
                 try:
-                    test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, sim_state = sim_state, plotting=args.plotting)
+		    test_aug_traj = trajs[i_choice]
+                    if not test_aug_traj:
+			test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, sim_state = sim_state, plotting=args.plotting)
                 except ValueError: # If something is cloud/traj is empty or something
                     redprint("**Raised value error during traj transfer")
                     break
