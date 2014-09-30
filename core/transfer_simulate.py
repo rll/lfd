@@ -49,13 +49,14 @@ class BatchTransferSimulate(object):
             from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
             global lfd_env, reg_and_traj_transferer
             sim = DynamicRopeSimulationRobotWorld()
+            sim_transfer = DynamicRopeSimulationRobotWorld()
             world = sim
             lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
             #reg_factory = None
             reg_factory = TpsRpmBijRegistrationFactory(demos)
-            traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, 
+            traj_transferer = PoseTrajectoryTransferer(sim_transfer, args.eval.beta_pos, args.eval.beta_rot, 
                                                        args.eval.gamma, args.eval.use_collision_cost)
-            traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, 
+            traj_transferer = FingerTrajectoryTransferer(sim_transfer, args.eval.beta_pos, args.eval.gamma, 
                                                          args.eval.use_collision_cost, 
                                                          init_trajectory_transferer=traj_transferer)
             reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)

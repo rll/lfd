@@ -42,6 +42,10 @@ class TrajectoryTransferer(object):
         raise NotImplementedError
 
     def set_sim(self, sim):
+        # Destory old simulation environment from memory
+        if self.sim:
+            self.sim.env.Destroy()
+            del self.sim
         self.sim = sim
         if self.init_trajectory_transferer:
             self.init_trajectory_transferer.set_sim(sim)

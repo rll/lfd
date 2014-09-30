@@ -472,6 +472,7 @@ def setup_lfd_environment_sim(args):
     return lfd_env, sim
 
 def setup_registration_and_trajectory_transferer(args, sim):
+    sim_transfer = DynamicRopeSimulationRobotWorld()
     if args.eval.gpu:
         if args.eval.reg_type == 'rpm':
             reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
@@ -490,9 +491,9 @@ def setup_registration_and_trajectory_transferer(args, sim):
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
 
     if args.eval.transferopt == 'pose' or args.eval.transferopt == 'finger':
-        traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
+        traj_transferer = PoseTrajectoryTransferer(sim_transfer, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
         if args.eval.transferopt == 'finger':
-            traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost, init_trajectory_transferer=traj_transferer)
+            traj_transferer = FingerTrajectoryTransferer(sim_transfer, args.eval.beta_pos, args.eval.gamma, args.eval.use_collision_cost, init_trajectory_transferer=traj_transferer)
     else:
         raise RuntimeError("Invalid transferopt option %s"%args.eval.transferopt)
     
