@@ -66,13 +66,13 @@ class BatchTransferSimulate(object):
             global downsample_size, all_demos, beta_pos, beta_rot, gamma, use_collision_cost
             sim = DynamicRopeSimulationRobotWorld()
             world = sim
-            sim_transfer = DynamicRopeSimulationRobotWorld()
+            sim_traj = DynamicRopeSimulationRobotWorld()
             lfd_env = LfdEnvironment(sim, world, downsample_size=downsample_size)
             lfd_env.sim.set_state(simstate)
             reg_factory = TpsRpmBijRegistrationFactory(all_demos)
-            traj_transferer = PoseTrajectoryTransferer(sim_transfer, beta_pos, beta_rot, 
+            traj_transferer = PoseTrajectoryTransferer(sim_traj, beta_pos, beta_rot, 
                                                        gamma, use_collision_cost)
-            traj_transferer = FingerTrajectoryTransferer(sim_transfer, beta_pos, gamma, 
+            traj_transferer = FingerTrajectoryTransferer(sim_traj, beta_pos, gamma, 
                                                          use_collision_cost, 
                                                          init_trajectory_transferer=traj_transferer)
             reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
@@ -90,14 +90,10 @@ class BatchTransferSimulate(object):
                     break
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             fail = not(feas) or misgrasp or result_state.cloud.shape[0] < 10
-            sim.env.Destroy()
-            sim_transfer.env.Destroy()
-            del sim
-            del sim_transfer
-            del lfd_env
-            del reg_factory
+            traj_transferer.sim.env.Destroy()
             del traj_transferer
             del reg_and_traj_transferer
+            del reg_factory
             return {'result_state': result_state,
 		    'action': action, 
                     'metadata': metadata, 
@@ -138,14 +134,10 @@ class BatchTransferSimulate(object):
 
             demo = reg_and_traj_transferer.registration_factory.demos[action]
             aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
-            sim.env.Destroy()
-            sim_transfer.env.Destroy()
-            del sim
-            del sim_transfer
-            del lfd_env
-            del reg_factory
+            traj_transferer.sim.env.Destroy()
             del traj_transferer
             del reg_and_traj_transferer
+            del reg_factory
             return (aug_traj, simstate, action)
 
         amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action]])

@@ -21,9 +21,10 @@ class RegistrationAndTrajectoryTransferer(object):
 class TwoStepRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
     def transfer(self, demo, test_scene_state, sim_state = None, plotting=False):
         ###MAJOR HACK
-        sim = DynamicRopeSimulationRobotWorld()
-        sim.set_state(sim_state)
-        self.trajectory_transferer.set_sim(sim)
+        #sim = DynamicRopeSimulationRobotWorld()
+        #sim.set_state(sim_state)
+        #self.trajectory_transferer.set_sim(sim)
+        self.trajectory_transferer.sim.set_state(sim_state)
         reg = self.registration_factory.register(demo, test_scene_state)
         test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
         return test_aug_traj
