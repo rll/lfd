@@ -5,12 +5,28 @@ def estimate_performance(results_file):
 
     num_knots = 0
     num_tasks = len(results_file)-1
-    for i in range(num_tasks):
-        num_steps = len(results_file[str(i)])
 
+    start_i = min([int(i) for i in results_file.keys() if i != 'args'])
+    succ = []
+    failures = []
+    goal_failures = []
+    for i in range(start_i, num_tasks+start_i):
+        num_steps = len(results_file[str(i)])
+        found_goal = False
         is_knot = results_file[str(i)][str(num_steps-1)]['results']['knot'][()]
         if is_knot:
             num_knots += 1
+            succ.append(i)
+        else:
+            failures.append(i)
+        for j in range(num_steps):
+            if results_file[str(i)][str(j)]['results']['found_goal'][()] and j<3:
+                found_goal = True
+        if not(found_goal):
+            goal_failures.append(i)
+    print 'Failures:', failures
+    print 'Successes', succ
+    print 'Goal Failures:', goal_failures
     return num_knots, num_tasks
 
 if __name__ == '__main__':
