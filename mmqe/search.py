@@ -143,6 +143,7 @@ def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=
 # assumes expander is a list of expand instances
 def beam_search_parallel(start_state, timestep, actions, expander, evaluator, sim, width=1, depth=1, debug=False):
     id2simstate = {}
+    action2traj = dict([(a, None) for a in actions])
     SearchNode.set_actions(actions)
     root_id = SearchNode.get_UID()
     id2simstate[root_id] = sim.get_state()
@@ -170,11 +171,14 @@ def beam_search_parallel(start_state, timestep, actions, expander, evaluator, si
         expand_res = expander.get_results()
         agenda = []
         for res in expand_res:
-            next_s, next_s_id, is_goal, is_fail, simstate = (res['result_state'],
+            next_s, next_s_id, is_goal, is_fail, simstate, traj= (res['result_state'],
                                                              res['metadata'],
                                                              res['is_knot'],
                                                              res['is_failure'],
-                                                             res['next_simstate'])
+                                                             res['next_simstate'],
+							     res['aug_traj'])
+	    if d==0:
+		action2traj[res['action']] = traj
             id2simstate[next_s_id] = simstate
             parent = SearchNode.id_map[next_s_id].parent
             del SearchNode.id_map[next_s_id]
@@ -206,4 +210,6 @@ def beam_search_parallel(start_state, timestep, actions, expander, evaluator, si
             break
     # Reset back to the original state before returning
     sim.set_state(id2simstate[root_id])
-    return root.select_best()
+    best = root.select_best()
+    best_traj = action2traj[best[0][0]]
+    return best[0],best[1], [best_traj]
