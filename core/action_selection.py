@@ -37,7 +37,7 @@ class GreedyActionSelection(ActionSelection):
     def plan_agenda(self, scene_state, timestep=-1):
         action2q_value = self.registration_factory.batch_cost(scene_state)
         q_values, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
-        return agenda, q_values
+        return agenda, q_values, None, None
 
 class FeatureActionSelection(ActionSelection):
     def __init__(self, registration_factory, features, actions, demos,
@@ -103,7 +103,7 @@ class ParallelFeatureActionSelection(ActionSelection):
             try:
                 score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
             except:
-                return -np.inf
+                return -np.inf*np.r_[np.ones(len(self.features.weights))]
             # if np.max(score) > -.2:
             #     import ipdb; ipdb.set_trace()
             return score

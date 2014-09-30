@@ -113,10 +113,10 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
 
                 start_time = time.time()
                 try:
-                    test_aug_traj = trajs[i_choice]
-                    if test_aug_traj:
+                    if trajs and trajs[i_choice]:
+                        test_aug_traj = trajs[i_choice]
                         print "Using traj from beam search"
-                    if not test_aug_traj:
+                    else:
 			            test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, sim_state = sim_state, plotting=args.plotting)
                 except ValueError: # If something is cloud/traj is empty or something
                     redprint("**Raised value error during traj transfer")
@@ -184,7 +184,7 @@ def eval_on_holdout_parallel(args, action_selection, lfd_env, sim):
         sim_util.reset_arms_to_side(sim)
         scene_state = lfd_env.observe_scene()
         sim_state = sim.get_state()
-        agenda, q_values_root = action_selection.plan_agenda(scene_state)
+        agenda, q_values_root, trajs, found_goal = action_selection.plan_agenda(scene_state)
         results[i_task] = {'scene_state':scene_state, 'best_action':agenda[0], 'sim_state':sim_state, 'values':q_values_root}
         bts.queue_transfer_simulate(sim_state, scene_state, agenda[0], (i_task, 0))
 
@@ -212,7 +212,7 @@ def eval_on_holdout_parallel(args, action_selection, lfd_env, sim):
                 scene_state = lfd_env.observe_scene() # re-observe scene in case we're doing a different
                 # type of lfd_env (e.g. GroundTruth)
                 try:
-                    agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
+                    agenda, q_values_root, trajs, found_goal = action_selection.plan_agenda(scene_state, i_step)
                 except ValueError: #e.g. if cloud is empty - any action is hopeless
                     del results[i_task]
                     successes[i_task] = False

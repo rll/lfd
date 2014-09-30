@@ -42,47 +42,43 @@ class BatchTransferSimulate(object):
 
         @interactive
         def engine_initialize(id, args, demos):
-            from core.simulation import DynamicRopeSimulationRobotWorld
-            from core.environment import LfdEnvironment
-            from core.registration import TpsRpmBijRegistrationFactory
-            from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
-            from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
-            global lfd_env, reg_and_traj_transferer
-            sim = DynamicRopeSimulationRobotWorld()
-            sim_transfer = DynamicRopeSimulationRobotWorld()
-            world = sim
-            lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
-            #reg_factory = None
-            reg_factory = TpsRpmBijRegistrationFactory(demos)
-            traj_transferer = PoseTrajectoryTransferer(sim_transfer, args.eval.beta_pos, args.eval.beta_rot, 
-                                                       args.eval.gamma, args.eval.use_collision_cost)
-            traj_transferer = FingerTrajectoryTransferer(sim_transfer, args.eval.beta_pos, args.eval.gamma, 
-                                                         args.eval.use_collision_cost, 
-                                                         init_trajectory_transferer=traj_transferer)
-            reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+            global downsample_size, all_demos, beta_pos, beta_rot, gamma, use_collision_cost
+            all_demos = demos
+            downsample_size = args.eval.downsample_size
+            beta_pos = args.eval.beta_pos
+            beta_rot = args.eval.beta_rot
+            gamma = args.eval.gamma
+            use_collision_cost = args.eval.use_collision_cost
         self.dv.map_sync(engine_initialize, self.rc.ids, [args]*len(self.dv.targets), [demos]*len(self.dv.targets))
-        sim = DynamicRopeSimulationRobotWorld()
-        world = sim
-        lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
-        reg_factory = TpsRpmBijRegistrationFactory(demos)
-        traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, 
-                                                   args.eval.gamma, args.eval.use_collision_cost)
-        traj_transferer = FingerTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.gamma, 
-                                                     args.eval.use_collision_cost, 
-                                                     init_trajectory_transferer=traj_transferer)
-        reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-        self.lfd_env = lfd_env
-        self.reg_and_traj_transferer = reg_and_traj_transferer
         self.pending = set()
         
     def queue_transfer_simulate(self, simstate, state, action, next_state_id): # TODO optional arguments
         self.wait_while_queue_is_full()
         @interactive
         def engine_transfer_simulate(simstate, state, action, metadata):            
+            from core.simulation import DynamicRopeSimulationRobotWorld
+            from core.environment import LfdEnvironment
+            from core.registration import TpsRpmBijRegistrationFactory
+            from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+            from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
             from rapprentice.knot_classifier import isKnot as is_knot
             from core import simulation_object, sim_util
-            global lfd_env, reg_and_traj_transferer
+            global downsample_size, all_demos, beta_pos, beta_rot, gamma, use_collision_cost
+            sim = DynamicRopeSimulationRobotWorld()
+            world = sim
+            sim_transfer = DynamicRopeSimulationRobotWorld()
+            lfd_env = LfdEnvironment(sim, world, downsample_size=downsample_size)
             lfd_env.sim.set_state(simstate)
+            reg_factory = TpsRpmBijRegistrationFactory(all_demos)
+            traj_transferer = PoseTrajectoryTransferer(sim_transfer, beta_pos, beta_rot, 
+                                                       gamma, use_collision_cost)
+            traj_transferer = FingerTrajectoryTransferer(sim_transfer, beta_pos, gamma, 
+                                                         use_collision_cost, 
+                                                         init_trajectory_transferer=traj_transferer)
+            reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+
+
+
             demo = reg_and_traj_transferer.registration_factory.demos[action]
             aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
             (feas, misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0)
@@ -109,10 +105,29 @@ class BatchTransferSimulate(object):
         self.wait_while_queue_is_full()
         @interactive
         def engine_transfer_simulate(simstate, state, action):            
+            from core.simulation import DynamicRopeSimulationRobotWorld
+            from core.environment import LfdEnvironment
+            from core.registration import TpsRpmBijRegistrationFactory
+            from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+            from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
             from rapprentice.knot_classifier import isKnot as is_knot
             from core import simulation_object, sim_util
-            global lfd_env, reg_and_traj_transferer
+            global downsample_size, all_demos, beta_pos, beta_rot, gamma, use_collision_cost
+            sim = DynamicRopeSimulationRobotWorld()
+            world = sim
+            sim_transfer = DynamicRopeSimulationRobotWorld()
+            lfd_env = LfdEnvironment(sim, world, downsample_size=downsample_size)
             lfd_env.sim.set_state(simstate)
+            reg_factory = TpsRpmBijRegistrationFactory(all_demos)
+            traj_transferer = PoseTrajectoryTransferer(sim_transfer, beta_pos, beta_rot, 
+                                                       gamma, use_collision_cost)
+            traj_transferer = FingerTrajectoryTransferer(sim_transfer, beta_pos, gamma, 
+                                                         use_collision_cost, 
+                                                         init_trajectory_transferer=traj_transferer)
+            reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+
+
+
             demo = reg_and_traj_transferer.registration_factory.demos[action]
             aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
             return (aug_traj, simstate, action)
