@@ -140,7 +140,7 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
             handles.append(self.sim.env.plot3(demo_cloud[:,:3], 10, test_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.plot3(test_cloud[:,:3], 10, test_color if test_color is not None else (0,0,1)))
             handles.extend(sim_util.draw_grid(self.sim, demo_cloud[:,:3], reg.f))
-            self.sim.viewer.Idle()
+            #self.sim.viewer.Idle()
             self.sim.viewer.Step()
         
         active_lr = ""

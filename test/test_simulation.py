@@ -49,6 +49,14 @@ class TestSimulation(unittest.TestCase):
             T[:3,3] = bt_cyl.GetTransform()[:3,3]
             bt_cyl.SetTransform(T) # SetTransform needs to be used in the Bullet object, not the openrave body
         self.sim.update()
+        viewer = trajoptpy.GetViewer(self.sim.env)
+        camera_matrix = np.array([[ 0,    1, 0,   0],
+                                  [-1,    0, 0.5, 0],
+                                  [ 0.5,  0, 1,   0],
+                                  [ 2.25, 0, 4.5, 1]])
+        viewer.SetWindowProp(0,0,1500,1500)
+        viewer.SetCameraManipulatorMatrix(camera_matrix)
+        viewer.Step()
     
     def test_reproducibility(self):
         sim_state0 = self.sim.get_state()

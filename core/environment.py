@@ -107,28 +107,43 @@ class GroundTruthBoxLfdEnvironment(LfdEnvironment):
     def observe_scene(self, scene, ground_truth=False):
         if ground_truth:
             pts = np.zeros((0,3))
+            box_top_height = self.box_top_height
+            box0pos=np.r_[self.box0pos[:2],np.array([box_top_height])]
+            box1pos=np.r_[self.box1pos[:2],np.array([box_top_height])]
+            box1pos_2=np.r_[self.box1pos_2[:2],np.array([box_top_height])]
             box0_x,box0_y = self.box0pos[0],self.box0pos[1]
             box1_x,box1_y = self.box1pos[0],self.box1pos[1]
             box1_x_2,box1_y_2 = self.box1pos_2[0],self.box1pos_2[1]
             box_width = self.box_width
-            box_top_height = self.box_top_height
-            const1=.14
-            pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height-const1],
-            [box0_x-box_width,box0_y+box_width,box_top_height-const1],
-            [box0_x+box_width,box0_y-box_width,box_top_height-const1],
-            [box0_x+box_width,box0_y+box_width,box_top_height-const1]])]
-            const = .14
+
+            pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
+            [box0_x-box_width,box0_y+box_width,box_top_height],
+            [box0_x+box_width,box0_y-box_width,box_top_height],
+            [box0_x+box_width,box0_y+box_width,box_top_height],])]
+            offset=.14
             if scene == ("demonstration"):
-                pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height-const],
-                [box1_x-box_width,box1_y+box_width,box_top_height-const],
-                [box1_x+box_width,box1_y-box_width,box_top_height-const],
-                [box1_x+box_width,box1_y+box_width,box_top_height-const]])]
+                pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height-offset],
+                [box1_x-box_width,box1_y+box_width,box_top_height-offset],
+                [box1_x+box_width,box1_y-box_width,box_top_height-offset],
+                [box1_x+box_width,box1_y+box_width,box_top_height-offset]])]
+                pts = np.r_[pts,np.array([box1pos+np.r_[box_width,0,-offset],
+                        box1pos-np.r_[box_width,0,offset],
+                        box1pos-np.r_[0,box_width,offset],
+                        box1pos+np.r_[0,box_width,-offset]])]
             else:
-                pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height-const],
-                [box1_x_2-box_width,box1_y_2+box_width,box_top_height-const],
-                [box1_x_2+box_width,box1_y_2-box_width,box_top_height-const],
-                [box1_x_2+box_width,box1_y_2+box_width,box_top_height-const]])]
-                """
+                pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height-offset],
+                [box1_x_2-box_width,box1_y_2+box_width,box_top_height-offset],
+                [box1_x_2+box_width,box1_y_2-box_width,box_top_height-offset],
+                [box1_x_2+box_width,box1_y_2+box_width,box_top_height-offset]])]
+                pts = np.r_[pts,np.array([box1pos_2+np.r_[box_width,0,-offset],
+                        box1pos_2-np.r_[box_width,0,offset],
+                        box1pos_2-np.r_[0,box_width,offset],
+                        box1pos_2+np.r_[0,box_width,-offset]])]
+            pts = np.r_[pts,np.array([box0pos+np.r_[box_width,0,0],
+                        box0pos-np.r_[box_width,0,0],
+                        box0pos-np.r_[0,box_width,0],
+                        box0pos+np.r_[0,box_width,0],box0pos])]
+            """
             box_top_height = self.bottom_height
 
             pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],

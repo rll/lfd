@@ -252,6 +252,24 @@ class DynamicSimulation(StaticSimulation):
             bt_obj.UpdateRave()
         self.env.UpdatePublishedBodies()
 
+    def add_constraints(self, link1, link2, grab_tf=None):
+        if grab_tf is None:
+            grab_tf = link1.GetTransform()
+
+        cnt = self.bt_env.AddConstraint({
+            "type": "generic6dof",
+            "params": {
+                "link_a": link1,
+                "link_b": link2,
+                "frame_in_a": np.linalg.inv(link1.GetTransform()).dot(grab_tf),
+                "frame_in_b": np.linalg.inv(link2.GetTransform()).dot(grab_tf),
+                "use_linear_reference_frame_a": False,
+                "stop_erp": .8,
+                "stop_cfm": .1,
+                "disable_collision_between_linked_bodies": True,
+            }
+        })
+
 class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
     def __init__(self, env=None, T_w_k=None, range_k=2.):
         """
@@ -336,7 +354,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         if self.viewer and step_viewer:
             self.viewer.Step()
     
-    def close_gripper(self, lr, step_viewer=1, max_vel=.01, close_dist_thresh=0.004, grab_dist_thresh=0.005):
+    def close_gripper(self, lr, step_viewer=1, max_vel=.01, close_dist_thresh=0.006, grab_dist_thresh=0.007):
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = self.robot.GetDOFValues([joint_ind])[0]
