@@ -114,7 +114,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 best_root_action = str(agenda[i_choice])
                 start_time = time.time()
 
-                traj_transferer.sim.env.Destroy()
+                reg_and_traj_transferer.trajectory_transferer.sim.env.Destroy()
                 del reg_and_traj_transferer
 
                 sim = DynamicRopeSimulationRobotWorld()
