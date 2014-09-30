@@ -83,26 +83,28 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim_state = sim.get_state()
             sim.set_state(sim_state)
             scene_state = lfd_env.observe_scene()
-
             # plot cloud of the test scene
             handles = []
             if args.plotting:
                 handles.append(sim.env.plot3(scene_state.cloud[:,:3], 2, scene_state.color if scene_state.color is not None else (0,0,1)))
                 sim.viewer.Step()
-            
+
             eval_stats = eval_util.EvalStats()
-            
+
             start_time = time.time()
             agenda, q_values_root, trajs, found_goal = action_selection.plan_agenda(scene_state, i_step)
-            #try:
+            eval_stats.action_elapsed_time += time.time() - start_time
+ 
+            eval_stats.generalized = True
+            num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
+
+
+           #try:
             #    agenda, q_values_root, trajs = action_selection.plan_agenda(scene_state, i_step)
             #except ValueError: #e.g. if cloud is empty - any action is hopeless
             #    redprint("**Raised Value Error during action selection")
             #    break
-            eval_stats.action_elapsed_time += time.time() - start_time
-            
-            eval_stats.generalized = True
-            num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
+           
             for i_choice in range(num_actions_to_try):
                 if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
                     eval_stats.generalized = False
@@ -110,19 +112,33 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 redprint("TRYING %s"%agenda[i_choice])
 
                 best_root_action = str(agenda[i_choice])
-
                 start_time = time.time()
-                try:
-                    if trajs and trajs[i_choice]:
-                        test_aug_traj = trajs[i_choice]
-                        print "Using traj from beam search"
-                    else:
-			            test_aug_traj = reg_and_traj_transferer.transfer(GlobalVars.demos[best_root_action], scene_state, sim_state = sim_state, plotting=args.plotting)
-                except ValueError: # If something is cloud/traj is empty or something
-                    redprint("**Raised value error during traj transfer")
-                    break
-                #ipdb.set_trace()
-                eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
+
+                traj_transferer.sim.env.Destroy()
+                del reg_and_traj_transferer
+
+                sim = DynamicRopeSimulationRobotWorld()
+                world = sim
+                sim_traj = DynamicRopeSimulationRobotWorld()
+                lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
+                lfd_env.sim.set_state(sim_state)
+                reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
+                traj_transferer = PoseTrajectoryTransferer(sim_traj, args.eval.beta_pos, args.eval.beta_rot, 
+                                                           args.eval.gamma, args.eval.use_collision_cost)
+                traj_transferer = FingerTrajectoryTransferer(sim_traj, args.eval.beta_pos, args.eval.gamma, 
+                                                             args.eval.use_collision_cost, 
+                                                             init_trajectory_transferer=traj_transferer)
+                reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+
+                demo = reg_and_traj_transferer.registration_factory.demos[best_root_action]
+                aug_traj = reg_and_traj_transferer.transfer(demo, scene_state, sim_state, plotting=args.plotting)
+                (eval_stats.feasible, eval_stats.misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0, check_feasible=args.eval.check_feasible)
+
+
+
+                #except ValueError: # If something is cloud/traj is empty or something
+                #    redprint("**Raised value error during traj transfer")
+                #    break
                 sim.settle()
                 eval_stats.exec_elapsed_time += time.time() - start_time
                 
