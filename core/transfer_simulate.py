@@ -139,6 +139,15 @@ class BatchTransferSimulate(object):
     def wait_while_queue_is_nonempty(self):
         self.wait_while_queue_size_above_size(0)
 
+    def cleanup(self):
+        self.rc.purge_results('all')
+        self.rc.results.clear()
+        self.rc.metadata.clear()
+        self.dv.results.clear()
+        #assert not self.rc.outstanding
+        #self.rc.history = []
+        #self.dv.history = []
+
     def get_results(self):
         results = []
         try:
