@@ -335,24 +335,24 @@ def main():
                 ds_g['scaled_l_traj']      = scaled_l_traj
                 ds_g['scaled_r_traj_K']    = scaled_r_traj_K
                 ds_g['scaled_l_traj_K']    = scaled_l_traj_K
- 
+                # Precompute l,r closing indices
+                lr2finger_traj = {}
+                for lr in 'lr':
+                    arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
+                    lr2finger_traj[lr] = gripper_joint2gripper_l_finger_joint_values(np.asarray(seg_info['%s_gripper_joint'%lr]))[:,None]
+                    opening_inds, closing_inds = get_opening_closing_inds(lr2finger_traj[lr])
+                    if '%s_closing_inds'%lr in seg_info:
+                        del seg_info['%s_closing_inds'%lr]
+                    if not closing_inds:
+                        closing_inds = False
+                    seg_info['%s_closing_inds'%lr] = closing_inds
+#
             ds_g['cloud_xyz']          = x_na
             ds_g['scaled_cloud_xyz']   = scaled_x_na
             ds_g['scaling']            = scale_params[0]
             ds_g['scaled_translation'] = scale_params[1]
             ds_g['scaled_K_nn']        = K_nn
-        # Precompute l,r closing indices
-        lr2finger_traj = {}
-        for lr in 'lr':
-            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            lr2finger_traj[lr] = gripper_joint2gripper_l_finger_joint_values(np.asarray(seg_info['%s_gripper_joint'%lr]))[:,None]
-            opening_inds, closing_inds = get_opening_closing_inds(lr2finger_traj[lr])
-            if '%s_closing_inds'%lr in seg_info:
-                del seg_info['%s_closing_inds'%lr]
-            if not closing_inds:
-                closing_inds = False
-            seg_info['%s_closing_inds'%lr] = closing_inds
-#
+
 
         for bend_coef in bend_coefs:
             if str(bend_coef) in inv_group:
