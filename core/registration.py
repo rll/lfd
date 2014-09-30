@@ -359,7 +359,7 @@ class TpsnRpmGTRegistrationFactory(RegistrationFactory):
     def __init__(self, demos, cost_type="bending", prior_fn=None, temp_init=.001, temp_final=.00001,
                         bend_init=1e8, bend_final=1e-5, outlierfrac=1e-2, outlierprior=1e-2, normal_coef_init=1e-15, 
                         normal_coef_final=1e-4, normal_temp_init=.3,normal_temp_final=.3, sim=None,
-                        bend_coef=1e-8,normal_coef=1):
+                        bend_coef=1e-8,normal_coef=1e5):
         """
         TODO: do something better for default parameters and write comment
         """
@@ -411,10 +411,7 @@ class TpsnRpmGTRegistrationFactory(RegistrationFactory):
         Exs = np.r_[Exs,np.tile(np.array([0,0,1]), (8,1))]
         Eys = Exs
 
-        handles=[]
-        for i in range(Epts.shape[0]):
-            handles.append(self.sim.env.drawlinestrip(np.array([Epts[i],np.array(Epts[i]+Exs[i]/10)]),5,(0,1,0,1)))
-        self.sim.viewer.Step()
+        
         #self.sim.viewer.Idle()
         
         #from rapprentice import berkeley_pr2
@@ -455,6 +452,15 @@ class TpsnRpmGTRegistrationFactory(RegistrationFactory):
         Exs = np.r_[Exs, np.tile(np.array([[0,-1,0],[0,1,0]]),(4,1))]
         Exs = np.r_[Exs,np.tile(np.array([0,0,1]), (8,1))]
         Eys = Exs
+        Epts_y=np.r_[y_md[0:8],y_md[0:8],y_md[0:8]]
+        handles=[]
+        for i in range(Epts.shape[0]):
+            handles.append(self.sim.env.drawlinestrip(np.array([Epts[i],np.array(Epts[i]+Exs[i]/10)]),5,(0,1,0,1)))
+        for i in range(Epts_y.shape[0]):
+            handles.append(self.sim.env.drawlinestrip(np.array([Epts_y[i],np.array(Epts_y[i]+Eys[i]/10)]),5,(1,0,0,1)))
+        self.sim.viewer.Step()
+
+        #ipy.embed()
         
         """
         Epts = x_nd

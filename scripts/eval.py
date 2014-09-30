@@ -72,7 +72,7 @@ def generate_box_demonstration(lfd_env,box0_pos, box1_pos, move_height, box_dept
     t1, h1 = get_move_traj(box0_pos + np.r_[0,0,move_height], box0_pos + np.r_[0,0,box_depth/2-0.02], False, lfd_env, 'r', rotaxis)
     t2, h2 = get_move_traj(box0_pos + np.r_[0,0,box_depth/2-0.03], box0_pos + np.r_[0,0,move_height], False, lfd_env, 'r', rotaxis)
     t3, h3 = get_move_traj(box0_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,move_height], False, lfd_env, 'r', rotaxis)
-    t4, h4 = get_move_traj(box1_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,box_depth/2+box_depth/2-0.02+0.001], False, lfd_env, 'r', rotaxis)
+    t4, h4 = get_move_traj(box1_pos + np.r_[0,0,move_height], box1_pos + np.r_[0,0,box_depth/2-0.03], False, lfd_env, 'r', rotaxis)
     t5, h5 = get_move_traj(box1_pos + np.r_[0,0,box_depth+box_depth/2-0.02+0.001], box1_pos + np.r_[0,0,move_height], False, lfd_env, 'r', rotaxis)
 
     full_traj_r = np.r_[t1,t2,t3,t4,t5]
@@ -97,7 +97,9 @@ def generate_box_demonstration(lfd_env,box0_pos, box1_pos, move_height, box_dept
     return demonstration_traj
 
 def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
-    table_height = 0.78
+    table_height = 0.78-.1#TODO
+
+    
     box_length = 0.04
     box_depth = 0.12
     x_start_dist = 0.4
@@ -112,28 +114,46 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     static_offset = 0.01
     #z_offset = box_depth-0.08
     z_offset = 0
-    gt=False
+    gt=True
 
     success,failure=0,0
     succeeds = []
     offset=0
-    rotaxis=[0,0,1,45]
-    #rotaxis=[0,0,0,0]
+    #rotaxis=[0,0,1,45]
+    rotaxis=[0,0,0,0]
+    
 
-    if rotaxis!=[0,0,0,0]:
-        box2 = BoxSimulationObject("box2", np.r_[x_start_dist + offset + (box_length+static_offset)/np.sqrt(2),0 + (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length/2, box_length*3/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box3 = BoxSimulationObject("box3", np.r_[x_start_dist + offset - (box_length+static_offset)/np.sqrt(2),0 + (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length*3/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box4 = BoxSimulationObject("box4", np.r_[x_start_dist + offset + (box_length+static_offset)/np.sqrt(2),0 - (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length*3/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box5 = BoxSimulationObject("box5", np.r_[x_start_dist + offset - (box_length+static_offset)/np.sqrt(2),0 - (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length/2, box_length*3/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
-    else:
-        box2 = BoxSimulationObject("box2", np.r_[x_start_dist + offset + (box_length+static_offset),0,table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box3 = BoxSimulationObject("box3", np.r_[x_start_dist + offset - (box_length+static_offset),0,table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box4 = BoxSimulationObject("box4", np.r_[x_start_dist + offset, 0 - (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box5 = BoxSimulationObject("box5", np.r_[x_start_dist + offset, 0 + (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-        box0 = BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True)
+    height = table_height+.1
+    h_l = np.r_[.37,.1,height]
+    h_r = np.r_[.37,-.1,height]
+    h_l_w = 0.03
+    h_r_w = 0.01
+    outside_extent=0.1
+    z_extent = 0.02
+    y_extent = 0.02
+    x_extent=0.2
+    lfd_env.box0pos = h_r[:2]
+    lfd_env.box1pos = h_l[:2]
+    box0 = BoxSimulationObject("box0", h_r+np.r_[0,0,z_extent/2+box_depth/2+.01], [box_length/2,box_length/2,box_depth/2], dynamic=True, rotationaxis=rotaxis)   
 
-    sim.add_objects([box0,box2,box3,box4,box5])
+    box2 = BoxSimulationObject("box2", h_r+np.r_[0,h_r_w+y_extent,0], [x_extent,y_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box3 = BoxSimulationObject("box3", h_r-np.r_[0,h_r_w+y_extent,0], [x_extent,y_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box4 = BoxSimulationObject("box4", h_r+np.r_[h_r_w+x_extent/2-h_r_w/2,0,0], [x_extent/2-h_r_w/2,h_r_w,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box5 = BoxSimulationObject("box5", h_r-np.r_[h_r_w+x_extent/2-h_r_w/2,0,0], [x_extent/2-h_r_w/2,h_r_w,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box6 = BoxSimulationObject("box6", h_r-np.r_[0,h_r_w+outside_extent+y_extent,0], [x_extent,outside_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+
+    box7 = BoxSimulationObject("box7", h_l+np.r_[0,h_l_w+y_extent,0], [x_extent,y_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box8 = BoxSimulationObject("box8", h_l-np.r_[0,h_l_w+y_extent,0], [x_extent,y_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box9 = BoxSimulationObject("box9", h_l+np.r_[h_l_w+x_extent/2-h_l_w/2,0,0], [x_extent/2-h_l_w/2,h_l_w,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box10 = BoxSimulationObject("box10", h_l-np.r_[h_l_w+x_extent/2-h_l_w/2,0,0], [x_extent/2-h_l_w/2,h_l_w,z_extent], dynamic=False, rotationaxis=rotaxis)
+    box11 = BoxSimulationObject("box11", h_l+np.r_[0,h_l_w+outside_extent+y_extent,0], [x_extent,outside_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+
+    sim.add_objects([box0,box2,box3,box4,box5,box6,box7,box8,box9,box10, box11])
+    sim.settle()
+    sim.viewer.Step()
+    sim.viewer.Idle()
+
+    #sim.add_objects([box0,box1,box2,box3,box4,box5,box6,box7,box8])
     reg_factory=None
     if args.eval.reg_type == 'tpsn':
         reg_factory = TpsnRegistrationFactory(GlobalVars.demos, sim=sim)
@@ -151,12 +171,13 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     T = openravepy.matrixFromAxisAngle(np.array([0,0,np.pi/4]))
     T[:3,3] = bt_box0.GetTransform()[:3,3]
     bt_box0.SetTransform(T)
-    d_traj = generate_box_demonstration(lfd_env, box0_pos, box1_pos, move_height, box_depth, sim, rotaxis)
+    d_traj = generate_box_demonstration(lfd_env, h_r+np.r_[0,0,z_extent+box_depth/2+.01], h_l+np.r_[0,0,z_extent+box_depth/2+.01], move_height, box_depth, sim, rotaxis)
     if gt:
         sc_dem = lfd_env.observe_scene("demonstration",ground_truth=gt)
     else:
         sc_dem, i0 = lfd_env.observe_scene("demonstration",ground_truth=gt)
         reg_factory.i0=i0
+
     d1 = Demonstration("d1",sc_dem,d_traj)
     """
     bt_box2 = sim.bt_env.GetObjectByName("box2")
@@ -174,8 +195,8 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
     bt_box5.SetTransform(T)
     sim.update()
     """
-    lfd_env.box0pos = box0_pos
-    lfd_env.box1pos = box1_pos
+    #lfd_env.box0pos = box0_pos
+    #lfd_env.box1pos = box1_pos
 
     #traj_transferer = PoseTrajectoryTransferer(sim, args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost)
     
@@ -196,7 +217,6 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
             for b_init in np.linspace(1e2,1e2,1):
                 for b_final in np.linspace(1e-3,1e-3,1):
     """
-    
     #for b_final in np.linspace(1e-1,1e-5,10):
         #for n_final in np.linspace(1e-2,1e-7,10):
     #z = open("tpsnrpm_gt_2_9_29.txt",'w')
@@ -206,7 +226,7 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
         for n_final in np.linspace(1e-2,1e-9,10):
             for offset in np.linspace(0.2,0,5):
                 sim_util.reset_arms_to_side(lfd_env.sim)
-                sim.remove_objects([box2,box3,box4,box5,box0])
+                sim.remove_objects([box7,box8,box9,box10,box11])
 
                 """
                 box2 = BoxSimulationObject("box2", np.r_[x_start_dist + box_length1,0,table_height+box_depth/2-static_offset], [box_length/2, box_length, box_depth/2], dynamic=False, rotationaxis=rotaxis)
@@ -215,22 +235,16 @@ def box_eval_on_holdout(args, reg_and_traj_transferer, lfd_env, sim):
                 box5 = BoxSimulationObject("box5", np.r_[x_start_dist, box_length1 ,table_height+box_depth/2-static_offset], [box_length, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
                 """
 
-                if rotaxis!=[0,0,0,0]:
-                    box2 = BoxSimulationObject("box2", np.r_[x_start_dist + offset + (box_length+static_offset)/np.sqrt(2),0 + (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length/2, box_length*3/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box3 = BoxSimulationObject("box3", np.r_[x_start_dist + offset - (box_length+static_offset)/np.sqrt(2),0 + (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length*3/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box4 = BoxSimulationObject("box4", np.r_[x_start_dist + offset + (box_length+static_offset)/np.sqrt(2),0 - (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length*3/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box5 = BoxSimulationObject("box5", np.r_[x_start_dist + offset - (box_length+static_offset)/np.sqrt(2),0 - (box_length+static_offset)/np.sqrt(2),table_height+box_depth/2-z_offset], [box_length/2, box_length*3/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box0 = BoxSimulationObject("box0", box0_pos+np.array([box_offset,0,0]), [box_length/2, box_length/2, box_depth/2], dynamic=True)
-                else:
-                    box2 = BoxSimulationObject("box2", np.r_[x_start_dist + offset + (box_length+static_offset),0,table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box3 = BoxSimulationObject("box3", np.r_[x_start_dist + offset - (box_length+static_offset),0,table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box4 = BoxSimulationObject("box4", np.r_[x_start_dist + offset,0 - (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box5 = BoxSimulationObject("box5", np.r_[x_start_dist + offset,0 + (box_length+static_offset),table_height+box_depth/2-z_offset], [box_length/2, box_length/2, box_depth/2], dynamic=False, rotationaxis=rotaxis)
-                    box0 = BoxSimulationObject("box0", box0_pos+np.array([box_offset,0,0]), [box_length/2, box_length/2, box_depth/2], dynamic=True)
+                box7 = BoxSimulationObject("box7", h_l+np.r_[offset,h_l_w+y_extent,0], [x_extent,y_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+                box8 = BoxSimulationObject("box8", h_l-np.r_[-offset,h_l_w+y_extent,0], [x_extent,y_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
+                box9 = BoxSimulationObject("box9", h_l+np.r_[offset+h_l_w+x_extent/2-h_l_w/2,0,0], [x_extent/2-h_l_w/2,h_l_w,z_extent], dynamic=False, rotationaxis=rotaxis)
+                box10 = BoxSimulationObject("box10", h_l-np.r_[-offset+h_l_w+x_extent/2-h_l_w/2,0,0], [x_extent/2-h_l_w/2,h_l_w,z_extent], dynamic=False, rotationaxis=rotaxis)
+                box11 = BoxSimulationObject("box11", h_l+np.r_[offset,h_l_w+outside_extent+y_extent,0], [x_extent,outside_extent,z_extent], dynamic=False, rotationaxis=rotaxis)
 
-                lfd_env.box1pos_2=np.array([x_start_dist+offset, 0])
 
-                sim.add_objects([box2,box3,box4,box5,box0])
+                lfd_env.box1pos_2=h_l[:2]+np.r_[offset,0]
+
+                sim.add_objects([box7,box8,box9,box10,box11])
                 sim.update()
                 sim.viewer.Step()
 
@@ -662,7 +676,7 @@ def setup_lfd_environment_sim(args):
     
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
-    sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
+    sim_objs.append(BoxSimulationObject("table", [1, 0, table_height + -.19], [.85, .85, .1], dynamic=False))
 
     #BOX PARAMETERS
     table_height = 0.78
@@ -680,6 +694,16 @@ def setup_lfd_environment_sim(args):
     static_offset = 0.008
     #z_offset = box_depth-0.08
     z_offset = 0
+
+    height = table_height+.1
+    h_l = np.r_[.45,.1,height]
+    h_r = np.r_[.45,-.1,height]
+    h_l_w = 0.02
+    h_r_w = 0.01
+    outside_extent=0.1
+    z_extent = 0.02
+    y_extent = 0.02
+    x_extent=0.2
         
     if 'bookshelve' in args.eval.obstacles:
         sim_objs.append(XmlSimulationObject("../data/bookshelve.env.xml", dynamic=False))
@@ -697,7 +721,7 @@ def setup_lfd_environment_sim(args):
     sim.add_objects(sim_objs)
     if args.eval.ground_truth:
         if args.box:
-            lfd_env = GroundTruthBoxLfdEnvironment(sim, world, box0_pos[:2], box1_pos[:2], box1_pos[:2] + np.array([x_offset, 0]),box_length/2, table_height+box_depth, table_height, downsample_size=args.eval.downsample_size)
+            lfd_env = GroundTruthBoxLfdEnvironment(sim, world, h_r[:2], h_l[:2], h_l[:2] + np.array([x_offset, 0]),box_length/2, height+box_depth/2+0.01, table_height, downsample_size=args.eval.downsample_size)
         else:
             lfd_env = GroundTruthRopeLfdEnvironment(sim, world, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
     else:

@@ -112,22 +112,22 @@ class GroundTruthBoxLfdEnvironment(LfdEnvironment):
             box1_x_2,box1_y_2 = self.box1pos_2[0],self.box1pos_2[1]
             box_width = self.box_width
             box_top_height = self.box_top_height
-
-            pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height],
-            [box0_x-box_width,box0_y+box_width,box_top_height],
-            [box0_x+box_width,box0_y-box_width,box_top_height],
-            [box0_x+box_width,box0_y+box_width,box_top_height]])]
-
+            const1=.14
+            pts = np.r_[pts,np.array([[box0_x-box_width,box0_y-box_width,box_top_height-const1],
+            [box0_x-box_width,box0_y+box_width,box_top_height-const1],
+            [box0_x+box_width,box0_y-box_width,box_top_height-const1],
+            [box0_x+box_width,box0_y+box_width,box_top_height-const1]])]
+            const = .14
             if scene == ("demonstration"):
-                pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height],
-                [box1_x-box_width,box1_y+box_width,box_top_height],
-                [box1_x+box_width,box1_y-box_width,box_top_height],
-                [box1_x+box_width,box1_y+box_width,box_top_height]])]
+                pts = np.r_[pts,np.array([[box1_x-box_width,box1_y-box_width,box_top_height-const],
+                [box1_x-box_width,box1_y+box_width,box_top_height-const],
+                [box1_x+box_width,box1_y-box_width,box_top_height-const],
+                [box1_x+box_width,box1_y+box_width,box_top_height-const]])]
             else:
-                pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height],
-                [box1_x_2-box_width,box1_y_2+box_width,box_top_height],
-                [box1_x_2+box_width,box1_y_2-box_width,box_top_height],
-                [box1_x_2+box_width,box1_y_2+box_width,box_top_height]])]
+                pts = np.r_[pts,np.array([[box1_x_2-box_width,box1_y_2-box_width,box_top_height-const],
+                [box1_x_2-box_width,box1_y_2+box_width,box_top_height-const],
+                [box1_x_2+box_width,box1_y_2-box_width,box_top_height-const],
+                [box1_x_2+box_width,box1_y_2+box_width,box_top_height-const]])]
                 """
             box_top_height = self.bottom_height
 
