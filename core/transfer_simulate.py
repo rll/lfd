@@ -90,6 +90,14 @@ class BatchTransferSimulate(object):
                     break
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             fail = not(feas) or misgrasp or result_state.cloud.shape[0] < 10
+            sim.env.Destroy()
+            sim_transfer.env.Destroy()
+            del sim
+            del sim_transfer
+            del lfd_env
+            del reg_factory
+            del traj_transferer
+            del reg_and_traj_transferer
             return {'result_state': result_state,
 		    'action': action, 
                     'metadata': metadata, 
@@ -130,6 +138,14 @@ class BatchTransferSimulate(object):
 
             demo = reg_and_traj_transferer.registration_factory.demos[action]
             aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
+            sim.env.Destroy()
+            sim_transfer.env.Destroy()
+            del sim
+            del sim_transfer
+            del lfd_env
+            del reg_factory
+            del traj_transferer
+            del reg_and_traj_transferer
             return (aug_traj, simstate, action)
 
         amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action]])
