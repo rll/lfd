@@ -100,7 +100,10 @@ class ParallelFeatureActionSelection(ActionSelection):
 
     def plan_agenda(self, scene_state, timestep=-1):
         def evaluator(state, ts):
-            score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
+            try:
+                score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
+            except:
+                return -np.inf
             # if np.max(score) > -.2:
             #     import ipdb; ipdb.set_trace()
             return score

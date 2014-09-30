@@ -212,4 +212,4 @@ def beam_search_parallel(start_state, timestep, actions, expander, evaluator, si
     sim.set_state(id2simstate[root_id])
     best = root.select_best()
     best_traj = action2traj[best[0][0]]
-    return best[0],best[1], [best_traj]
+    return best[0],best[1], [best_traj], goal_found
