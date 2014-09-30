@@ -41,6 +41,11 @@ class TrajectoryTransferer(object):
         """
         raise NotImplementedError
 
+    def set_sim(self, sim):
+        self.sim = sim
+        if self.init_trajectory_transferer:
+            self.init_trajectory_transferer.set_sim(sim)
+
 class PoseTrajectoryTransferer(TrajectoryTransferer):
     def __init__(self, sim, beta_pos, beta_rot, gamma, use_collision_cost, init_trajectory_transferer=None):
         super(PoseTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)

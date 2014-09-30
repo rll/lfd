@@ -98,6 +98,31 @@ def group_or_dataset_to_obj(group_or_dataset):
             v = dataset[()]
     return v
 
+def check_equal(g_or_d1, g_or_d2, parent_seq = None):
+    if parent_seq == None:
+        parent_seq = []
+    keys1 = sorted(g_or_d1.keys())
+    keys2 = sorted(g_or_d2.keys())
+    if keys1 != keys2:
+        return parent_seq
+    cur_differences = []
+    for k1, k2 in zip(keys1, keys2):
+        if k1 != k2:
+            cur_differences.append(parent_seq + [(k1, k2)])
+        else:
+            cur_seq = parent_seq + [k1]
+            g1 = g_or_d1[k1]
+            g2 = g_or_d2[k2]
+            if isinstance(g1, h5py.Group) and isinstance(g2, h5py.Group):
+                subtree_differences = check_equal(g1, g2, cur_seq)
+                if subtree_differences:
+                    cur_differences.extend(subtree_differences)
+            elif np.any(g1[()] != g2[()]):
+                cur_differences.append(parent_seq + [(k1, k2)])
+    return sorted(cur_differences, key=lambda x: len(x))
+    
+    
+
 def save_results_args(fname, args):
     # if args is already in the results file, make sure that the eval arguments are the same
     if fname is None:
