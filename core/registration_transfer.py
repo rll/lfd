@@ -1,4 +1,5 @@
 from __future__ import division
+from core.simulation import DynamicRopeSimulationRobotWorld
 
 class RegistrationAndTrajectoryTransferer(object):
     def __init__(self, registration_factory, trajectory_transferer):
@@ -22,7 +23,7 @@ class TwoStepRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
         ###MAJOR HACK
         sim = DynamicRopeSimulationRobotWorld()
         sim.set_state(sim_state)
-        self.trajector_transferer.set_sim(sim)
+        self.trajectory_transferer.set_sim(sim)
         reg = self.registration_factory.register(demo, test_scene_state)
         test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
         return test_aug_traj, reg
