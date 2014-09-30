@@ -227,7 +227,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
             lr2trajs = {}
             for aug_traj in aug_trajs:
                 lr2traj = stack_traj(aug_traj)
-                flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
+#                 flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
                 for lr in active_lr:
                     if lr not in lr2trajs:
                         lr2trajs[lr] = []
@@ -280,7 +280,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         aligned_lr2trajs = {}
         for aug_traj in aligned_aug_trajs:
             lr2traj = stack_traj(aug_traj)
-            flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
+#             flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
             for lr in active_lr:
                 if lr not in aligned_lr2trajs:
                     aligned_lr2trajs[lr] = []
@@ -308,6 +308,27 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
                 dof_val = aligned_lr2trajs[lr][:,t,:]
                 dof_mu_traj[t,:] = dof_val.mean(axis=0)
                 dof_sigma_traj[t,:,:] = (dof_val-dof_mu_traj[t,:]).T.dot(dof_val-dof_mu_traj[t,:])/dof_val.shape[0]
+                
+                # recompute rotation means
+                rot0 = openravepy.rotationMatrixFromAxisAngle(dof_val[0,3:6])
+                aa_devs = [np.zeros(3)] # deviation from the rotation of demo 0
+                for i_demo in range(1, dof_val.shape[0]):
+                    rot = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
+                    rot_dev = rot0.T.dot(rot)
+                    aa_devs.append(openravepy.axisAngleFromRotationMatrix(rot_dev))
+                aa_devs = np.asarray(aa_devs)
+                rot_mu_dev = openravepy.rotationMatrixFromAxisAngle(aa_devs.mean(axis=0))
+                rot_mu = rot0.dot(rot_mu_dev)
+                dof_mu_traj[t,3:6] = openravepy.axisAngleFromRotationMatrix(rot_mu)
+                # recompute rotation covariances
+                aa_mu_devs = [] # deviation from the mean rotation
+                for i_demo in range(dof_val.shape[0]):
+                    rot = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
+                    rot_mu_dev = rot_mu.T.dot(rot)
+                    aa_mu_devs.append(openravepy.axisAngleFromRotationMatrix(rot_mu_dev))
+                aa_mu_devs = np.asarray(aa_mu_devs)
+                dof_sigma_traj[t,3:6,3:6] = aa_mu_devs.T.dot(aa_mu_devs)/dof_val.shape[0]
+                
             lr2dof_mu_traj[lr] = dof_mu_traj
             lr2dof_sigma_traj[lr] = dof_sigma_traj
         
