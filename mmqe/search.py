@@ -115,7 +115,7 @@ def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=
             parent_state = parent_node.state
             child_id = parent_node.child_ids[SearchNode.action2ind[a]]
             sim.set_state(id2simstate[P_ID])
-            expand_res.append(expander(parent_state, a, child_id))
+            expand_res.append(expander(parent_state, a, child_id, id2simstate[P_ID]))
             id2simstate[child_id] = sim.get_state()
             child_node = ExpandingNode(child_id, parent_node)
         agenda = []

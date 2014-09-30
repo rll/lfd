@@ -83,7 +83,7 @@ class BatchTransferSimulate(object):
             global lfd_env, reg_and_traj_transferer
             lfd_env.sim.set_state(simstate)
             demo = reg_and_traj_transferer.registration_factory.demos[action]
-            aug_traj = reg_and_traj_transferer.transfer(demo, state, plotting=False)
+            aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
             (feas, misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0)
             lfd_env.sim.settle()
             result_state = lfd_env.observe_scene()
@@ -112,7 +112,7 @@ class BatchTransferSimulate(object):
             global lfd_env, reg_and_traj_transferer
             lfd_env.sim.set_state(simstate)
             demo = reg_and_traj_transferer.registration_factory.demos[action]
-            aug_traj = reg_and_traj_transferer.transfer(demo, state, plotting=False)
+            aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
             return (aug_traj, simstate, action)
 
         amr = self.v.map(engine_transfer_simulate, *[[e] for e in [simstate, state, action]])

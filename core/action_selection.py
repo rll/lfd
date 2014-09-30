@@ -60,8 +60,8 @@ class FeatureActionSelection(ActionSelection):
             opt = np.argmax(val)
             return np.dot(fv, self.features.weights)
 
-        def simulate_transfer(state, action, next_state_id):
-            aug_traj=self.transferer.transfer(self.demos[action], state, plotting=self.debug)
+        def simulate_transfer(state, action, next_state_id, sim_state):
+            aug_traj=self.transferer.transfer(self.demos[action], state, sim_state, plotting=self.debug)
             
             (feas, misgrasp) = self.lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=self.debug)
             
@@ -107,7 +107,7 @@ class ParallelFeatureActionSelection(ActionSelection):
 
         return beam_search_parallel(scene_state, timestep, self.actions, self.batch_transfer_simulate,
                            evaluator, self.lfd_env.sim, width=self.width,
-                           depth=self.depth, debug=True)
+                           depth=self.depth, debug=False)
 
 def transfer(transferer, demo, state):
     return transferer.transfer(demo, state, plotting=False)
