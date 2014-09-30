@@ -51,12 +51,13 @@ class FeatureActionSelection(ActionSelection):
 
     def plan_agenda(self, scene_state, timestep):
         def evaluator(state, ts):
-            fv = self.features.features(state,timestep=ts)
-            val = np.dot(fv, self.features.weights)
-            opt = np.argmax(val)
-            print 'Worst distance from gripper to rope:', np.max([fv[i][-1] for i in range(len(self.actions))])
-            print 'Chosen distance from gripper to rope: ', fv[opt][-1]
-            return np.dot(fv, self.features.weights)
+            try:
+                score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
+            except:
+                return -np.inf*np.r_[np.ones(len(self.features.weights))]
+            # if np.max(score) > -.2:
+            #     import ipdb; ipdb.set_trace()
+            return score
 
         def simulate_transfer(state, action, next_state_id):
             aug_traj=self.transferer.transfer(self.demos[action], state, plotting=False)
@@ -74,3 +75,4 @@ class FeatureActionSelection(ActionSelection):
         return beam_search(scene_state, timestep, self.actions, simulate_transfer,
                            evaluator, self.lfd_env.sim, width=self.width,
                            depth=self.depth)
+
