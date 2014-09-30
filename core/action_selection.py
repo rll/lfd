@@ -103,7 +103,7 @@ class ParallelFeatureActionSelection(ActionSelection):
             try:
                 score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
             except:
-                return -np.inf
+                return -np.inf*np.r_[np.ones(len(self.features.weights))]
             # if np.max(score) > -.2:
             #     import ipdb; ipdb.set_trace()
             return score
