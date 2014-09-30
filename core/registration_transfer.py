@@ -26,7 +26,7 @@ class TwoStepRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
         self.trajectory_transferer.set_sim(sim)
         reg = self.registration_factory.register(demo, test_scene_state)
         test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
-        return test_aug_traj, reg
+        return test_aug_traj
 
 class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
     def __init__(self, registration_factory, trajectory_transferer):
