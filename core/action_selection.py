@@ -41,7 +41,7 @@ class FeatureActionSelection(ActionSelection):
                  width, depth, simulator=None, lfd_env=None):
         self.features = features
         self.actions = actions.keys()
-        self.features.set_name2ind(self.actions)
+#        self.features.set_name2ind(self.actions)
         self.demos = demos
         self.width = width
         self.depth = depth
@@ -72,7 +72,6 @@ class FeatureActionSelection(ActionSelection):
             rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
             return (result_state, next_state_id, rope_knot)
 
-        return beam_search(scene_state, timestep, self.actions, simulate_transfer,
+        return beam_search(scene_state, timestep, self.features.src_ctx.seg_names, simulate_transfer,
                            evaluator, self.lfd_env.sim, width=self.width,
                            depth=self.depth)
-
