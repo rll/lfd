@@ -55,10 +55,11 @@ class FeatureActionSelection(ActionSelection):
 
     def plan_agenda(self, scene_state, timestep=-1):
         def evaluator(state, ts):
-            fv = self.features.features(state,timestep=ts)
-            val = np.dot(fv, self.features.weights)
-            opt = np.argmax(val)
-            return np.dot(fv, self.features.weights)
+            try:
+                score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
+            except:
+                return -np.inf*np.r_[np.ones(len(self.features.weights))]
+            return score
 
         def simulate_transfer(state, action, next_state_id, sim_state):
             aug_traj=self.transferer.transfer(self.demos[action], state, sim_state, plotting=self.debug)
