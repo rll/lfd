@@ -52,7 +52,7 @@ class FeatureActionSelection(ActionSelection):
     def plan_agenda(self, scene_state, timestep):
         def evaluator(state, ts):
             try:
-                score = np.dot(self.features.features(state, timestep=ts), self.features.weights) + self.features.w0
+                score = np.dot(self.features.features(state, timestep=ts), self.features.weights)# + self.features.w0
             except:
                 return -np.inf*np.r_[np.ones(len(self.features.weights))]
             # if np.max(score) > -.2:
