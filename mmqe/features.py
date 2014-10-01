@@ -43,9 +43,11 @@ class Feature(object):
     def load_weights(self, fname):
         f = h5py.File(fname, 'r')
         weights = f['weights'][:]
+        w0 = f['w0'][()]
         f.close()
         assert weights.shape == self.weights.shape
         self.weights = weights
+        self.w0 = w0
 
     def get_ind(self, a):
         raise NotImplementedError
@@ -66,6 +68,7 @@ class BatchRCFeats(Feature):
         self.N = len(self.src_ctx.seg_names)
         self.indicators = np.eye(self.N)
         self.weights = np.r_[-1, np.zeros(self.N)]
+        self.w0 = 0
 
     def features(self, state, **kwargs):
         self.tgt_cld = state.cloud
