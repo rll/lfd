@@ -99,7 +99,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             start_time = time.time()
             #agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
             try:
-                agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
+                (agenda, q_values_root), goal_found = action_selection.plan_agenda(scene_state, i_step)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
                 redprint("**Raised Value Error during action selection")
                 break
@@ -132,7 +132,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             print "BEST ACTION:", best_root_action
 
             knot = is_knot(rope.rope.GetControlPoints())
-            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot}
+            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot, 'goal_found': goal_found}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
             if not eval_stats.generalized:
