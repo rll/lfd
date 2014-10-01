@@ -178,6 +178,9 @@ class MaxMarginModel(object):
             xi_var.Obj *= C
         self.model.update()
 
+    def margin_err(self):
+        return sum(xi.X for xi in self.xi)
+
     def optimize_model(self):
         self.model.update()
         self.model.optimize()
@@ -217,6 +220,9 @@ class BellmanMaxMarginModel(MaxMarginModel):
         mm_model.gamma = param_f['gamma'][()]
         return mm_model
 
+    def bellman_err(self):
+        return sum(yi.X for yi in self.yi)
+
     def populate_slacks(self):
         self.xi = [var for var in self.model.getVars() if var.VarName.startswith('xi')]
         self.xi_val = []
@@ -235,16 +241,17 @@ class BellmanMaxMarginModel(MaxMarginModel):
         rhs_coeffs.append((-1, yi_neg_var)) 
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
+        if final_transition:
+            rhs += self.goal_reward
         # w'*curr_phi == -1 + yi_pos - yi_neg + gammma * w'*next_phi
         self.model.addConstr(lhs == rhs)
         #store the constraint so we can store them to a file later
         if update:
             self.model.update()
 
-    def add_deadend_constraint(self, phi, update=True):
+    def add_deadend_constraint(self, phi, yi_pos_var, update=True):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, phi) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
-        yi_pos_var = self.add_yi(pos_only=True)
         rhs_coeffs = [(1, yi_pos_var)]
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.dead_end_value
@@ -252,10 +259,14 @@ class BellmanMaxMarginModel(MaxMarginModel):
         if update:
             self.model.update()
 
-    def add_yi(self, neg_only=False):
+    def add_yi(self, pos_only=False):
         yi_pos_name = 'yi_pos_{}'.format(len(self.yi))
         yi_neg_name = 'yi_neg_{}'.format(len(self.yi))
         yi_pos = self.model.addVar(lb = 0, name = yi_pos_name, obj = 1)
+        if pos_only:
+            self.yi.append(yi_pos)
+            self.model.update()
+            return yi_pos
         yi_neg = self.model.addVar(lb = 0, name = yi_neg_name, obj = 1)
         # make sure new_yi is not already in self.yi
         self.yi.extend([yi_pos, yi_neg])
@@ -277,16 +288,21 @@ class BellmanMaxMarginModel(MaxMarginModel):
         n_added = 0
         n_total = len(infile)
         for key in infile:
-            task_i, step_i = BellmanMaxMarginModel.parse_key(key)
             constr = infile[key]            
             if constr['exp_action_name'][()] == 'failure':
-                phi = constr['rhs_phi'][:]
+                rhs_phi = constr['rhs_phi'][:]
                 n_constrs = rhs_phi.shape[0]
-                for i in range(n_constrs):
-                    self.add_deadend_constraint(phi[i], update=False)                
+                yi_pos_var = self.add_yi(pos_only=True)
+                for j in range(n_constrs):
+                    self.add_deadend_constraint(rhs_phi[j], yi_pos_var, update=False)
+                sys.stdout.write("\rComputed Constraints {}/{}           ".format(n_added, n_total))
+                sys.stdout.flush()            
+                n_added += 1
+                continue
             lhs_phi = constr['exp_phi'][:]
             final_transition = False
             try:
+                task_i, step_i = BellmanMaxMarginModel.parse_key(key)
                 n_s_i = step_i + 1
                 next_constr = infile[str((task_i, n_s_i))]
                 rhs_phi = next_constr['exp_phi'][:]
