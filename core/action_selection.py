@@ -34,7 +34,8 @@ class GreedyActionSelection(ActionSelection):
     def plan_agenda(self, scene_state, timestep):
         action2q_value = self.registration_factory.batch_cost(scene_state)
         q_values, agenda = zip(*sorted([(q_value, action) for (action, q_value) in action2q_value.items()]))
-        return agenda, q_values
+        # Return false for goal not found
+        return (agenda, q_values), False
 
 class FeatureActionSelection(ActionSelection):
     def __init__(self, registration_factory, features, actions, demos,

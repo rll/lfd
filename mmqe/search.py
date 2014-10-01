@@ -137,4 +137,4 @@ def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=
             break
     # Reset back to the original state before returning
     sim.set_state(id2simstate[root_id])
-    return root.select_best()
+    return root.select_best(), goal_found
