@@ -83,7 +83,7 @@ class BatchTransferSimulate(object):
             try:
                 aug_traj = reg_and_traj_transferer.transfer(demo, state, simstate, plotting=False)
             except:
-                return {'result_state': state, 'action': None, 'metadata': metadata, 'is_failure':True, 'next_simstate':simstate, 'aug_traj':None}
+                return {'result_state': state, 'action': None, 'metadata': metadata, 'is_failure':True, 'next_simstate':simstate, 'aug_traj':None, 'is_knot': False}
             (feas, misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0)
             lfd_env.sim.settle()
             result_state = lfd_env.observe_scene()
