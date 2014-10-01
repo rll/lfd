@@ -220,9 +220,14 @@ def eval_on_holdout_parallel(args, action_selection, lfd_env, sim):
             sys.stdout.write("\rReceived results for key {}\tmax_steps is {}\t{} successes of {} total                    ".format(old_key, args.eval.num_steps, np.sum(successes.values()), len(holdout_items)))
             sys.stdout.flush()
             i_task, i_step = old_key
-            results[i_task]['aug_traj'] = aug_traj
-            results[i_task]['knot'] = knot_success
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, results[i_task])
+            if aug_traj != None: 
+            	results[i_task]['aug_traj'] = aug_traj
+            	results[i_task]['knot'] = knot_success
+            	eval_util.save_task_results_step(args.resultfile, i_task, i_step, results[i_task])
+            else:
+                successes[i_task] = False
+                del results[i_task]
+                continue
             if knot_success:
                 successes[i_task] = True
                 del results[i_task]
