@@ -29,7 +29,7 @@ def estimate_performance(args, results_file):
     print 'Successes', succ
     if args.report_goal:
         print 'Goal Failures:', goal_failures
-    return num_knots, num_tasks
+    return num_knots, num_tasks, failures
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -40,6 +40,6 @@ if __name__ == '__main__':
     
     results_file = h5py.File(args.results_file, 'r')
     
-    num_successes, num_tasks = estimate_performance(args, results_file)
+    num_successes, num_tasks, failures = estimate_performance(args, results_file)
     print "Successes / Total: %d/%d" % (num_successes, num_tasks)
     print "Success rate:", float(num_successes)/float(num_tasks)
