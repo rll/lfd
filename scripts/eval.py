@@ -115,26 +115,29 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 best_root_action = str(agenda[i_choice])
                 start_time = time.time()
 
-                reg_and_traj_transferer.trajectory_transferer.sim.env.Destroy()
-                del reg_and_traj_transferer
+                try:
+                    reg_and_traj_transferer.trajectory_transferer.sim.env.Destroy()
+                    del reg_and_traj_transferer
 
-                sim = DynamicRopeSimulationRobotWorld()
-                world = sim
-                sim_traj = DynamicRopeSimulationRobotWorld()
-                lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
-                lfd_env.sim.set_state(sim_state)
-                reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
-                traj_transferer = PoseTrajectoryTransferer(sim_traj, args.eval.beta_pos, args.eval.beta_rot, 
-                                                           args.eval.gamma, args.eval.use_collision_cost)
-                traj_transferer = FingerTrajectoryTransferer(sim_traj, args.eval.beta_pos, args.eval.gamma, 
-                                                             args.eval.use_collision_cost, 
-                                                             init_trajectory_transferer=traj_transferer)
-                reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+                    sim = DynamicRopeSimulationRobotWorld()
+                    world = sim
+                    sim_traj = DynamicRopeSimulationRobotWorld()
+                    lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
+                    lfd_env.sim.set_state(sim_state)
+                    reg_factory = TpsRpmBijRegistrationFactory(GlobalVars.demos)
+                    traj_transferer = PoseTrajectoryTransferer(sim_traj, args.eval.beta_pos, args.eval.beta_rot, 
+                                                               args.eval.gamma, args.eval.use_collision_cost)
+                    traj_transferer = FingerTrajectoryTransferer(sim_traj, args.eval.beta_pos, args.eval.gamma, 
+                                                                 args.eval.use_collision_cost, 
+                                                                 init_trajectory_transferer=traj_transferer)
+                    reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
 
-                demo = reg_and_traj_transferer.registration_factory.demos[best_root_action]
-                aug_traj = reg_and_traj_transferer.transfer(demo, scene_state, sim_state, plotting=args.plotting)
-                (eval_stats.feasible, eval_stats.misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0, check_feasible=args.eval.check_feasible)
-
+                    demo = reg_and_traj_transferer.registration_factory.demos[best_root_action]
+                    aug_traj = reg_and_traj_transferer.transfer(demo, scene_state, sim_state, plotting=args.plotting)
+                    (eval_stats.feasible, eval_stats.misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0, check_feasible=args.eval.check_feasible)
+                except:
+                    redprint("Failed on task")
+                    break
 
 
                 #except ValueError: # If something is cloud/traj is empty or something
