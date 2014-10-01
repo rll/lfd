@@ -60,6 +60,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
     if args.eval.rope_param_angStiffness is not None:
         rope_params.angStiffness = args.eval.rope_param_angStiffness
 
+
     num_successes = 0
     num_total = 0
     sim_util.reset_arms_to_side(sim)
@@ -149,7 +150,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             print "BEST ACTION:", best_root_action
 
             knot = is_knot(rope.rope.GetControlPoints())
-            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot, 'found_goal':found_goal}
+            results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot, 'found_goal':found_goal}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
             if not eval_stats.generalized:
@@ -165,9 +166,10 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             if knot:
                 num_successes += 1
                 break;
-        
-        sim.remove_objects([rope])
-        
+	for sim_obj in lfd_env.sim.sim_objs:
+            if isinstance(sim_obj, RopeSimulationObject):
+                sim.remove_objects([sim_obj])
+    
         task_time = (.8) * (time.time() - task_start)  + (.2) * task_time if task_time else time.time() - task_start
         num_total += 1
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
@@ -233,7 +235,7 @@ def eval_on_holdout_parallel(args, action_selection, lfd_env, sim):
                     del results[i_task]
                     successes[i_task] = False
                     continue
-                results[i_task] = {'scene_state':next_scene, 'best_action':agenda[0], 'sim_state':next_simstate, 'values':q_values_root}
+                results[i_task] = {'scene_state':next_scene, 'best_action':agenda[0], 'sim_state':next_simstate, 'values':q_values_root, 'found_goal': found_goal}
                 bts.queue_transfer_simulate(next_simstate, scene_state, agenda[0], (i_task, next_i_step))
             else:
                 del results[i_task]
