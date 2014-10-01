@@ -98,6 +98,11 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             
             start_time = time.time()
             #agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
+
+            if len(scene_state.cloud) == 0:
+                redprint("Detected 0 points in scene")
+                break
+
             try:
                 (agenda, q_values_root), goal_found = action_selection.plan_agenda(scene_state, i_step)
             except ValueError: #e.g. if cloud is empty - any action is hopeless
