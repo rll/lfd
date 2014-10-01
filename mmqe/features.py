@@ -159,8 +159,8 @@ class SimpleMulGripperFeats(MulFeats):
         l_inds = [actions[key]['l_closing_inds'] for key in self.src_ctx.seg_names]
         r_inds = [actions[key]['r_closing_inds'] for key in self.src_ctx.seg_names]
         # replace False with -1 and [1,2,12] with 12 -- we want the last index
-        self.l_ind = [int(inds[-1]) if inds[()] else -1 for inds in l_inds]
-        self.r_ind = [int(inds[-1]) if inds[()] else -1 for inds in r_inds]
+        self.l_ind = [int(inds[-1]) if type(inds[()]) is list else -1 for inds in l_inds]
+        self.r_ind = [int(inds[-1]) if type(inds[()]) is list else -1 for inds in r_inds]
         actions.close()
 
 def get_quad_terms(vec):

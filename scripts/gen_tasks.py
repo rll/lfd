@@ -45,6 +45,7 @@ def replace_rope(sim, new_rope, animation):
 
 def load_random_start_segment(demofile):
     start_keys = [seg for seg in GlobalVars.actions.keys() if 'seg00' in seg]
+#    start_keys = [seg for seg in GlobalVars.actions.keys() if seg.startswith('demo') and 'seg00' in seg]
     seg_name = random.choice(start_keys)
     return (GlobalVars.actions[seg_name]['cloud_xyz'], seg_name)
 

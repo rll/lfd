@@ -21,7 +21,7 @@ from rapprentice import tps_registration
 
 from rapprentice import plotting_openrave, task_execution, \
     resampling, ropesim, rope_initialization
-from rapprentice.knot_classifier import remove_consecutive_crossings, remove_consecutive_cross_pairs, calculateCrossings, crossingsToString, isKnot
+from rapprentice.knot_classifier import remove_consecutive_crossings, remove_consecutive_cross_pairs, calculateCrossings, crossingsToString, isFig8Knot
 import pdb
 import time
 
@@ -44,82 +44,95 @@ class GlobalVars:
     actions_cache = None
     demos = None
 
-def queue_traj(sim_state, simulator, lfd_env, sim, transferer):
-    sim.set_state(sim_state)
-    scene = lfd_env.observe_scene()
-
-    costs = transferer.registration_factory.batch_cost(scene)
-    best_keys = sorted(costs, key=costs.get)[:MAX_ACTIONS_TO_TRY]
-    for a in best_keys:
-        simulator.queue_transfer(sim_state, scene, a)
-
-
 # @profile
 def label_demos_parallel(args, transferer, lfd_env, sim):
     outfile = h5py.File(args.eval.outfile, 'a')
 
+    rope_params = sim_util.RopeParams()
+    rope_params.radius = ROPE_RADIUS_THICK
+    if args.eval.rope_param_radius is not None:
+        rope_params.radius = args.eval.rope_param_radius
+    if args.eval.rope_param_angStiffness is not None:
+        rope_params.angStiffness = args.eval.rope_param_angStiffness
+
+    # TODO pass in rope params to sample_rope_state
+    (init_rope_nodes, demo_id) = sample_rope_state(
+        args.eval, sim, args.animation)
+    resample = False
+
+
+
     labeled_data = []
 
-    transfer_simulates = []
-    for i in range(NUM_PROCS):
-        print 'Initializing Proc ', i
-        labeled_data.append([])
-        transfer_simulates.append(BatchTransferSimulate(args, GlobalVars.demos))
-        queue_traj(sample_rope_state(args.eval, sim), transfer_simulates[i], lfd_env, sim, transferer)
 
     while True:
-        for i in range(NUM_PROCS):
-            print "Starting Proccess", i
-            simulator = transfer_simulates[i]
-            simulator.wait_while_queue_is_nonempty()
+        if args.animation:
+            sim.viewer.Step()
+        sim_state = sim.get_state()
+        sim.set_state(sim_state)
 
+        scene_state = lfd_env.observe_scene()
+
+        # plot cloud of the test scene
+        handles = []
+        if args.plotting:
+            handles.append(
+                sim.env.plot3(
+                    scene_state.cloud[
+                        :,
+                        :3],
+                    2,
+                    scene_state.color if scene_state.color is not None else (
+                        0,
+                        0,
+                        1)))
+            sim.viewer.Step()
+        costs = transferer.registration_factory.batch_cost(scene_state)
+        best_keys = sorted(costs, key=costs.get)
+        for seg_name in best_keys:
+            traj = transferer.transfer(GlobalVars.demos[seg_name],
+                                                scene_state,
+                                                plotting=args.plotting)
+        
+
+            feasible, misgrasp = lfd_env.execute_augmented_trajectory(
+                traj, step_viewer=args.animation, interactive=args.interactive)
+            sim_util.reset_arms_to_side(sim)
+            sim.settle(step_viewer=args.animation)
+
+            if not feasible or misgrasp:
+                print 'Feasible: ', feasible
+                print 'Misgrasp: ', misgrasp
+                if misgrasp:
+                    sim.set_state(sim_state)
+                    continue
+            print "y accepts this action"
+            print "n rejects this action"
+            print "r resamples rope state"
+            print "f to save this as a failure"
+            print "C-c safely quits"
+            user_input = lower(raw_input("What to do?"))
             success = False
-            results = simulator.get_results()
-            attempt = 0
-            for traj, state, action in results:
-                print "Attempt #" + str(attempt)
-                attempt += 1
-                sim.set_state(state)
-
-                old_scene = lfd_env.observe_scene()
-                feasible, misgrasp = lfd_env.execute_augmented_trajectory(
-                    traj, step_viewer=args.animation, interactive=args.interactive)
-                sim_util.reset_arms_to_side(sim)
-                sim.settle(step_viewer=args.animation)
-
-
-                if not feasible or misgrasp:
-                    print 'Feasible: ', feasible
-                    print 'Misgrasp: ', misgrasp
-                    if misgrasp:
-                        continue
-                #    continue
-                print "y accepts this action"
-                print "n rejects this action"
-                print "r resamples rope state"
-                print "f to save this as a failure"
-                print "C-c safely quits"
-                user_input = lower(raw_input("What to do?"))
-                if user_input == 'y':
-                    success = True
-                    labeled_data[i].append((old_scene, action))
-                    if isKnot(get_rope_nodes(sim)):
-                        save_success(outfile, labeled_data[i])
-                        labeled_data[i] = []
-                        queue_traj(sample_rope_state(args.eval, sim), simulator, lfd_env, sim, transferer)
-                    else:
-                        queue_traj(sim.get_state(), simulator, lfd_env, sim, transferer)
-                    break
-                elif user_input == 'n':
-                    continue
-                elif user_input == 'r':
-                    break
-                elif user_input == 'f':
-                    save_failure(outfile, lfd_env.observe_scene())
-                    continue
-            if not success:
-                labeled_data[i] = []
-                queue_traj(sample_rope_state(args.eval, sim), simulator, lfd_env, sim, transferer)
+            if user_input == 'y':
+                success = True
+                labeled_data.append((scene_state,seg_name))
+                if isFig8Knot(get_rope_nodes(sim)):
+                    save_success(outfile, labeled_data)
+                    labeled_data = []
+                    sim.set_state(sample_rope_state(args.eval, sim))
+                break
+            elif user_input == 'n':
+                sim.set_state(sim_state)
+                continue
+            elif user_input == 'r':
+                break
+            elif user_input == 'f':
+                sim.set_state(sim_state)
+                save_failure(outfile, lfd_env.observe_scene())
+                continue
+        if not success:
+            labeled_data = []
+            sim.set_state(sample_rope_state(args.eval, sim))
 
 def save_failure(outfile, failure_scene):
     key = get_next_failure_key(outfile)

@@ -62,7 +62,7 @@ def filter_labeled_examples(examples, output, remove_short, remove_long,
     to_remove = False
     if remove_short and num_examples - prev_start < 4:
         to_remove = True
-    if remove_long and num_examples - prev_start > 5:
+    if remove_long and num_examples - prev_start > 6:
         to_remove = True
     if remove_deadend and 'deadend' in examples[str(num_examples-1)].keys() and \
             examples[str(num_examples-1)]['deadend'][()] == 1:
