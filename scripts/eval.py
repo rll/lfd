@@ -203,7 +203,7 @@ def eval_on_holdout_parallel(args, action_selection, lfd_env, sim):
         scene_state = lfd_env.observe_scene()
         sim_state = sim.get_state()
         agenda, q_values_root, trajs, found_goal = action_selection.plan_agenda(scene_state)
-        results[i_task] = {'scene_state':scene_state, 'best_action':agenda[0], 'sim_state':sim_state, 'values':q_values_root}
+        results[i_task] = {'scene_state':scene_state, 'best_action':agenda[0], 'sim_state':sim_state, 'values':q_values_root, 'found_goal': found_goal}
         bts.queue_transfer_simulate(sim_state, scene_state, agenda[0], (i_task, 0))
 
     while results:
