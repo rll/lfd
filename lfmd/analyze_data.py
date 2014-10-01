@@ -9,6 +9,9 @@ import scipy
 from scipy import optimize
 import copy
 
+from pykalman import KalmanFilter
+from pykalman.standard import _last_dims
+
 import trajoptpy, openravepy
 from rapprentice import util, math_utils, planning, resampling
 
@@ -124,22 +127,40 @@ def flipped_angle_axis(aa_trajs):
             angle_traj[0] = -1 * (angle_traj[0] % 2*np.pi) + 2*np.pi
     # flip axes for the rest of the trajectory for each trajectory
     for axis_traj, angle_traj in zip(axis_trajs, angle_trajs):
-        dot_products = np.einsum('ij,ij->i', axis_traj[:-1], axis_traj[1:]) # pairwise dot products axis_traj[t].dot(axis_traj[t-1])
-        flip_inds = np.r_[False, dot_products < 0]
-        for flip_ind in  np.where(flip_inds)[0]:
-            if flip_ind != len(flip_inds)-1:
-                flip_inds[flip_ind+1:] = np.invert(flip_inds[flip_ind+1:])
-        axis_traj[flip_inds] *= -1
-        angle_traj[flip_inds] = -1 * (angle_traj[flip_inds] % 2*np.pi) + 2*np.pi
+        for i in range(len(axis_traj)):
+            if i > 0 and axis_traj[i].dot(axis_traj[i-1]) < 0:
+                axis_traj[i] *= -1
+                angle_traj[i] %= 2*np.pi
+                angle_traj[i] *= -1
+                angle_traj[i] += 2*np.pi
+    # TODO: check if this is equivalent
+#     for axis_traj, angle_traj in zip(axis_trajs, angle_trajs):
+#         dot_products = np.einsum('ij,ij->i', axis_traj[:-1], axis_traj[1:]) # pairwise dot products axis_traj[t].dot(axis_traj[t-1])
+#         flip_inds = np.r_[False, dot_products < 0]
+#         for flip_ind in  np.where(flip_inds)[0]:
+#             if flip_ind != len(flip_inds)-1:
+#                 flip_inds[flip_ind+1:] = np.invert(flip_inds[flip_ind+1:])
+#         axis_traj[flip_inds] *= -1
+#         angle_traj[flip_inds] = -1 * (angle_traj[flip_inds] % 2*np.pi) + 2*np.pi
     # make all angles be between 0 and 2*np.pi
     for angle_traj in angle_trajs:
         angle_traj[:] = np.unwrap(angle_traj)
     return angle_trajs, axis_trajs
 
 def flip_angle_axis_in_place(aa_trajs):
+    orig_rot_trajs = [rotationMatrixFromAxisAngle(aa_traj) for aa_traj in aa_trajs]
+
     angle_trajs, axis_trajs = flipped_angle_axis(aa_trajs)
     for aa_traj, axis_traj, angle_traj in zip(aa_trajs, axis_trajs, angle_trajs):
         aa_traj[:,:] = axis_traj * angle_traj[:,None]
+    
+    # check rotations are the same
+    new_rot_trajs = [rotationMatrixFromAxisAngle(aa_traj) for aa_traj in aa_trajs]
+    for orig_rot_traj, new_rot_traj in zip(orig_rot_trajs, new_rot_trajs):
+#         rot_diffs = [orig_rot.T.dot(new_rot) for orig_rot, new_rot in zip(orig_rot_traj, new_rot_traj)]
+#         aa_diffs = axisAngleFromRotationMatrix(rot_diffs)
+#         angle_diffs = np.apply_along_axis(np.linalg.norm, 1, aa_diffs)
+        assert np.allclose(orig_rot_traj, new_rot_traj)
     return aa_trajs
 
 def axisAngleFromRotationMatrix(rots):
@@ -147,6 +168,11 @@ def axisAngleFromRotationMatrix(rots):
     for t, rot in enumerate(rots):
         aa_diffs[t,:] = openravepy.axisAngleFromRotationMatrix(rot)
     return aa_diffs
+
+def rotationMatrixFromAxisAngle(aas):
+    rots = [openravepy.rotationMatrixFromAxisAngle(aa) for aa in aas]
+    rots = np.asarray(rots)
+    return rots
 
 def diff_rotation_matrix(rots):
     rot_diffs = np.empty((len(rots)-1, 3, 3))
@@ -166,11 +192,9 @@ def stack_traj(aug_traj):
         vel_traj = np.r_[vel_traj[0][None,:], vel_traj]
         vel_traj /= DT
         force_traj = np.zeros((aug_traj.n_steps,0))
-        force_ext_traj = np.zeros((aug_traj.n_steps,0))
-        if aug_traj.lr2force_traj and aug_traj.lr2force_ext_traj:
+        if aug_traj.lr2force_traj:
             force_traj = aug_traj.lr2force_traj[lr]
-            force_ext_traj = aug_traj.lr2force_ext_traj[lr]
-        lr2traj[lr] = np.c_[pos_traj, vel_traj, force_traj, force_ext_traj]
+        lr2traj[lr] = np.c_[pos_traj, vel_traj, force_traj]
     return lr2traj
 
 def flip_wrist_rotations(aug_trajs):
@@ -215,7 +239,10 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         active_lr = 'lr'
         
         aug_trajs = [demo.aug_traj.get_transformed_traj(reg) for (reg, demo) in zip(regs, demos)]
-        flip_wrist_rotations(aug_trajs)
+#         for lr in active_lr:
+#             for aug_traj in aug_trajs:
+#                 for t in range(aug_traj.n_steps)[::self.downsample_traj]:
+#                     handles.extend(sim_util.draw_axis(self.sim, aug_traj.lr2ee_traj[lr][t], arrow_length=.01, arrow_width=.001))
         
         if plotting:
             for aug_traj in aug_trajs:
@@ -298,6 +325,15 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
                         plt.plot(traj[:,i_dof])
             plt.draw()
         
+#         for lr in active_lr:
+#             for t in range(t_steps)[::self.downsample_traj]:
+#                 for i_demo in range(dof_val.shape[0]):
+#                     dof_val = aligned_lr2trajs[lr][:,t,:]
+#                     hmat = np.eye(4)
+#                     hmat[:3,:3] = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
+#                     hmat[:3,3] = dof_val[i_demo,:3]
+#                     handles.extend(sim_util.draw_axis(self.sim, hmat, arrow_length=.01, arrow_width=.001))
+
         lr2dof_mu_traj = {}
         lr2dof_sigma_traj = {}
         for lr in active_lr:
@@ -331,6 +367,15 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
                 
             lr2dof_mu_traj[lr] = dof_mu_traj
             lr2dof_sigma_traj[lr] = dof_sigma_traj
+
+#         for lr in active_lr:
+#             for t in range(t_steps)[::self.downsample_traj]:
+#                 for i_demo in range(dof_val.shape[0]):
+#                     dof_val = aligned_lr2trajs[lr][:,t,:]
+#                     hmat = np.eye(4)
+#                     hmat[:3,:3] = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
+#                     hmat[:3,3] = dof_val[i_demo,:3]
+#                     handles.extend(sim_util.draw_axis(self.sim, hmat, arrow_length=.01, arrow_width=.001))
         
         if plotting:
             for lr in active_lr:
@@ -404,12 +449,11 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         test_aug_traj.lr2open_finger_traj = aligned_aug_trajs[0].lr2open_finger_traj
         test_aug_traj.lr2close_finger_traj = aligned_aug_trajs[0].lr2close_finger_traj
         test_aug_traj.lr2force_traj = {}
-        test_aug_traj.lr2force_ext_traj = {}
+        test_aug_traj.lr2x_traj = {}
         for lr in active_lr:
             assert lr2dof_mu_traj[lr].shape[0] == test_aug_traj.n_steps
-            assert lr2dof_mu_traj[lr].shape[1] == 24
+            assert lr2dof_mu_traj[lr].shape[1] == 18
             test_aug_traj.lr2force_traj[lr] = lr2dof_mu_traj[lr][:,12:18]
-            test_aug_traj.lr2force_ext_traj[lr] = lr2dof_mu_traj[lr][:,18:24]
         
         test_aug_traj.lr2dof_mu_traj = lr2dof_mu_traj
         test_aug_traj.lr2dof_sigma_traj = lr2dof_sigma_traj
@@ -422,7 +466,126 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         
         return test_aug_traj
 
-def register_scenes(reg_factory, scene_state):
+def kalman_smoother(Z, M_inv, plotting=False):
+    """
+    X: state
+    U: control
+    Z: observation (position and forces)
+    F: state transition model
+    B: control input model
+    Q: process variance
+    R: observation variance
+    """
+    t_steps = Z.shape[0]
+    
+    x0 = np.r_[Z[0,0:6],
+               np.zeros(4*6)]
+    P0 = np.eye(5*6)
+    P0[0*6:1*6,0*6:1*6] *= 0.005 # small
+    P0[1*6:2*6,1*6:2*6] *= 0     # small
+    P0[2*6:3*6,2*6:3*6] *= 0     # small
+    P0[3*6:4*6,3*6:4*6] *= 100   # medium # TODO
+    P0[4*6:5*6,4*6:5*6] *= 1     # high   # TODO
+    
+    # transition matrix
+    F = np.zeros((t_steps-1, 5*6, 5*6))
+    # observation matrix
+    H = np.r_[np.c_[      np.eye(6), np.zeros((6,6)),   np.zeros((6,6)), np.zeros((6,6)), np.zeros((6,6))],
+              np.c_[np.zeros((6,6)), np.zeros((6,6)),   np.zeros((6,6)), np.zeros((6,6)),       np.eye(6)]]
+    for t in range(t_steps-1):
+        F[t] = np.r_[np.c_[      np.eye(6),    DT*np.eye(6), (DT**2)*np.eye(6), np.zeros((6,6)), np.zeros((6,6))],
+                     np.c_[np.zeros((6,6)),       np.eye(6),      DT*np.eye(6), np.zeros((6,6)), np.zeros((6,6))],
+                     np.c_[np.zeros((6,6)), np.zeros((6,6)),   np.zeros((6,6)),        M_inv[t],        M_inv[t]],
+                     np.c_[np.zeros((6,6)), np.zeros((6,6)),   np.zeros((6,6)),       np.eye(6), np.zeros((6,6))],
+                     np.c_[np.zeros((6,6)), np.zeros((6,6)),   np.zeros((6,6)), np.zeros((6,6)),       np.eye(6)]]
+    
+    # transition covariance
+    Q = np.eye(5*6)
+    Q[0*6:1*6,0*6:1*6] *= 0.005       # small
+    Q[1*6:2*6,1*6:2*6] *= (0.005/DT)  # small
+    Q[2*6:3*6,2*6:3*6] *= (1/(DT*DT)) # small
+    Q[3*6:4*6,3*6:4*6] *= 100         # medium # TODO
+    Q[4*6:5*6,4*6:5*6] *= 1           # high   # TODO
+    # observation covariance
+    R = np.eye(2*6)
+    R[0*6:1*6,0*6:1*6] *= 0.005
+    R[1*6:2*6,1*6:2*6] *= 5 # TODO
+    
+    def em_transition_matrix(transition_offsets, smoothed_state_means,
+                              smoothed_state_covariances, pairwise_covariances):
+        res = F.copy()
+        n_timesteps, n_dim_state, _ = smoothed_state_covariances.shape
+        print "em_transition_matrix"
+        time_start = time.time()
+        for tt in range(1, n_timesteps):
+            if tt % 100 == 0:
+                print tt
+            t_start = np.clip(tt-500, 1, n_timesteps)
+            t_end = np.clip(tt+500+1, 1, n_timesteps)
+            
+            res1 = np.zeros((n_dim_state, n_dim_state))
+            res2 = np.zeros((n_dim_state, n_dim_state))
+            ws = np.exp(-((np.arange(t_start, t_end)-tt)**2)/(200.0**2))
+            ws /= ws.sum()
+            for t, w in zip(range(t_start, t_end), ws):
+                transition_offset = _last_dims(transition_offsets, t - 1, ndims=1)
+                res1 += w * (
+                    pairwise_covariances[t]
+                    + np.outer(smoothed_state_means[t],
+                               smoothed_state_means[t - 1])
+                    - np.outer(transition_offset, smoothed_state_means[t - 1])
+                )
+                res2 += w * (
+                    smoothed_state_covariances[t - 1]
+                    + np.outer(smoothed_state_means[t - 1],
+                               smoothed_state_means[t - 1])
+                )
+    #         res[tt-1] = np.linalg.solve(res2.T, res1.T).T
+    #         M_inv = np.linalg.solve((res2[0*6:1*6,:] + res2[1*6:2*6,:]).T, res1[2*6:3*6,:].T)
+            F_tmp = np.dot(res1, np.linalg.pinv(res2))
+            m_inv0 = F_tmp[2*6:3*6,3*6:4*6]
+            m_inv1 = F_tmp[2*6:3*6,4*6:5*6]
+            m_inv = (m_inv0 + m_inv1) / 2.
+            res[tt-1,2*6:3*6,3*6:4*6] = m_inv
+            res[tt-1,2*6:3*6,4*6:5*6] = m_inv
+        print "time", time.time() - time_start
+        return res
+    
+    kf = KalmanFilter(transition_matrices=F, observation_matrices=H, transition_covariance=Q, observation_covariance=R,
+                      initial_state_mean=x0, initial_state_covariance=P0)
+    kf = kf.em(Z, n_iter=5, em_vars=['transition_covariance', 'observation_covariance'])
+#     kf = kf.em(Z, n_iter=5, em_vars=['transition_matrices'], em_transition_matrix=em_transition_matrix)
+    (X_smoothed, P_smoothed) = kf.smooth(Z)
+    
+    if plotting:
+        plt.ion()
+        fig = plt.figure()
+        for i in range(5):
+            plt.subplot(5,2,2*i+1)
+            plt.plot(X_smoothed[:,6*i], 'r')
+            plt.plot(X_smoothed[:,6*i+1], 'g')
+            plt.plot(X_smoothed[:,6*i+2], 'b')
+            plt.subplot(5,2,2*i+1+1)
+            plt.plot(X_smoothed[:,6*i+3], 'r')
+            plt.plot(X_smoothed[:,6*i+4], 'g')
+            plt.plot(X_smoothed[:,6*i+5], 'b')
+        plt.draw()
+        
+        fig = plt.figure()
+        for i in range(2):
+            plt.subplot(2,2,2*i+1)
+            plt.plot(Z[:,6*i], 'r')
+            plt.plot(Z[:,6*i+1], 'g')
+            plt.plot(Z[:,6*i+2], 'b')
+            plt.subplot(2,2,2*i+1+1)
+            plt.plot(Z[:,6*i+3], 'r')
+            plt.plot(Z[:,6*i+4], 'g')
+            plt.plot(Z[:,6*i+5], 'b')
+        plt.draw()
+    
+    return X_smoothed
+
+def register_scenes(sim, reg_factory, scene_state):
     sys.stdout.write("registering all scenes... ")
     sys.stdout.flush()
     regs = []
@@ -606,22 +769,22 @@ def processFuncCt(cliptype, pM, pm, empsig, empmu, pD, pd, Ct, ct, Lt):
         raise NotImplementedError
     
 class ForceAugmentedTrajectory(AugmentedTrajectory):
-    def __init__(self, lr2force_traj, lr2force_ext_traj, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
+    def __init__(self, lr2force_traj, lr2x_traj, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
         super(ForceAugmentedTrajectory, self).__init__(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, 
                                                        lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
-        for lr2traj in [lr2force_traj, lr2force_ext_traj]:
+        for lr2traj in [lr2force_traj, lr2x_traj]:
             if lr2traj is None:
                 continue
             for lr in lr2traj.keys():
                 assert lr2traj[lr].shape[0] == self.n_steps
         
         self.lr2force_traj = lr2force_traj
-        self.lr2force_ext_traj = lr2force_ext_traj
+        self.lr2x_traj = lr2x_traj
     
     @staticmethod
-    def create_from_full_traj(robot, full_traj, lr2force_traj, lr2force_ext_traj, lr2open_finger_traj=None, lr2close_finger_traj=None):
+    def create_from_full_traj(robot, full_traj, lr2force_traj, lr2x_traj, lr2open_finger_traj=None, lr2close_finger_traj=None):
         aug_traj = AugmentedTrajectory.create_from_full_traj(robot, full_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
-        return ForceAugmentedTrajectory(lr2force_traj, lr2force_ext_traj, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, lr2open_finger_traj=aug_traj.lr2open_finger_traj, lr2close_finger_traj=aug_traj.lr2close_finger_traj)
+        return ForceAugmentedTrajectory(lr2force_traj, lr2x_traj, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, lr2open_finger_traj=aug_traj.lr2open_finger_traj, lr2close_finger_traj=aug_traj.lr2close_finger_traj)
     
     def get_resampled_traj(self, timesteps_rs):
         """
@@ -630,13 +793,13 @@ class ForceAugmentedTrajectory(AugmentedTrajectory):
         """
         aug_traj = super(ForceAugmentedTrajectory, self).get_resampled_traj(timesteps_rs)
         lr2force_traj_rs = None if self.lr2force_traj is None else {}
-        lr2force_ext_traj_rs = None if self.lr2force_ext_traj is None else {}
-        for (lr2traj_rs, self_lr2traj) in [(lr2force_traj_rs, self.lr2force_traj), (lr2force_ext_traj_rs, self.lr2force_ext_traj)]:
+        lr2x_traj_rs = None if self.lr2x_traj is None else {}
+        for (lr2traj_rs, self_lr2traj) in [(lr2force_traj_rs, self.lr2force_traj), (lr2x_traj_rs, self.lr2x_traj)]:
             if self_lr2traj is None:
                 continue
             for lr in self_lr2traj.keys():
                 lr2traj_rs[lr] = math_utils.interp2d(timesteps_rs, np.arange(len(self_lr2traj[lr])), self_lr2traj[lr])
-        return ForceAugmentedTrajectory(lr2force_traj_rs, lr2force_ext_traj_rs, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, 
+        return ForceAugmentedTrajectory(lr2force_traj_rs, lr2x_traj_rs, lr2arm_traj=aug_traj.lr2arm_traj, lr2finger_traj=aug_traj.lr2finger_traj, lr2ee_traj=aug_traj.lr2ee_traj, 
                                  lr2open_finger_traj=aug_traj.lr2open_finger_traj, lr2close_finger_traj=aug_traj.lr2close_finger_traj)
     
     def get_transformed_traj(self, reg):
@@ -646,9 +809,7 @@ class ForceAugmentedTrajectory(AugmentedTrajectory):
         for lr in self.lr2force_traj.keys(): # should use the original position for the jacobians
             aug_traj.lr2force_traj[lr] = np.c_[reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_traj[lr][:,:3]), \
                                                reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_traj[lr][:,3:])]
-        for lr in self.lr2force_ext_traj.keys():
-            aug_traj.lr2force_ext_traj[lr] = np.c_[reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_ext_traj[lr][:,:3]), \
-                                                   reg.f.transform_vectors(self.lr2ee_traj[lr][:,:3,3], self.lr2force_ext_traj[lr][:,3:])]
+        aug_traj.lr2x_traj = {}
         return aug_traj
 
 def parse_input_args():
@@ -684,6 +845,8 @@ def parse_input_args():
     parser_eval.add_argument("--force_coef", type=float, default=1, help="coefficient for dtw force cost")
     parser_eval.add_argument("--torque_coef", type=float, default=1, help="coefficient for dtw torque cost")
 
+    parser_eval.add_argument("--recompute_smoothing", action="store_true", default=False)
+
     parser_eval.add_argument("--downsample_traj", type=int, default=1, help="downsample demonstration trajectory by this factor")
     parser_eval.add_argument("--max_num_demos", type=int, default=10, help="maximum number of demos to combine")
 
@@ -691,11 +854,12 @@ def parse_input_args():
     return args
 
 def setup_demos(args, robot):
-    actions = h5py.File(args.eval.actionfile, 'r')
+    actions = h5py.File(args.eval.actionfile)
     
     demos = {}
     for action, seg_info in actions.iteritems():
         if 'overhand' in args.eval.actionfile and 'seg00' not in action: continue #TODO
+        if 'board3flip0_seg00' == action: continue
         full_cloud = seg_info['cloud_xyz'][()]
         scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
         lr2force_traj = {}
@@ -716,23 +880,61 @@ def setup_demos(args, robot):
             lr2close_finger_traj[lr][closing_inds] = True
             if "%s_gripper_force"%lr in seg_info:
                 lr2force_traj[lr] = np.asarray(seg_info["%s_gripper_force"%lr])
-        M_inv = calculate_masses(lr2arm_traj, robot)
-        lr2force_ext_traj = {}
-        for lr in 'lr':
-            accel = np.c_[np.diff(np.diff(lr2ee_traj[lr][:,:3,3], axis=0), axis=0),
-                          axisAngleFromRotationMatrix(diff_rotation_matrix(diff_rotation_matrix(lr2ee_traj[lr][:,:3,:3])))]
-            accel = np.r_[accel[0,:][None,:], accel[0,:][None,:], accel]
-            accel /= DT*DT
-            lr2force_ext_traj[lr] = np.empty((len(lr2force_traj[lr]), 6))
-            for t in range(len(lr2force_traj[lr])):
-                M = np.linalg.inv(M_inv[lr][t])
-                if t == 0:
-                    lr2force_ext_traj[lr][t,:] = M.dot(accel[t,:]) - lr2force_traj[lr][t,:]
-                else:
-                    lr2force_ext_traj[lr][t,:] = M.dot(accel[t,:]) - lr2force_traj[lr][t-1,:]
-        aug_traj = ForceAugmentedTrajectory(lr2force_traj, lr2force_ext_traj, lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
+        aug_traj = ForceAugmentedTrajectory(lr2force_traj, None, lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
         demo = Demonstration(action, scene_state, aug_traj)
         demos[action] = demo
+
+    flip_wrist_rotations([demo.aug_traj for demo in demos.values()])
+    for action, seg_info in actions.iteritems():
+        aug_traj = demos[action].aug_traj
+        lr2x_traj = {}
+        for lr in 'lr':
+            if "%s_gripper_x"%lr not in seg_info or args.eval.recompute_smoothing:
+                sys.stdout.write("running Kalman smoothing for demo %s... "%action)
+                sys.stdout.flush()
+                lr2M_inv = calculate_masses(aug_traj.lr2arm_traj, robot)
+                aas = axisAngleFromRotationMatrix(aug_traj.lr2ee_traj[lr][:,:3,:3])
+                flip_angle_axis_in_place([aas])
+                Z = np.c_[aug_traj.lr2ee_traj[lr][:,:3,3], 
+                          aas,
+                          aug_traj.lr2force_traj[lr]]
+                lr2x_traj[lr] = kalman_smoother(Z, lr2M_inv[lr], plotting=False)
+                del seg_info["%s_gripper_x"%lr]
+                seg_info["%s_gripper_x"%lr] = lr2x_traj[lr]
+                print "done"
+            else:
+                lr2x_traj[lr] = np.asarray(seg_info["%s_gripper_x"%lr])
+        aug_traj.lr2x_traj = lr2x_traj
+    actions.close()
+    
+    for demo in demos.values():
+        aug_traj = demo.aug_traj
+        for lr in 'lr':
+            ee_traj = np.empty((len(aug_traj.lr2x_traj[lr]), 4, 4))
+            ee_traj[:] = np.eye(4)
+            ee_traj[:,:3,3] = aug_traj.lr2x_traj[lr][:,:3]
+            ee_traj[:,:3,:3] = rotationMatrixFromAxisAngle(aug_traj.lr2x_traj[lr][:,3:6])
+            force_traj = aug_traj.lr2x_traj[lr][:,3*6:4*6] + aug_traj.lr2x_traj[lr][:,4*6:5*6]
+            aug_traj.lr2ee_traj[lr] = ee_traj
+            aug_traj.lr2force_traj[lr] = force_traj
+
+#             plt.ion()
+#             plt.figure()
+#             plt.subplot(2,1,1)
+#             plt.plot(ee_traj[:,0,3], 'r')
+#             plt.plot(ee_traj[:,1,3], 'g')
+#             plt.plot(ee_traj[:,2,3], 'b')
+#             plt.plot(aug_traj.lr2ee_traj[lr][:,0,3], 'r')
+#             plt.plot(aug_traj.lr2ee_traj[lr][:,1,3], 'g')
+#             plt.plot(aug_traj.lr2ee_traj[lr][:,2,3], 'b')
+#             plt.subplot(2,1,2)
+#             plt.plot(force_traj[:,0], 'r')
+#             plt.plot(force_traj[:,1], 'g')
+#             plt.plot(force_traj[:,2], 'b')
+#             plt.plot(aug_traj.lr2force_traj[lr][:,0], 'r')
+#             plt.plot(aug_traj.lr2force_traj[lr][:,1], 'g')
+#             plt.plot(aug_traj.lr2force_traj[lr][:,2], 'b')
+#             plt.draw()
     return demos
 
 def setup_lfd_environment_sim(args):
@@ -750,7 +952,6 @@ def setup_lfd_environment_sim(args):
     sim.add_objects(sim_objs)
     lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
     
-    actions = h5py.File(args.eval.actionfile, 'r')
     _, seg_info = actions.items()[0]
     init_joint_names = np.asarray(seg_info["joint_states"]["name"])
     init_joint_values = np.asarray(seg_info["joint_states"]["position"][0])
@@ -758,6 +959,7 @@ def setup_lfd_environment_sim(args):
     values, dof_inds = zip(*[(value, dof_ind) for value, dof_ind in zip(init_joint_values, dof_inds) if dof_ind != -1])
     sim.robot.SetDOFValues(values, dof_inds) # this also sets the torso (torso_lift_joint) to the height in the data
     sim_util.reset_arms_to_side(sim)
+    actions.close()
     
     if args.animation:
         viewer = trajoptpy.GetViewer(sim.env)
@@ -819,11 +1021,12 @@ def main():
     full_cloud = demos.values()[0].scene_state.cloud
     scene_state = demonstration.SceneState(full_cloud, downsample_size=args.eval.downsample_size)
 
-    regs, demos = register_scenes(reg_factory, scene_state)
+    regs, demos = register_scenes(sim, reg_factory, scene_state)
     
     trajectory_transferer = MultipleDemosPoseTrajectoryTransferer(sim, args.eval.pos_coef, args.eval.rot_coef, args.eval.pos_vel_coef, args.eval.rot_vel_coef, args.eval.force_coef, args.eval.torque_coef, 
                                                                   args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost, 
                                                                   downsample_traj=args.eval.downsample_traj)
+    trajectory_transferer.lfd_env = lfd_env
     n_demos = min(args.eval.max_num_demos, len(reg_factory.demos))
     test_aug_traj = trajectory_transferer.transfer(regs[:n_demos], demos[:n_demos], plotting=args.animation, plotting_std_dev=args.std_dev)
 
