@@ -354,7 +354,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         if self.viewer and step_viewer:
             self.viewer.Step()
     
-    def close_gripper(self, lr, step_viewer=1, max_vel=.01, close_dist_thresh=0.006, grab_dist_thresh=0.007):
+    def close_gripper(self, lr, step_viewer=1, max_vel=.01, close_dist_thresh=0.007, grab_dist_thresh=0.008):
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = self.robot.GetDOFValues([joint_ind])[0]

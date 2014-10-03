@@ -276,6 +276,17 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         f = registration.unscale_tps(f, src_params, targ_params)
         wt_n_edge = corr.sum(axis=1)
         corr = (corr/wt_n_edge[:,None])
+
+        Epts = np.r_[x_nd[0:8],x_nd[0:8],x_nd[0:8],x_nd[8:16],x_nd[8:17],x_nd[17:]]
+        Exs = np.r_[np.tile(np.array([[-1,0,0],[-1,0,0],[1,0,0],[1,0,0]]), (2,1))]
+        Exs = np.r_[Exs, np.tile(np.array([[0,-1,0],[0,1,0]]),(4,1))]
+        Exs = np.r_[Exs,np.tile(np.array([0,0,1]), (8,1))]
+        Exs = np.r_[Exs,np.tile(np.array([[1,0,0],[-1,0,0],[0,-1,0],[0,1,0]]),(2,1))]
+        Exs = np.r_[Exs,np.tile(np.array([0,0,1]),(9,1))]
+        Exs = np.r_[Exs,np.tile(np.array([[1,0,0],[-1,0,0],[0,-1,0],[0,1,0]]),(2,1))]
+        Eys = Exs
+
+        
        # 
         f = registration.fit_ThinPlateSpline(x_nd,corr.dot(y_md),bend_coef=self.bend_coef)
         f._bending_cost = bending_cost # TODO: do this properly
