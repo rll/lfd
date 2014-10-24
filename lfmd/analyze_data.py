@@ -124,18 +124,18 @@ def flipped_angle_axis(aa_trajs):
     for axis_traj, angle_traj in zip(axis_trajs[1:], angle_trajs[1:]):
         if axis_traj[0].dot(axis_trajs[0][0]) < 0:
             axis_traj[0] *= -1
-            angle_traj[0] = -1 * (angle_traj[0] % 2*np.pi) + 2*np.pi
+            angle_traj[0] = -1 * (angle_traj[0] % (2*np.pi)) + 2*np.pi
     # flip axes for the rest of the trajectory for each trajectory
     for axis_traj, angle_traj in zip(axis_trajs, angle_trajs):
-        for i in range(len(axis_traj)):
-            if i > 0 and axis_traj[i].dot(axis_traj[i-1]) < 0:
-                axis_traj[i] *= -1
-                angle_traj[i] %= 2*np.pi
-                angle_traj[i] *= -1
-                angle_traj[i] += 2*np.pi
+        for t in range(len(axis_traj)):
+            if t > 0 and axis_traj[t].dot(axis_traj[t-1]) < 0:
+                axis_traj[t] *= -1
+                angle_traj[t] %= 2*np.pi
+                angle_traj[t] *= -1
+                angle_traj[t] += 2*np.pi
     # TODO: check if this is equivalent
 #     for axis_traj, angle_traj in zip(axis_trajs, angle_trajs):
-#         dot_products = np.einsum('ij,ij->i', axis_traj[:-1], axis_traj[1:]) # pairwise dot products axis_traj[t].dot(axis_traj[t-1])
+#         dot_products = np.einsum('ij,ij->t', axis_traj[:-1], axis_traj[1:]) # pairwise dot products axis_traj[t].dot(axis_traj[t-1])
 #         flip_inds = np.r_[False, dot_products < 0]
 #         for flip_ind in  np.where(flip_inds)[0]:
 #             if flip_ind != len(flip_inds)-1:
@@ -237,6 +237,14 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         
         trajs = None
         active_lr = 'lr'
+
+        if plotting:
+            for demo in demos:
+                aug_traj = demo.aug_traj
+                color = np.r_[np.random.random(3),1]
+                for lr in active_lr:
+                    handles.append(self.sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
+            self.sim.viewer.Idle()
         
         aug_trajs = [demo.aug_traj.get_transformed_traj(reg) for (reg, demo) in zip(regs, demos)]
 #         for lr in active_lr:
@@ -254,7 +262,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
             lr2trajs = {}
             for aug_traj in aug_trajs:
                 lr2traj = stack_traj(aug_traj)
-#                 flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
+                flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
                 for lr in active_lr:
                     if lr not in lr2trajs:
                         lr2trajs[lr] = []
@@ -307,7 +315,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
         aligned_lr2trajs = {}
         for aug_traj in aligned_aug_trajs:
             lr2traj = stack_traj(aug_traj)
-#             flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
+            flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
             for lr in active_lr:
                 if lr not in aligned_lr2trajs:
                     aligned_lr2trajs[lr] = []
@@ -464,6 +472,18 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
                 handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
             self.sim.viewer.Step()
         
+#         from rapprentice import eval_util
+#         f = h5py.File("towel_0_0_processed.h5")
+#         M_inv = {}
+#         J = {}
+#         for lr in active_lr:
+#             M_inv[lr], J[lr] = mass_calculate3(lr, self.sim.robot, test_aug_traj.lr2arm_traj[lr])
+#         eval_util.add_obj_to_group(f, 'M_inv', M_inv)
+#         eval_util.add_obj_to_group(f, 'J', J)
+#         eval_util.add_obj_to_group(f, 'dof_mu_traj', lr2dof_mu_traj)
+#         eval_util.add_obj_to_group(f, 'dof_sigma_traj', lr2dof_sigma_traj)
+#         eval_util.add_obj_to_group(f, 'aligned_trajs', aligned_lr2trajs)
+
         return test_aug_traj
 
 def kalman_smoother(Z, M_inv, plotting=False):
@@ -516,6 +536,7 @@ def kalman_smoother(Z, M_inv, plotting=False):
         res = F.copy()
         n_timesteps, n_dim_state, _ = smoothed_state_covariances.shape
         print "em_transition_matrix"
+        import time
         time_start = time.time()
         for tt in range(1, n_timesteps):
             if tt % 100 == 0:
@@ -590,7 +611,23 @@ def register_scenes(sim, reg_factory, scene_state):
     sys.stdout.flush()
     regs = []
     demos = []
+    
+#     from rapprentice import plotting_openrave
+#     def plot_cb(x_nd, y_md, targ_Nd, corr_nm, wt_n, f, demo):
+#         handles = []
+#         handles.append(sim.env.plot3(x_nd, 5, (1,0,0,1)))
+#         handles.append(sim.env.plot3(f.transform_points(x_nd), 5, (0,1,0,1)))
+#         handles.append(sim.env.plot3(y_md, 5, (0,0,1,1)))
+#         handles.extend(plotting_openrave.draw_grid(sim.env, f.transform_points, x_nd.min(axis=0) - .1, x_nd.max(axis=0) + .1, xres = .05, yres = .05, zres = .04))
+#         aug_traj = demo.aug_traj
+#         for lr in 'lr':
+#             handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
+#             handles.append(sim.env.drawlinestrip(f.transform_hmats(aug_traj.lr2ee_traj[lr])[:,:3,3], 2, (0,1,0)))
+#         print "plot_cb"
+#         sim.viewer.Idle()
+    
     for action, demo in reg_factory.demos.iteritems():
+#         reg = reg_factory.register(demo, scene_state, plotting=5, plot_cb=lambda x_nd, y_md, targ_Nd, corr_nm, wt_n, f: plot_cb(x_nd, y_md, targ_Nd, corr_nm, wt_n, f, demo))
         reg = reg_factory.register(demo, scene_state)
         regs.append(reg)
         demos.append(demo)
@@ -598,6 +635,27 @@ def register_scenes(sim, reg_factory, scene_state):
     print "done"
     
     return regs, demos
+
+def mass_calculate3(lr, robot, aligned_joint_traj):
+    manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+    arm = robot.GetManipulator(manip_name)
+    
+    joint_feedforward = [3.33, 1.16, 0.1, 0.25, 0.133, 0.0727, 0.0727]
+    M_joint_inv = np.linalg.inv(np.diag(joint_feedforward))
+    M_inv = []
+
+    cur_traj = aligned_joint_traj
+    M_inv = []
+    Js = []
+    for j in range(cur_traj.shape[0]):
+        vals = cur_traj[j,:]
+        robot.SetDOFValues(vals, arm.GetArmIndices())
+        J = np.vstack((arm.CalculateJacobian(), arm.CalculateAngularVelocityJacobian()))
+        M_inv.append(J.dot(M_joint_inv).dot(np.transpose(J)))
+        Js.append(J)
+    M_inv = np.asarray(M_inv)
+    Js = np.asarray(Js)
+    return M_inv, Js
 
 def mass_calculate2(lr, robot, aligned_joint_traj):
     manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
@@ -767,6 +825,55 @@ def processFuncCt(cliptype, pM, pm, empsig, empmu, pD, pd, Ct, ct, Lt):
         return Ct, ct, Lt
     else:
         raise NotImplementedError
+
+def mass_calculate(dof_val_mus, dof_val_sigmas, aligned_trajs):
+    #Regression code for getting masses
+    ipy.embed()
+    aligned_trajs = aligned_trajs[:,:,:18]
+    n_demos, t_steps, n_dof = aligned_trajs.shape
+    
+    xdot_trajs = aligned_trajs[:,:,6:12] / DT # TODO have 1/DT somewhere else
+    xdotdot_trajs = np.diff(xdot_trajs, axis=1) / DT
+    xdotdot_trajs = np.asarray([np.r_[xdotdot_traj, xdotdot_traj[-1][None,:]] for xdotdot_traj in xdotdot_trajs])
+    u_trajs = aligned_trajs[:,:,12:18]
+    
+    lambda_val = 0.1
+    alpha = 0.01
+    ms = np.zeros((t_steps,6))
+    for d in range(6):
+        for t in range(t_steps):
+            F = []
+            Xdot = []
+            Xdotdot = []
+            w = []
+            for i in range(n_demos):
+                # time window
+                t_start = np.clip(t-100, 0, t_steps)
+                t_end = np.clip(t+100+1, 0, t_steps)
+                F.append(u_trajs[i,t_start:t_end,d:d+1])
+                Xdot.append(xdot_trajs[i,t_start:t_end,d:d+1])
+                Xdotdot.append(xdotdot_trajs[i,t_start:t_end,d:d+1])
+                w_unnormalized = np.exp(-.5*alpha*((np.arange(t_start, t_end)-t)**2))
+                w.append(w_unnormalized/w_unnormalized.sum())
+            F = np.concatenate(F)
+            F = np.c_[F, np.ones_like(F)]
+            Xdot = np.concatenate(Xdot)
+            Xdotdot = np.concatenate(Xdotdot)
+            w = np.concatenate(w)
+            WF = w[:,None] * F
+            M = np.linalg.solve(F.T.dot(WF) + lambda_val*np.eye(2), WF.T.dot(Xdotdot))
+            ms[t,d] = 1./M[0]
+            if d == 0 and t == 300:
+                fig = plt.figure()
+                plt.scatter(Xdot, F[:,0])
+                plt.draw()
+
+    fig = plt.figure()
+    for d in range(6):
+        ax = fig.add_subplot(6,1,d+1)
+        plt.plot(ms[:,d])
+        ax.set_yscale('log')
+    plt.draw()
     
 class ForceAugmentedTrajectory(AugmentedTrajectory):
     def __init__(self, lr2force_traj, lr2x_traj, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
@@ -884,39 +991,39 @@ def setup_demos(args, robot):
         demo = Demonstration(action, scene_state, aug_traj)
         demos[action] = demo
 
-    flip_wrist_rotations([demo.aug_traj for demo in demos.values()])
-    for action, seg_info in actions.iteritems():
-        aug_traj = demos[action].aug_traj
-        lr2x_traj = {}
-        for lr in 'lr':
-            if "%s_gripper_x"%lr not in seg_info or args.eval.recompute_smoothing:
-                sys.stdout.write("running Kalman smoothing for demo %s... "%action)
-                sys.stdout.flush()
-                lr2M_inv = calculate_masses(aug_traj.lr2arm_traj, robot)
-                aas = axisAngleFromRotationMatrix(aug_traj.lr2ee_traj[lr][:,:3,:3])
-                flip_angle_axis_in_place([aas])
-                Z = np.c_[aug_traj.lr2ee_traj[lr][:,:3,3], 
-                          aas,
-                          aug_traj.lr2force_traj[lr]]
-                lr2x_traj[lr] = kalman_smoother(Z, lr2M_inv[lr], plotting=False)
-                del seg_info["%s_gripper_x"%lr]
-                seg_info["%s_gripper_x"%lr] = lr2x_traj[lr]
-                print "done"
-            else:
-                lr2x_traj[lr] = np.asarray(seg_info["%s_gripper_x"%lr])
-        aug_traj.lr2x_traj = lr2x_traj
-    actions.close()
+#     flip_wrist_rotations([demo.aug_traj for demo in demos.values()])
+#     for action, seg_info in actions.iteritems():
+#         aug_traj = demos[action].aug_traj
+#         lr2x_traj = {}
+#         for lr in 'lr':
+#             if "%s_gripper_x"%lr not in seg_info or args.eval.recompute_smoothing:
+#                 sys.stdout.write("running Kalman smoothing for demo %s... "%action)
+#                 sys.stdout.flush()
+#                 lr2M_inv = calculate_masses(aug_traj.lr2arm_traj, robot)
+#                 aas = axisAngleFromRotationMatrix(aug_traj.lr2ee_traj[lr][:,:3,:3])
+#                 flip_angle_axis_in_place([aas])
+#                 Z = np.c_[aug_traj.lr2ee_traj[lr][:,:3,3], 
+#                           aas,
+#                           aug_traj.lr2force_traj[lr]]
+#                 lr2x_traj[lr] = kalman_smoother(Z, lr2M_inv[lr], plotting=False)
+#                 del seg_info["%s_gripper_x"%lr]
+#                 seg_info["%s_gripper_x"%lr] = lr2x_traj[lr]
+#                 print "done"
+#             else:
+#                 lr2x_traj[lr] = np.asarray(seg_info["%s_gripper_x"%lr])
+#         aug_traj.lr2x_traj = lr2x_traj
+#     actions.close()
     
-    for demo in demos.values():
-        aug_traj = demo.aug_traj
-        for lr in 'lr':
-            ee_traj = np.empty((len(aug_traj.lr2x_traj[lr]), 4, 4))
-            ee_traj[:] = np.eye(4)
-            ee_traj[:,:3,3] = aug_traj.lr2x_traj[lr][:,:3]
-            ee_traj[:,:3,:3] = rotationMatrixFromAxisAngle(aug_traj.lr2x_traj[lr][:,3:6])
-            force_traj = aug_traj.lr2x_traj[lr][:,3*6:4*6] + aug_traj.lr2x_traj[lr][:,4*6:5*6]
-            aug_traj.lr2ee_traj[lr] = ee_traj
-            aug_traj.lr2force_traj[lr] = force_traj
+#     for demo in demos.values():
+#         aug_traj = demo.aug_traj
+#         for lr in 'lr':
+#             ee_traj = np.empty((len(aug_traj.lr2x_traj[lr]), 4, 4))
+#             ee_traj[:] = np.eye(4)
+#             ee_traj[:,:3,3] = aug_traj.lr2x_traj[lr][:,:3]
+#             ee_traj[:,:3,:3] = rotationMatrixFromAxisAngle(aug_traj.lr2x_traj[lr][:,3:6])
+#             force_traj = aug_traj.lr2x_traj[lr][:,3*6:4*6] + aug_traj.lr2x_traj[lr][:,4*6:5*6]
+#             aug_traj.lr2ee_traj[lr] = ee_traj
+#             aug_traj.lr2force_traj[lr] = force_traj
 
 #             plt.ion()
 #             plt.figure()
@@ -1017,6 +1124,14 @@ def main():
     demos = setup_demos(args, sim.robot)
     reg_factory = setup_registration(args, demos, sim)
     
+#     ipy.embed()
+#     for action, demo in demos.iteritems():
+#         handles = []
+#         handles.append(sim.env.plot3(demo.scene_state.cloud, 2, (0,0,1)))
+#         lfd_env.execute_augmented_trajectory(demo.aug_traj, step_viewer=10, interactive=args.interactive)
+    
+#     import pickle
+#     full_cloud = pickle.load(open("data/cloud9.pickle", "rb" ))['cloud']
     # for now, use the cloud of the first demo as the current cloud
     full_cloud = demos.values()[0].scene_state.cloud
     scene_state = demonstration.SceneState(full_cloud, downsample_size=args.eval.downsample_size)
