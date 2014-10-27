@@ -4,11 +4,9 @@ from __future__ import division
 
 import numpy as np
 import trajoptpy, openravepy
-from rapprentice import planning, resampling
 from core.simulation import DynamicSimulation
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject, CylinderSimulationObject
 from core import sim_util
-import IPython as ipy #TODO
 
 table_height = 0.77
 helix_ang0 = 0
