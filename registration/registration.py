@@ -114,7 +114,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                               rad_init=self.rad_init, rad_final=self.rad_final, 
                               rot_reg=self.rot_reg, 
                               outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                              prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
+                              prior_prob_nm=prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
         
         return Registration(demo, test_scene_state, f, corr)
     
@@ -188,7 +188,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                      rad_init=self.rad_init, rad_final=self.rad_final, 
                                      rot_reg=self.rot_reg, 
                                      outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                                     prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
+                                     prior_prob_nm=prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
         
         return Registration(demo, test_scene_state, f, corr, g=g)
     
