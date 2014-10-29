@@ -156,7 +156,7 @@ class ThinPlateSpline(Transformation):
         self.wt_n = None
     
     @staticmethod
-    def fit_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n=None):
+    def fit_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n):
         """
         x_na: source cloud
         y_nd: target cloud
@@ -165,13 +165,21 @@ class ThinPlateSpline(Transformation):
         wt_n: weight the points        
         """
         f = ThinPlateSpline()
-        f.lin_ag, f.trans_g, f.w_ng = tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n)
-        f.x_na = x_na
-        f.y_ng = y_ng
-        f.bend_coef = bend_coef
-        f.rot_coef = rot_coef
-        f.wt_n
-        return f
+        f.set_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n)
+
+    def set_ThinPlateSpline(self, x_na, y_ng, bend_coef, rot_coef, wt_n, theta=None):
+        if theta is None:
+            self.lin_ag, self.trans_g, self.w_ng = tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n)
+        else:
+            d = x_na.shape[1]
+            self.trans_g = theta[0]
+            self.lin_ag  = theta[1:d+1]
+            self.w_ng    = theta[d+1:]
+        self.x_na = x_na
+        self.y_ng = y_ng
+        self.bend_coef = bend_coef
+        self.rot_coef = rot_coef
+        self.wt_n = wt_n
     
     def transform_points(self, x_ma):
         y_ng = tps_eval(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
@@ -238,7 +246,7 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
         wt_m /= len(y_md) # normalize by number of points            
         return y_md, ytarg_md, wt_m
 
-def tps_rpm(x_nd, y_md, fsolve=None, 
+def tps_rpm(x_nd, y_md, f_solver_factory=None, 
             n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
             reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
             rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
@@ -257,8 +265,15 @@ def tps_rpm(x_nd, y_md, fsolve=None,
     # set up outlier priors for source and target scenes
     n, _ = x_nd.shape
     m, _ = y_md.shape
-    x_priors = np.ones(n)*outlierprior    
-    y_priors = np.ones(m)*outlierprior    
+    x_priors = np.ones(n)*outlierprior
+    y_priors = np.ones(m)*outlierprior
+    
+    # set up custom solver if solver factory is specified
+    if f_solver_factory is None:
+        fsolve = None
+    else:
+        x_K_nn = tps_kernel_matrix(x_nd)
+        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -275,7 +290,7 @@ def tps_rpm(x_nd, y_md, fsolve=None,
             x_nd_inlier, xtarg_nd, wt_n = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm)
     
             if fsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n=wt_n)
+                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
             else:
                 fsolve.solve(wt_n, xtarg_nd, reg, rot_reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
         
@@ -284,7 +299,7 @@ def tps_rpm(x_nd, y_md, fsolve=None,
         
     return f, corr_nm
 
-def tps_rpm_bij(x_nd, y_md, fsolve=None, gsolve=None, 
+def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None, 
                 n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
                 reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
                 rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
@@ -306,8 +321,20 @@ def tps_rpm_bij(x_nd, y_md, fsolve=None, gsolve=None,
     # set up outlier priors for source and target scenes
     n, _ = x_nd.shape
     m, _ = y_md.shape
-    x_priors = np.ones(n)*outlierprior    
-    y_priors = np.ones(m)*outlierprior    
+    x_priors = np.ones(n)*outlierprior
+    y_priors = np.ones(m)*outlierprior
+    
+    # set up custom solver if solver factory is specified
+    if f_solver_factory is None:
+        fsolve = None
+    else:
+        x_K_nn = tps_kernel_matrix(x_nd)
+        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs)
+    if g_solver_factory is None:
+        gsolve = None
+    else:
+        y_K_nn = tps_kernel_matrix(y_md)
+        gsolve = g_solver_factory.get_solver(x_nd, y_K_nn, regs)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -328,11 +355,11 @@ def tps_rpm_bij(x_nd, y_md, fsolve=None, gsolve=None,
             y_md_inlier, ytarg_md, wt_m = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=False)
     
             if fsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n=wt_n)
+                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
             else:
                 fsolve.solve(wt_n, xtarg_nd, reg, rot_reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
             if gsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_n=wt_m)
+                f = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_m)
             else:
                 gsolve.solve(wt_m, ytarg_md, reg, rot_reg, g) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
         
