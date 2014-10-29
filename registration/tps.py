@@ -337,7 +337,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
         gsolve = None
     else:
         y_K_nn = tps_kernel_matrix(y_md)
-        gsolve = g_solver_factory.get_solver(x_nd, y_K_nn, regs, rot_reg)
+        gsolve = g_solver_factory.get_solver(y_md, y_K_nn, regs, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
