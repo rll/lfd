@@ -19,8 +19,9 @@ class Demonstration(object):
         """
         self.name = name
         self.scene_state = scene_state
-        assert aug_traj.lr2ee_traj is not None
-        assert aug_traj.lr2finger_traj is not None
+        if aug_traj is not None:
+            assert aug_traj.lr2ee_traj is not None
+            assert aug_traj.lr2finger_traj is not None
         self.aug_traj = aug_traj
     
     def __repr__(self):
