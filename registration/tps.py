@@ -166,6 +166,7 @@ class ThinPlateSpline(Transformation):
         """
         f = ThinPlateSpline()
         f.set_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n)
+        return f
 
     def set_ThinPlateSpline(self, x_na, y_ng, bend_coef, rot_coef, wt_n, theta=None):
         if theta is None:
@@ -273,7 +274,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
         fsolve = None
     else:
         x_K_nn = tps_kernel_matrix(x_nd)
-        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs)
+        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -292,7 +293,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             if fsolve is None:
                 f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
             else:
-                fsolve.solve(wt_n, xtarg_nd, reg, rot_reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
+                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
@@ -329,12 +330,12 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
         fsolve = None
     else:
         x_K_nn = tps_kernel_matrix(x_nd)
-        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs)
+        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs, rot_reg)
     if g_solver_factory is None:
         gsolve = None
     else:
         y_K_nn = tps_kernel_matrix(y_md)
-        gsolve = g_solver_factory.get_solver(x_nd, y_K_nn, regs)
+        gsolve = g_solver_factory.get_solver(x_nd, y_K_nn, regs, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -357,11 +358,11 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
             if fsolve is None:
                 f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
             else:
-                fsolve.solve(wt_n, xtarg_nd, reg, rot_reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
+                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
             if gsolve is None:
                 f = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_m)
             else:
-                gsolve.solve(wt_m, ytarg_md, reg, rot_reg, g) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
+                gsolve.solve(wt_m, ytarg_md, reg, g) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)

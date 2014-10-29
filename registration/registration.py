@@ -1,7 +1,7 @@
 from __future__ import division
 
 import numpy as np
-import constants.TpsConstant as tpsc
+from constants import TpsConstant as tpsc
 import tps, solver
 
 class Registration(object):
@@ -102,10 +102,10 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         self.outlierfrac = outlierfrac
         self.prior_fn = prior_fn
         
-        if use_solver is None:
-            self.f_solver_factory = None
-        else:
+        if use_solver:
             self.f_solver_factory = solver.TpsSolverFactory()
+        else:
+            self.f_solver_factory = None
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         if self.prior_fn is not None:
@@ -184,12 +184,12 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.outlierfrac = outlierfrac
         self.prior_fn = prior_fn
         
-        if use_solver is None:
-            self.f_solver_factory = None
-            self.g_solver_factory = None
-        else:
+        if use_solver:
             self.f_solver_factory = solver.TpsSolverFactory()
             self.g_solver_factory = solver.TpsSolverFactory()
+        else:
+            self.f_solver_factory = None
+            self.g_solver_factory = None
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         if self.prior_fn is not None:

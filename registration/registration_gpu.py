@@ -1,7 +1,7 @@
 from __future__ import division
 
 import numpy as np
-import constants.TpsGpuConstant as tpsgc
+from constants import TpsGpuConstant as tpsgc
 from registration import Registration, RegistrationFactory
 import tps, solver_gpu
 import tpsopt
