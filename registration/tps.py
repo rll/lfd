@@ -1,6 +1,8 @@
 """
 Functions for fitting and applying thin plate spline transformations
 """
+from __future__ import division
+
 from constants import TpsConstant as tpsc
 import numpy as np
 import scipy.spatial.distance as ssd
