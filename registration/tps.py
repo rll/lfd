@@ -275,8 +275,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
     if f_solver_factory is None:
         fsolve = None
     else:
-        x_K_nn = tps_kernel_matrix(x_nd)
-        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs, rot_reg)
+        fsolve = f_solver_factory.get_solver(x_nd, regs, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -331,13 +330,11 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
     if f_solver_factory is None:
         fsolve = None
     else:
-        x_K_nn = tps_kernel_matrix(x_nd)
-        fsolve = f_solver_factory.get_solver(x_nd, x_K_nn, regs, rot_reg)
+        fsolve = f_solver_factory.get_solver(x_nd, regs, rot_reg)
     if g_solver_factory is None:
         gsolve = None
     else:
-        y_K_nn = tps_kernel_matrix(y_md)
-        gsolve = g_solver_factory.get_solver(y_md, y_K_nn, regs, rot_reg)
+        gsolve = g_solver_factory.get_solver(y_md, regs, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -362,7 +359,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
             else:
                 fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
             if gsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_m)
+                g = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_m)
             else:
                 gsolve.solve(wt_m, ytarg_md, reg, g) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
         

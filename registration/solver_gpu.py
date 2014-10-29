@@ -9,25 +9,16 @@ import pycuda.autoinit
 from tpsopt.culinalg_exts import gemm, get_gpu_ptrs, dot_batch_nocheck
 import scipy.linalg
 
-class TpsGpuSolver(object):
+from solver import TpsSolver, TpsSolverFactory
+
+class TpsGpuSolver(TpsSolver):
     """
     class to fit a thin plate spline to data using precomputed
     matrix products
     """
     def __init__(self, bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef, 
                  QN_gpu = None, WQN_gpu = None, NON_gpu = None, NHN_gpu = None):
-        for b in bend_coefs:
-            if b not in NON:
-                raise RuntimeError("No precomputed NON for bending coefficient {}".format(b))
-        self.rot_coef = rot_coef
-        self.n, self.d  = x_nd.shape
-        self.bend_coefs = bend_coefs
-        self.N          = N
-        self.QN         = QN        
-        self.NON        = NON
-        self.NR         = NR
-        self.x_nd       = x_nd
-        self.K_nn       = K_nn
+        super(TpsGpuSolver, self).__init__(bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef)
         ## set up GPU memory
         if QN_gpu is None:
             self.QN_gpu = gpuarray.to_gpu(self.QN)
@@ -70,12 +61,13 @@ class TpsGpuSolver(object):
         theta = self.N.dot(z)
         f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
 
-class TpsGpuSolverFactory(object):
+class TpsGpuSolverFactory(TpsSolverFactory):
     """
     pre-allocates the GPU space needed to get a new solver
     efficiently computes solution params and returns a TPSSolver
     """
-    def __init__(self, max_N, max_n_iter):
+    def __init__(self, max_N, max_n_iter, precompute_filename=None):
+        super(TpsGpuSolverFactory, self).__init__(precompute_filename=precompute_filename)
         d = 3
         self.max_N = max_N
         self.max_n_iter = max_n_iter
@@ -89,7 +81,7 @@ class TpsGpuSolverFactory(object):
         self.O_gpu = gpuarray.empty((max_N +d+1)*(max_N+d+1)* max_n_iter, np.float64)
         self.N_gpu = gpuarray.empty((max_N +d+1)*(max_N) *max_n_iter, np.float64)
     
-    def get_solver(self, x_na, K_nn, bend_coefs, rot_coef):
+    def _get_solver(self, x_na, K_nn, bend_coefs, rot_coef):
         n,d = x_na.shape
         assert len(bend_coefs) <= self.max_n_iter
         assert n <= self.max_N

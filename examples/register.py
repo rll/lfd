@@ -6,12 +6,12 @@ import numpy as np
 import trajoptpy
 from core.simulation import StaticSimulation
 from core.simulation_object import BoxSimulationObject
-# from core.registration import TpsRpmRegistrationFactory
 from registration.registration import TpsRpmRegistrationFactory
 from registration.plotting_openrave import registration_plot_cb
 
-import IPython as ipy
 from core.demonstration import Demonstration, SceneState
+
+np.random.seed(0)
 
 table_height = 0.77
 table = BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85, .1], dynamic=False)
@@ -45,7 +45,7 @@ for x_center_pert in np.arange(-0.1, 0.6, 0.1):
 test_cloud = generate_cloud(x_center_pert=0.2)
 test_scene_state = SceneState(test_cloud, downsample_size=0.025)
 
-reg_factory = TpsRpmRegistrationFactory({}, use_solver=True)
+reg_factory = TpsRpmRegistrationFactory({}, use_solver=True, precompute_fname="examples.cache.h5")
 plot_cb = lambda *args: registration_plot_cb(sim, *args)
 for demo in demos.values():
     reg = reg_factory.register(demo, test_scene_state, plotting=True, plot_cb=plot_cb)

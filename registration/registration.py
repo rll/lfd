@@ -75,7 +75,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                  rot_reg = tpsc.ROT_REG, 
                  outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 use_solver=False):
+                 use_solver=False, precompute_fname=None):
         """Inits TpsRpmRegistrationFactory with demonstrations and parameters
         
         Args:
@@ -87,6 +87,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             rot_reg: regularization on rotation
             prior_fn: function that takes the demo and test SceneState and returns the prior probability (i.e. NOT cost)
             use_solver: whether to use SolverFactory
+            precompute_fname: whether SolverFactory should load/save precomputed matrix products from file
         
         Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
         """
@@ -103,7 +104,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         self.prior_fn = prior_fn
         
         if use_solver:
-            self.f_solver_factory = solver.TpsSolverFactory()
+            self.f_solver_factory = solver.TpsSolverFactory(precompute_fname)
         else:
             self.f_solver_factory = None
     
@@ -157,7 +158,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                  rot_reg = tpsc.ROT_REG, 
                  outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 use_solver=False):
+                 use_solver=False, precompute_fname=None):
         """Inits TpsRpmBijRegistrationFactory with demonstrations and parameters
         
         Args:
@@ -169,6 +170,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
             rot_reg: regularization on rotation
             prior_fn: function that takes the demo and test SceneState and returns the prior probability (i.e. NOT cost)
             use_solver: whether to use SolverFactory
+            precompute_fname: whether the source SolverFactory should load/save precomputed matrix products from file
         
         Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
         """
@@ -185,8 +187,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.prior_fn = prior_fn
         
         if use_solver:
-            self.f_solver_factory = solver.TpsSolverFactory()
-            self.g_solver_factory = solver.TpsSolverFactory()
+            self.f_solver_factory = solver.TpsSolverFactory(precompute_fname)
+            self.g_solver_factory = solver.TpsSolverFactory() # don't cache for the target SolverFactory
         else:
             self.f_solver_factory = None
             self.g_solver_factory = None
