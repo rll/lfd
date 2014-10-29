@@ -3,11 +3,9 @@ from __future__ import division
 import numpy as np
 import constants.TpsGpuConstant as tpsgc
 from registration import Registration, RegistrationFactory
-from tps import tps_kernel_matrix, loglinspace 
-import tps
+import tps, solver_gpu
 import tpsopt
 from tpsopt.batchtps import GPUContext, TgtContext
-from tpsopt.transformations import EmptySolver
 
 class GpuTpsRpmRegistrationFactory(RegistrationFactory):
     def __init__(self, demos):
@@ -44,9 +42,9 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         self.outlierprior = outlierprior
         self.outlierfrac = outlierfrac
         self.prior_fn = prior_fn
-        self.regs = np.around(loglinspace(self.reg_init, self.reg_final, self.n_iter), tpsgc.BEND_COEF_DIGITS)
-        self.f_empty_solver = EmptySolver(tpsgc.MAX_CLD_SIZE, self.regs)
-        self.g_empty_solver = EmptySolver(tpsgc.MAX_CLD_SIZE, self.regs)
+        self.f_solver_factory = solver_gpu.TpsGpuSolverFactory(tpsgc.MAX_CLD_SIZE, self.n_iter)
+        self.g_solver_factory = solver_gpu.TpsGpuSolverFactory(tpsgc.MAX_CLD_SIZE, self.n_iter)
+        
         self.src_ctx = GPUContext(self.regs)
         self.src_ctx.read_h5(filename)
         self.warn_clip_cloud = True
@@ -70,12 +68,8 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         x_nd = self._clip_cloud(x_nd)
         y_md = self._clip_cloud(y_md)
         
-        x_K_nn = tps_kernel_matrix(x_nd)
-        fsolve = self.f_empty_solver.get_solver(x_nd, x_K_nn, self.exact_bend_coefs)
-        y_K_nn = tps_kernel_matrix(y_md)
-        gsolve = self.g_empty_solver.get_solver(y_md, y_K_nn, self.exact_bend_coefs)
-
-        f, g, corr = tps.tps_rpm_bij(x_nd, y_md, fsolve=fsolve, gsolve=gsolve, 
+        f, g, corr = tps.tps_rpm_bij(x_nd, y_md, 
+                                     f_solver_factory=self.f_solver_factory, g_solver_factory=self.g_solver_factory, 
                                      n_iter=self.n_iter, em_iter=self.em_iter, 
                                      reg_init=self.reg_init, reg_final=self.reg_final, 
                                      rad_init=self.rad_init, rad_final=self.rad_final, 

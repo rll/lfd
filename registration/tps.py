@@ -1,7 +1,7 @@
 """
 Functions for fitting and applying thin plate spline transformations
 """
-import constants.TpsConstant as tpsc
+from constants import TpsConstant as tpsc
 import numpy as np
 import scipy.spatial.distance as ssd
 from transformation import Transformation
