@@ -29,7 +29,8 @@ $ cd lfd/tpsopt
 $ cmake .
 $ make
 ```
-It has been tested with the RLL overhand-knot tying demonstration dataset. Obtain a copy from https://www.dropbox.com/s/wnt3j42jp5solr8/actions.h5. 
+It has been tested with the RLL overhand-knot tying demonstration dataset. 
+To download the data, navigate to the lfd/bigdata, and then run download.py.
 
 To check the build, cd to tps-opt/tpsopt and run the appropriate version of the following
 ```
