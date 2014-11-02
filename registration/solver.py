@@ -39,12 +39,12 @@ class TpsSolver(object):
         f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
 
 class TpsSolverFactory(object):
-    def __init__(self, precompute_fname=None):
+    def __init__(self, cache_fname=None):
         """
-        precompute_fname: file to load/save precomputed matrix products. if None, no caching is done.
+        cache_fname: h5 file with 'solver' key to load/save precomputed matrix products. if None, no caching is done.
         """
-        if precompute_fname is not None:
-            self.file = h5py.File(precompute_fname)
+        if cache_fname is not None:
+            self.file = h5py.File(cache_fname)
         else:
             self.file = None
     

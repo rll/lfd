@@ -2,7 +2,7 @@ from __future__ import division
 
 import numpy as np
 from constants import TpsConstant as tpsc
-import tps, solver
+import tps
 
 class Registration(object):
     def __init__(self, demo, test_scene_state, f, corr, g=None):
@@ -75,7 +75,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                  rot_reg = tpsc.ROT_REG, 
                  outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 use_solver=False, precompute_fname=None):
+                 f_solver_factory=None):
         """Inits TpsRpmRegistrationFactory with demonstrations and parameters
         
         Args:
@@ -86,8 +86,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             rad_init/rad_final: radius (temperature) for correspondence calculation (meters)
             rot_reg: regularization on rotation
             prior_fn: function that takes the demo and test SceneState and returns the prior probability (i.e. NOT cost)
-            use_solver: whether to use SolverFactory
-            precompute_fname: whether SolverFactory should load/save precomputed matrix products from file
+            f_solver_factory: solver factory for forward registration
         
         Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
         """
@@ -102,11 +101,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         self.outlierprior = outlierprior
         self.outlierfrac = outlierfrac
         self.prior_fn = prior_fn
-        
-        if use_solver:
-            self.f_solver_factory = solver.TpsSolverFactory(precompute_fname)
-        else:
-            self.f_solver_factory = None
+        self.f_solver_factory = f_solver_factory
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         if self.prior_fn is not None:
@@ -158,7 +153,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                  rot_reg = tpsc.ROT_REG, 
                  outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 use_solver=False, precompute_fname=None):
+                 f_solver_factory=None, g_solver_factory=None):
         """Inits TpsRpmBijRegistrationFactory with demonstrations and parameters
         
         Args:
@@ -169,10 +164,11 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
             rad_init/rad_final: radius (temperature) for correspondence calculation (meters)
             rot_reg: regularization on rotation
             prior_fn: function that takes the demo and test SceneState and returns the prior probability (i.e. NOT cost)
-            use_solver: whether to use SolverFactory
-            precompute_fname: whether the source SolverFactory should load/save precomputed matrix products from file
+            f_solver_factory: solver factory for forward registration
+            g_solver_factory: solver factory for backward registration
         
         Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
+        Tip: Don't cache for the target SolverFactory
         """
         super(TpsRpmBijRegistrationFactory, self).__init__(demos)
         self.n_iter = n_iter
@@ -185,13 +181,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.outlierprior = outlierprior
         self.outlierfrac = outlierfrac
         self.prior_fn = prior_fn
-        
-        if use_solver:
-            self.f_solver_factory = solver.TpsSolverFactory(precompute_fname)
-            self.g_solver_factory = solver.TpsSolverFactory() # don't cache for the target SolverFactory
-        else:
-            self.f_solver_factory = None
-            self.g_solver_factory = None
+        self.f_solver_factory = f_solver_factory
+        self.g_solver_factory = g_solver_factory
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         if self.prior_fn is not None:

@@ -30,7 +30,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
                  rad_init=tpsgc.RAD[0], rad_final=tpsgc.RAD[1], 
                  rot_reg = tpsgc.ROT_REG, 
                  outlierprior = tpsgc.OUTLIER_PRIOR, outlierfrac = tpsgc.OURLIER_FRAC, 
-                 prior_fn=None, precompute_fname=None):
+                 prior_fn=None, cache_fname=None):
         super(GpuTpsRpmBijRegistrationFactory, self).__init__(demos)
         self.n_iter = n_iter
         self.em_iter = em_iter
@@ -42,8 +42,8 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         self.outlierprior = outlierprior
         self.outlierfrac = outlierfrac
         self.prior_fn = prior_fn
-        self.f_solver_factory = solver_gpu.TpsGpuSolverFactory(tpsgc.MAX_CLD_SIZE, self.n_iter, precompute_fname=precompute_fname)
-        self.g_solver_factory = solver_gpu.TpsGpuSolverFactory(tpsgc.MAX_CLD_SIZE, self.n_iter, precompute_fname=precompute_fname)
+        self.f_solver_factory = solver_gpu.TpsGpuSolverFactory(tpsgc.MAX_CLD_SIZE, self.n_iter, cache_fname=cache_fname)
+        self.g_solver_factory = solver_gpu.TpsGpuSolverFactory(tpsgc.MAX_CLD_SIZE, self.n_iter, cache_fname=cache_fname)
         
         self.src_ctx = GPUContext(self.regs)
         self.src_ctx.read_h5(filename)
