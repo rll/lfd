@@ -81,7 +81,7 @@ class TpsGpuSolverFactory(TpsSolverFactory):
         self.O_gpu = gpuarray.empty((max_N +d+1)*(max_N+d+1)* max_n_iter, np.float64)
         self.N_gpu = gpuarray.empty((max_N +d+1)*(max_N) *max_n_iter, np.float64)
     
-    def _get_solver(self, x_na, K_nn, bend_coefs, rot_coef):
+    def get_solver_mats(self, x_na, K_nn, bend_coefs, rot_coef):
         n,d = x_na.shape
         assert len(bend_coefs) <= self.max_n_iter
         assert n <= self.max_N
