@@ -30,4 +30,4 @@ python -m unittest discover -s /path/to/lfd/test
 ```
 
 ##Downloading test data
-First navigate to the bigdata directory, and then run the script download.py.
+First navigate to the `bigdata` directory, and then run the `download.py` script.
