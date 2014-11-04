@@ -10,7 +10,7 @@ from registration.registration import TpsRpmRegistrationFactory
 from registration.plotting_openrave import registration_plot_cb
 
 from core.demonstration import Demonstration, SceneState
-from registration import solver
+from registration import solver, solver_gpu
 
 np.random.seed(0)
 
@@ -46,7 +46,14 @@ for x_center_pert in np.arange(-0.1, 0.6, 0.1):
 test_cloud = generate_cloud(x_center_pert=0.2)
 test_scene_state = SceneState(test_cloud, downsample_size=0.025)
 
-reg_factory = TpsRpmRegistrationFactory({}, f_solver_factory=solver.TpsSolverFactory())
 plot_cb = lambda *args: registration_plot_cb(sim, *args)
+
+reg_factory_gpu = TpsRpmRegistrationFactory({}, f_solver_factory=solver_gpu.TpsGpuSolverFactory())
+regs_gpu = []
 for demo in demos.values():
-    reg = reg_factory.register(demo, test_scene_state, plotting=True, plot_cb=plot_cb)
+    regs_gpu.append(reg_factory_gpu.register(demo, test_scene_state, plotting=True, plot_cb=plot_cb))
+
+reg_factory = TpsRpmRegistrationFactory({}, f_solver_factory=solver.TpsSolverFactory())
+regs = []
+for demo in demos.values():
+    regs.append(reg_factory.register(demo, test_scene_state, plotting=True, plot_cb=plot_cb))
