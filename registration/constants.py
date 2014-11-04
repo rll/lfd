@@ -12,4 +12,4 @@ class TpsConstant(object):
 class TpsGpuConstant(TpsConstant):
     MAX_CLD_SIZE       = 150
     BEND_COEF_DIGITS   = 6
-    OURLIER_CUTOFF  = 1e-2
+    OUTLIER_CUTOFF  = 1e-2

@@ -61,7 +61,7 @@ class TpsGpuSolverFactory(TpsSolverFactory):
             use_cache: whether to cache solver matrices in file
             cache_dir: cached directory. if not specified, the .cache directory in parent directory of top-level package is used.
         
-        Note: if max_N and max_n_iter are specified, some gpu arrays are allocated once at construction time, but this doesn't provide significant speed improvement
+        Note: if max_N and max_n_iter are specified, some GPU arrays are allocated once at construction time, but this doesn't provide significant speed improvement
         """
         super(TpsGpuSolverFactory, self).__init__(use_cache=use_cache, cachedir=cachedir)
         d = 3
