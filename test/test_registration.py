@@ -22,7 +22,7 @@ class TestRegistration(unittest.TestCase):
             return cloud
         
         self.demos = {}
-        for x_center_pert in np.arange(-0.1, 0.6, 0.1):
+        for x_center_pert in np.arange(0.1, 0.4, 0.1):
             demo_name = "demo_{}".format(x_center_pert)
             demo_cloud = generate_cloud(x_center_pert=x_center_pert)
             demo_scene_state = SceneState(demo_cloud, downsample_size=0.025)
