@@ -25,7 +25,7 @@ camera_matrix = np.array([[ 0,    1, 0,   0],
                           [-1,    0, 0.5, 0],
                           [ 0.5,  0, 1,   0],
                           [ 2.25, 0, 4.5, 1]])
-viewer.SetWindowProp(2560,0,1500,1500)
+viewer.SetWindowProp(0,0,1500,1500)
 viewer.SetCameraManipulatorMatrix(camera_matrix)
 
 def generate_cloud(x_center_pert=0, max_noise=0.02):
