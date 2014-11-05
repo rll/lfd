@@ -136,7 +136,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             coefficients.
         """
         reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
-        cost = reg.f.getObjective()
+        cost = reg.f.get_objective()
         return cost
 
 class TpsRpmBijRegistrationFactory(RegistrationFactory):
@@ -217,7 +217,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
             premultiplied by the respective coefficients.
         """
         reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
-        cost = np.r_[reg.f.getObjective(), reg.g.getObjective()]
+        cost = np.r_[reg.f.get_objective(), reg.g.get_objective()]
         return cost
 
 class TpsSegmentRegistrationFactory(RegistrationFactory):

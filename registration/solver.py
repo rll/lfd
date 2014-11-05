@@ -50,7 +50,7 @@ class TpsSolverFactory(object):
                 # .cache directory in parent directory of top-level package
                 cachedir = os.path.join(__import__(__name__.split('.')[0]).__path__[0], os.path.pardir, ".cache")
             memory = Memory(cachedir=cachedir, verbose=0)
-            self.get_solver_mats_cached = memory.cache(self.get_solver_mats)
+            self.get_solver_mats = memory.cache(self.get_solver_mats)
     
     def get_solver_mats(self, x_nd, bend_coefs, rot_coef):
         K_nn = tps.tps_kernel_matrix(x_nd)
@@ -58,5 +58,5 @@ class TpsSolverFactory(object):
         return N, QN, NON, NR, K_nn
     
     def get_solver(self, x_nd, bend_coefs, rot_coef):
-        N, QN, NON, NR, K_nn = self.get_solver_mats_cached(x_nd, bend_coefs, rot_coef)
+        N, QN, NON, NR, K_nn = self.get_solver_mats(x_nd, bend_coefs, rot_coef)
         return TpsSolver(bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef)

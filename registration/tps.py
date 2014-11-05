@@ -50,7 +50,7 @@ def tps_kernel_matrix2(x_na, y_ma):
     return tps_apply_kernel(distmat, dim)
 
 def tps_eval(x_ma, lin_ag, trans_g, w_ng, x_na):
-    K_mn = tps_kernel_matrix2(x_ma, x_na).astype(np.float32)
+    K_mn = tps_kernel_matrix2(x_ma, x_na)
     return np.dot(K_mn, w_ng) + np.dot(x_ma, lin_ag) + trans_g[None,:]
 
 def tps_grad(x_ma, lin_ag, _trans_g, w_ng, x_na):
@@ -70,7 +70,7 @@ def tps_grad(x_ma, lin_ag, _trans_g, w_ng, x_na):
 
 def solve_eqp1(H, f, A):
     """solve equality-constrained qp
-    min tr(x'Hx) + tr(f'x)
+    min .5 tr(x'Hx) + tr(f'x)
     s.t. Ax = 0
     """    
     n_vars = H.shape[0]
@@ -84,8 +84,8 @@ def solve_eqp1(H, f, A):
     # columns of N span the null space
     
     # x = Nz
-    # then problem becomes unconstrained minimization .5*z'NHNz + z'Nf
-    # NHNz + Nf = 0
+    # then problem becomes unconstrained minimization .5 z'N'HNz + z'N'f
+    # N'HNz + N'f = 0
     L = N.T.dot(H.dot(N))
     R = -N.T.dot(f)
     z = np.linalg.solve(L, R)
@@ -155,16 +155,21 @@ class ThinPlateSpline(Transformation):
         self.y_ng = np.zeros((0,d))
         self.bend_coef = 0
         self.rot_coef = 0
-        self.wt_n = None
+        self.wt_n = np.zeros(0)
     
     @staticmethod
     def fit_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n):
         """
         x_na: source cloud
-        y_nd: target cloud
+        y_ng: target cloud
         smoothing: penalize non-affine part
         angular_spring: penalize rotation
-        wt_n: weight the points        
+        wt_n: weight the points
+        
+        Solves the optimization problem
+        min \sum{i=1}^n wt_n_i ||y_ng_i - f(x_na_i)||_2^2 + bend_coef tr(w_ng' K_nn w_ng) + tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
+        s.t. x_na' w_ng = 0
+             1' w_ng = 0
         """
         f = ThinPlateSpline()
         f.set_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n)
@@ -192,15 +197,20 @@ class ThinPlateSpline(Transformation):
         grad_mga = tps_grad(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
         return grad_mga
     
-    def getObjective(self):
+    def get_objective(self):
+        """
+        Returns the following 3 objectives
+        \sum{i=1}^n wt_n_i ||y_ng_i - f(x_na_i)||_2^2
+        bend_coef tr(w_ng' K_nn w_ng)
+        tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
+        
+        Implementation covers general case where there is a wt_n and bend_coef per dimension
+        """
         # expand these
         n, a = self.x_na.shape
         bend_coefs = np.ones(a) * self.bend_coef if np.isscalar(self.bend_coef) else self.bend_coef
         rot_coefs = np.ones(a) * self.rot_coef if np.isscalar(self.rot_coef) else self.rot_coef
-        if self.wt_n is None:
-            wt_n = np.ones(n)
-        else:
-            wt_n = self.wt_n
+        wt_n = self.wt_n
         if wt_n.ndim == 1:
             wt_n = wt_n[:,None]
         if wt_n.shape[1] == 1:
@@ -210,16 +220,13 @@ class ThinPlateSpline(Transformation):
         cost = np.zeros(3)
         
         # matching cost
-        cost[0] = np.linalg.norm((self.transform_points(self.x_na) - self.y_ng) * np.sqrt(wt_n))**2
-        # same as (np.square(np.apply_along_axis(np.linalg.norm, 1, f.transform_points(x_na) - y_ng)) * wt_n).sum()
-        # cost[0] -= np.linalg.norm(self.y_ng * np.sqrt(wt_n))**2 # constant
+        cost[0] = np.sum(np.square(self.transform_points(self.x_na) - self.y_ng) * wt_n)
         
         # bending cost
         cost[1] = np.trace(np.diag(bend_coefs).dot(self.w_ng.T.dot(K_nn.dot(self.w_ng))))
         
         # rotation cost
         cost[2] = np.trace((self.lin_ag - np.eye(a)).T.dot(np.diag(rot_coefs).dot((self.lin_ag - np.eye(a)))))
-        # cost[2] -= np.trace(np.diag(rot_coefs)) # constant
         return cost
 
 def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
@@ -393,4 +400,4 @@ def balance_matrix3(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N 
     prob_NM *= r_N[:,None]
     prob_NM *= c_M[None,:]
     
-    return prob_NM[:n, :m], r_N, c_M
+    return prob_NM[:n, :m].astype(np.float64), r_N, c_M

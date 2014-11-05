@@ -147,5 +147,5 @@ class TpsGpuSolverFactory(TpsSolverFactory):
     
     def get_solver(self, x_nd, bend_coefs, rot_coef):
         self.NON_gpu = None # remains as None if the cache is hit
-        N, QN, NON, NR, K_nn = self.get_solver_mats_cached(x_nd, bend_coefs, rot_coef)
+        N, QN, NON, NR, K_nn = self.get_solver_mats(x_nd, bend_coefs, rot_coef)
         return TpsGpuSolver(bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef, NON_gpu=self.NON_gpu)
