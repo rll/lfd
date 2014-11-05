@@ -111,6 +111,17 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
     """
     As in:
         H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
+    
+    Tries to solve the optimization problem
+    min_{f,corr_nm} 1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
+                    + bend_coef tr(w_ng' K_nn w_ng)
+                    + tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
+                    + rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+                    - rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+    s.t. x_na' w_ng = 0
+         1' w_ng = 0
+         \sum{i=1}^{n+1} corr_nm_ij = 1
+         \sum{j=1}^{m+1} corr_nm_ij = 1
     """
     def __init__(self, demos, 
                  n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
