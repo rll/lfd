@@ -1,16 +1,60 @@
 from __future__ import division
 
 import numpy as np
+import scipy.spatial.distance as ssd
 from constants import TpsConstant as tpsc
 import tps
 
 class Registration(object):
-    def __init__(self, demo, test_scene_state, f, corr, g=None):
+    def __init__(self, demo, test_scene_state, f, corr):
         self.demo = demo
         self.test_scene_state = test_scene_state
         self.f = f
         self.corr = corr
+    
+    def get_objective(self):
+        raise NotImplementedError
+
+class TpsRpmRegistration(Registration):
+    def __init__(self, demo, test_scene_state, f, corr, rad):
+        super(TpsRpmRegistration, self).__init__(demo, test_scene_state, f, corr)
+        self.rad = rad
+    
+    def get_objective(self):
+        x_nd = self.demo.scene_state.cloud[:,:3]
+        y_md = self.test_scene_state.cloud[:,:3]
+        cost = self.get_objective2(x_nd, y_md, self.f, self.corr, self.rad)
+        return cost
+    
+    @staticmethod
+    def get_objective2(x_nd, y_md, f, corr_nm, rad):
+        """
+        Returns the following 5 objectives
+        1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
+        bend_coef tr(w_ng' K_nn w_ng)
+        tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
+        rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+        -rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+        """
+        cost = np.zeros(5)
+        dist_nm = ssd.cdist(x_nd, y_md, 'sqeuclidean')
+        cost[0] = (corr_nm * dist_nm).sum() / len(x_nd)
+        cost[1:3] = f.get_objective()[1:]
+        corr_nm = np.reshape(corr_nm, (1,-1))
+        nz_corr_nm = corr_nm[corr_nm != 0]
+        cost[3] = rad * (nz_corr_nm * np.log(nz_corr_nm)).sum()
+        cost[4] = -rad * nz_corr_nm.sum()
+        return cost
+
+class TpsRpmBijRegistration(Registration):
+    def __init__(self, demo, test_scene_state, f, g, corr, rad):
+        super(TpsRpmBijRegistration, self).__init__(demo, test_scene_state, f, corr)
+        self.rad = rad
         self.g = g
+    
+    def get_objective(self):
+        raise NotImplementedError
+
 
 class RegistrationFactory(object):
     def __init__(self, demos):
@@ -120,7 +164,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                               outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
                               prior_prob_nm=prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
         
-        return Registration(demo, test_scene_state, f, corr)
+        return TpsRpmRegistration(demo, test_scene_state, f, corr, self.rad_final)
     
     def cost(self, demo, test_scene_state):
         """Gets the costs of the thin plate spline objective of the 
@@ -201,7 +245,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                      outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
                                      prior_prob_nm=prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
         
-        return Registration(demo, test_scene_state, f, corr, g=g)
+        return TpsRpmBijRegistration(demo, test_scene_state, f, g, corr, self.rad_final)
     
     def cost(self, demo, test_scene_state):
         """Gets the costs of the forward and backward thin plate spline 

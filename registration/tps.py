@@ -238,7 +238,7 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
         if np.any(wt_n == 0):
             inlier = wt_n != 0
             x_nd = x_nd[inlier,:]
-            wt_n = wt_n[inlier,:]
+            wt_n = wt_n[inlier]
             xtarg_nd = (corr_nm[inlier,:]/wt_n[:,None]).dot(y_md)
         else:
             xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
@@ -249,7 +249,7 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
         if np.any(wt_m == 0):
             inlier = wt_m != 0
             y_md = y_md[inlier,:]
-            wt_m = wt_m[inlier,:]
+            wt_m = wt_m[inlier]
             ytarg_md = (corr_nm[inlier,:]/wt_m[None,:]).T.dot(x_nd)
         else:
             ytarg_md = (corr_nm/wt_m[None,:]).T.dot(x_nd)
