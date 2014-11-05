@@ -49,3 +49,8 @@ bigdata/*
 # Temporary files
 *~
 
+.idea
+tpsopt/CMakeCache.txt
+tpsopt/CMakeFiles
+tpsopt/Makefile
+tpsopt/cmake_install.cmake
