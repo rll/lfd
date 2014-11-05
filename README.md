@@ -29,7 +29,7 @@ You can run the test suite using this command:
 python -m unittest discover -s /path/to/lfd/test/
 ```
 
-##Miscelaneous
+##Miscellaneous
 ###Downloading test data
 First navigate to the `bigdata` directory, and then run the `download.py` script.
 
