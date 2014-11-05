@@ -26,8 +26,12 @@ Now you should be able to run the scripts in the `examples` directory.
 
 You can run the test suite using this command:
 ```
-python -m unittest discover -s /path/to/lfd/test
+python -m unittest discover -s /path/to/lfd/test/
 ```
 
-##Downloading test data
+##Miscelaneous
+###Downloading test data
 First navigate to the `bigdata` directory, and then run the `download.py` script.
+
+###Cache files
+By default, some functions cache results in the default cache directory `/path/to/lfd/.cache/`. If you are running out of space, consider deleting this directory.
