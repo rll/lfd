@@ -260,9 +260,9 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
             reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
             rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-            rot_reg = tpsc.ROT_REG, 
-            outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
-            prior_prob_nm = None, plotting = False, plot_cb = None):
+            rot_reg=tpsc.ROT_REG, 
+            outlierprior=tpsc.OUTLIER_PRIOR, outlierfrac=tpsc.OURLIER_FRAC, 
+            prior_prob_nm=None, plotting=False, plot_cb=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -289,7 +289,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             xwarped_nd = f.transform_points(x_nd)
 
             dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
-            prob_nm = np.exp( -dist_nm / (2*rad) ) / np.sqrt(2 * np.pi * rad) # divide by constant term so that outlierprior makes sense as a probability
+            prob_nm = np.exp( -dist_nm / rad )
             if prior_prob_nm != None:
                 prob_nm *= prior_prob_nm
             
@@ -312,9 +312,9 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
                 reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
                 rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-                rot_reg = tpsc.ROT_REG, 
-                outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
-                prior_prob_nm = None, plotting = False, plot_cb = None):
+                rot_reg=tpsc.ROT_REG, 
+                outlierprior=tpsc.OUTLIER_PRIOR, outlierfrac=tpsc.OURLIER_FRAC, 
+                prior_prob_nm=None, plotting=False, plot_cb=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
