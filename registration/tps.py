@@ -377,7 +377,10 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
 
 def loglinspace(a,b,n):
     "n numbers between a to b (inclusive) with constant ratio between consecutive numbers"
-    return np.exp(np.linspace(np.log(a),np.log(b),n))    
+    if n == 1:
+        return np.r_[b]
+    else:
+        return np.exp(np.linspace(np.log(a),np.log(b),n))
 
 def balance_matrix3(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
     n,m = prob_nm.shape
