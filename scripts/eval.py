@@ -97,7 +97,6 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_stats = eval_util.EvalStats()
             
             start_time = time.time()
-            #agenda, q_values_root = action_selection.plan_agenda(scene_state, i_step)
 
             if len(scene_state.cloud) == 0:
                 redprint("Detected 0 points in scene")
@@ -126,7 +125,6 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 except ValueError: # If something is cloud/traj is empty or something
                     redprint("**Raised value error during traj transfer")
                     break
-                #ipdb.set_trace()
                 eval_stats.feasible, eval_stats.misgrasp = lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive, check_feasible=args.eval.check_feasible)
                 eval_stats.exec_elapsed_time += time.time() - start_time
                 
@@ -134,9 +132,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                      break
                 else:
                      sim.set_state(sim_state)
-            print "BEST ACTION:", best_root_action
 
-            knot = is_fig8knot(rope.rope.GetControlPoints())
+            knot = is_knot(rope.rope.GetControlPoints())
             results = {'scene_state':scene_state, 'best_action':best_root_action, 'values':q_values_root, 'aug_traj':test_aug_traj, 'eval_stats':eval_stats, 'sim_state':sim_state, 'knot':knot, 'goal_found': goal_found}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
