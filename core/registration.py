@@ -9,8 +9,13 @@ import tpsopt
 from constants import BEND_COEF_DIGITS, MAX_CLD_SIZE
 from tpsopt.tps import tps_kernel_matrix
 from tpsopt.registration import loglinspace
-from tpsopt.batchtps import GPUContext, TgtContext, SrcContext, batch_tps_rpm_bij
-from tpsopt.transformations import EmptySolver, TPSSolver
+
+try:
+    from tpsopt.batchtps import GPUContext, TgtContext, SrcContext, batch_tps_rpm_bij
+    from tpsopt.transformations import EmptySolver, TPSSolver
+except:
+    print 'Skipping GPU Import - Failure'
+
 
 import IPython as ipy
 
@@ -58,6 +63,7 @@ class RegistrationFactory(object):
             costs[name] = self.cost(demo, test_scene_state)
         return costs
 
+
 class TpsRpmBijRegistrationFactory(RegistrationFactory):
     """
     As in:
@@ -65,7 +71,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research 
         (ISRR), 2013.
     """
-    def __init__(self, demos, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], 
+    def __init__(self, demos, actionfile=None, n_iter=N_ITER_EXACT, em_iter=1, reg_init=EXACT_LAMBDA[0], 
         reg_final=EXACT_LAMBDA[1], rad_init=.1, rad_final=.005, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
         outlierprior=.1, outlierfrac=1e-2, cost_type='bending', prior_fn=None):
         """
@@ -83,7 +89,17 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.outlierfrac = outlierfrac
         self.cost_type = cost_type
         self.prior_fn = prior_fn
-        
+
+        self.actionfile = actionfile
+        if self.actionfile:
+            self.bend_coefs = np.around(loglinspace(DEFAULT_LAMBDA[0], DEFAULT_LAMBDA[1], N_ITER_CHEAP), BEND_COEF_DIGITS)
+            self.exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
+            self.f_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
+            self.g_empty_solver = EmptySolver(MAX_CLD_SIZE, self.exact_bend_coefs)
+            self.src_ctx = GPUContext(self.bend_coefs)
+            self.src_ctx.read_h5(actionfile)
+
+       
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         """
         TODO: use em_iter
@@ -127,6 +143,23 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         else:
             raise NotImplementedError
 
+    def batch_cost(self, test_scene_state):
+        if not(self.actionfile):
+            raise ValueError('No actionfile provided for gpu context')
+        tgt_ctx = TgtContext(self.src_ctx)
+        cloud = test_scene_state.cloud
+        if len(cloud) > MAX_CLD_SIZE:
+            cloud = cloud[np.random.choice(range(len(cloud)), size=MAX_CLD_SIZE, replace=False)]
+        tgt_ctx.set_cld(cloud)
+        cost_array = batch_tps_rpm_bij(self.src_ctx, tgt_ctx, T_init = 1e-1, T_final = 5e-3, #same as reg init and reg final?
+                      outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, component_cost=False)
+        if self.cost_type == 'bending':
+            costs = dict(zip(self.src_ctx.seg_names, cost_array))
+            return costs
+        else:
+            raise NotImplementedError
+
+
 #     def batch_cost(self, test_scene_state):
 #         # TODO Dylan
 #         raise NotImplementedError
@@ -166,13 +199,8 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
         y_md = np.array(new_cloud)
         if len(old_cloud) > MAX_CLD_SIZE:
             x_nd = x_nd[np.random.choice(range(len(x_nd)), size=MAX_CLD_SIZE, replace=False)]
-            #x_nd = old_cloud[np.random.random_integers(len(old_cloud)-1, size=min(MAX_CLD_SIZE, len(old_cloud)))]
         if len(new_cloud) > MAX_CLD_SIZE:
             y_md = y_md[np.random.choice(range(len(y_md)), size=MAX_CLD_SIZE, replace=False)]
-            #y_md = new_cloud[np.random.random_integers(len(new_cloud)-1, size=min(MAX_CLD_SIZE, len(new_cloud)))]
-
-        # if len(x_nd) != len(old_cloud) or len(y_md) != len(new_cloud):
-        #     ipy.embed()
 
         x_K_nn = tps_kernel_matrix(x_nd)
         fsolve = self.f_empty_solver.get_solver(x_nd, x_K_nn, self.exact_bend_coefs)
@@ -202,7 +230,7 @@ class GpuTpsRpmBijRegistrationFactory(RegistrationFactory):
 
     def cost(self, demo, test_scene_state):
         raise NotImplementedError
-    
+
     def batch_cost(self, test_scene_state):
         tgt_ctx = TgtContext(self.src_ctx)
         cloud = test_scene_state.cloud

@@ -28,7 +28,8 @@ def estimate_performance(fname):
             
             if results['knot']:
                 knot_exists = True
-                break
+            elif i_step == len(task_info)-1:
+                print i_task
         
         if infeasible:
             num_infeasible += 1
