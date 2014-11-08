@@ -135,22 +135,11 @@ def optimize_model(args):
     # Use dual simplex method
     mm_model.model.setParam('method', 1)
     #mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
-
     # mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
     # # barrier method (#2) is default for QP, but uses more memory and could lead to error
-    #mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
     mm_model.optimize_model()
 
-#    try:
 #    mm_model.model.setParam('method', 2)  # try solving model with barrier
-#    mm_model.optimize_model()
-#    mm_model.model.setParam('method', 2)  # Use dual simplex method to solve model
-#        assert mm_model.model.status == 2
-#    except grb.GurobiError, AssertionError:
-#        print "model failure"
-#        mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
-#        mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
-#        mm_model.optimize_model()
     assert mm_model.model.status == 2
     mm_model.save_weights_to_file(args.weightfile)
 
@@ -167,7 +156,7 @@ def do_all(args):
     d_vals = args.D
     for c in c_vals:
         for d in d_vals:
-            args.weightfile='{}/{}_{}_c={}_d={}_{}.h5'.format(weights_dir, labels, args.feature_type, c, d, args.model_type)        
+            args.weightfile='{}/{}_{}_c={}_d={}_{}.h5'.format(weights_dir, labels, args.feature_type, c, d, args.model_type)
             args.C = c
             args.D = d
             optimize_model(args)

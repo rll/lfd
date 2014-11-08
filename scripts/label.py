@@ -178,16 +178,6 @@ def get_next_task_i(outfile):
         return 0
     return max(task_is) + 1
 
-
-'''
-        # Print out current crossings
-        (cross,b,c,d)= calculateCrossings(rope_nodes)
-        (cross, b, c) = remove_consecutive_crossings(cross, b, c)
-        (cross, b, c) = remove_consecutive_cross_pairs(cross, b, c)
-        print 'Crossings of rope currently: ', crossingsToString(cross)
-
-'''
-
 def replace_rope(sim, new_rope, animation):
     rope_sim_obj = None
     for sim_obj in sim.sim_objs:
@@ -200,7 +190,6 @@ def replace_rope(sim, new_rope, animation):
     sim.add_objects([rope])
     sim.settle(step_viewer=animation)
 
-
 def load_random_start_segment(demofile):
     start_keys = [seg for seg in GlobalVars.actions.keys() if 'seg00' in seg]
     seg_name = random.choice(start_keys)
@@ -211,7 +200,6 @@ def sample_rope_state(rope_args, sim, animation=False, human_check=True):
     print 'Sampling rope state'
     success = False
     while not success:
-    # TODO: pick a random rope initialization
         new_xyz, demo_id = load_random_start_segment(GlobalVars.actions)
         print demo_id
         perturb_radius = random.uniform(rope_args.min_rad, rope_args.max_rad)
