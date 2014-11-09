@@ -282,7 +282,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
     if f_solver_factory is None:
         fsolve = None
     else:
-        fsolve = f_solver_factory.get_solver(x_nd, regs, rot_reg)
+        fsolve = f_solver_factory.get_solver(x_nd, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
@@ -337,11 +337,11 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
     if f_solver_factory is None:
         fsolve = None
     else:
-        fsolve = f_solver_factory.get_solver(x_nd, regs, rot_reg)
+        fsolve = f_solver_factory.get_solver(x_nd, rot_reg)
     if g_solver_factory is None:
         gsolve = None
     else:
-        gsolve = g_solver_factory.get_solver(y_md, regs, rot_reg)
+        gsolve = g_solver_factory.get_solver(y_md, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
         for _ in range(em_iter):
