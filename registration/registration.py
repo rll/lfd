@@ -4,6 +4,7 @@ import numpy as np
 import scipy.spatial.distance as ssd
 from constants import TpsConstant as tpsc
 import tps
+from solver import AutoTpsSolverFactory
 
 class Registration(object):
     def __init__(self, demo, test_scene_state, f, corr):
@@ -146,7 +147,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                  rot_reg = tpsc.ROT_REG, 
                  outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 f_solver_factory=None):
+                 f_solver_factory=AutoTpsSolverFactory()):
         """Inits TpsRpmRegistrationFactory with demonstrations and parameters
         
         Args:
@@ -224,7 +225,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                  rot_reg = tpsc.ROT_REG, 
                  outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 f_solver_factory=None, g_solver_factory=None):
+                 f_solver_factory=AutoTpsSolverFactory(), 
+                 g_solver_factory=AutoTpsSolverFactory(use_cache=False)):
         """Inits TpsRpmBijRegistrationFactory with demonstrations and parameters
         
         Args:

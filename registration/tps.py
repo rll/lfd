@@ -382,7 +382,7 @@ def loglinspace(a,b,n):
     else:
         return np.exp(np.linspace(np.log(a),np.log(b),n))
 
-def balance_matrix3(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
+def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
     n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1), 'f4')
     prob_NM[:n, :m] = prob_nm
@@ -404,3 +404,9 @@ def balance_matrix3(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N 
     prob_NM *= c_M[None,:]
     
     return prob_NM[:n, :m].astype(np.float64), r_N, c_M
+
+try:
+    from tps_gpu import balance_matrix3_gpu
+    balance_matrix3 = balance_matrix3_gpu
+except:
+    balance_matrix3 = balance_matrix3_cpu

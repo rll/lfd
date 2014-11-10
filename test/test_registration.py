@@ -5,7 +5,12 @@ from __future__ import division
 import numpy as np
 from core.demonstration import Demonstration, SceneState
 from registration.registration import TpsRpmRegistrationFactory
-from registration import tps, solver, solver_gpu
+from registration import tps, solver
+try:
+    from registration import solver_gpu
+    _use_gpu = True
+except:
+    _use_gpu = False
 from tempfile import mkdtemp
 import sys, time
 import unittest
@@ -42,7 +47,7 @@ class TestRegistration(unittest.TestCase):
         costs = reg_factory.batch_cost(self.test_scene_state)
         print "done in {}s".format(time.time() - start_time)
         
-        reg_factory_solver = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver.TpsSolverFactory(cachedir=tmp_cachedir))
+        reg_factory_solver = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver.CpuTpsSolverFactory(cachedir=tmp_cachedir))
         sys.stdout.write("computing costs: solver... ")
         sys.stdout.flush()
         start_time = time.time()
@@ -54,26 +59,30 @@ class TestRegistration(unittest.TestCase):
         costs_solver_cached = reg_factory_solver.batch_cost(self.test_scene_state)
         print "done in {}s".format(time.time() - start_time)
         
-        reg_factory_gpu = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver_gpu.TpsGpuSolverFactory(cachedir=tmp_cachedir))
-        sys.stdout.write("computing costs: gpu solver... ")
-        sys.stdout.flush()
-        start_time = time.time()
-        costs_gpu = reg_factory_gpu.batch_cost(self.test_scene_state)
-        print "done in {}s".format(time.time() - start_time)
-        sys.stdout.write("computing costs: cached gpu solver... ")
-        sys.stdout.flush()
-        start_time = time.time()
-        costs_gpu_cached = reg_factory_gpu.batch_cost(self.test_scene_state)
-        print "done in {}s".format(time.time() - start_time)
+        if _use_gpu:
+            reg_factory_gpu = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver_gpu.GpuTpsSolverFactory(cachedir=tmp_cachedir))
+            sys.stdout.write("computing costs: gpu solver... ")
+            sys.stdout.flush()
+            start_time = time.time()
+            costs_gpu = reg_factory_gpu.batch_cost(self.test_scene_state)
+            print "done in {}s".format(time.time() - start_time)
+            sys.stdout.write("computing costs: cached gpu solver... ")
+            sys.stdout.flush()
+            start_time = time.time()
+            costs_gpu_cached = reg_factory_gpu.batch_cost(self.test_scene_state)
+            print "done in {}s".format(time.time() - start_time)
+        else:
+            print "couldn't run GPU tests since the GPU is not configured properly"
         
         for demo_name in self.demos.keys():
             self.assertTrue(np.allclose(costs[demo_name], costs_solver[demo_name]))
             self.assertTrue(np.allclose(costs[demo_name], costs_solver_cached[demo_name]))
-            self.assertTrue(np.allclose(costs[demo_name], costs_gpu[demo_name]))
-            self.assertTrue(np.allclose(costs[demo_name], costs_gpu_cached[demo_name]))
+            if _use_gpu:
+                self.assertTrue(np.allclose(costs[demo_name], costs_gpu[demo_name]))
+                self.assertTrue(np.allclose(costs[demo_name], costs_gpu_cached[demo_name]))
     
     def test_tps_objective(self):
-        reg_factory = TpsRpmRegistrationFactory({}, f_solver_factory=solver.TpsSolverFactory(use_cache=False))
+        reg_factory = TpsRpmRegistrationFactory({}, f_solver_factory=solver.CpuTpsSolverFactory(use_cache=False))
         reg = reg_factory.register(self.demos.values()[0], self.test_scene_state)
         
         x_na = reg.f.x_na

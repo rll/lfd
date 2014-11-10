@@ -11,12 +11,9 @@ import scikits.cuda.linalg as culinalg
 culinalg.init()
 from tpsopt.culinalg_exts import gemm, geam
 
-class TpsGpuSolver(TpsSolver):
-    """
-    Fits thin plate spline to data using precomputed matrix products and does most of the operations on the GPU
-    """
+class GpuTpsSolver(TpsSolver):
     def __init__(self, N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef):
-        super(TpsGpuSolver, self).__init__(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
+        super(GpuTpsSolver, self).__init__(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
         self.has_cula = culinalg._has_cula
         # the GPU cho_solve requires matrices to be f-contiguous when rhs is a matrix
         self.QN = self.QN.copy(order='F')
@@ -57,15 +54,9 @@ class TpsGpuSolver(TpsSolver):
             theta = self.N.dot(z)
         f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
 
-class TpsGpuSolverFactory(TpsSolverFactory):
+class GpuTpsSolverFactory(TpsSolverFactory):
     def __init__(self, use_cache=True, cachedir=None):
-        """Inits TpsGpuSolverFactory
-        
-        Args:
-            use_cache: whether to cache solver matrices in file
-            cache_dir: cached directory. if not specified, the .cache directory in parent directory of top-level package is used.
-        """
-        super(TpsGpuSolverFactory, self).__init__(use_cache=use_cache, cachedir=cachedir)
+        super(GpuTpsSolverFactory, self).__init__(use_cache=use_cache, cachedir=cachedir)
     
     def get_solver_mats(self, x_nd, rot_coef):
         n,d = x_nd.shape
@@ -90,4 +81,4 @@ class TpsGpuSolverFactory(TpsSolverFactory):
     
     def get_solver(self, x_nd, rot_coef):
         N, QN, NKN, NRN, NR, K_nn = self.get_solver_mats(x_nd, rot_coef)
-        return TpsGpuSolver(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
+        return GpuTpsSolver(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
