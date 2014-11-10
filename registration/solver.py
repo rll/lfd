@@ -25,8 +25,7 @@ class TpsSolver(object):
             raise RuntimeError("The dimensions of y_nd doesn't match the dimensions of x_nd")
         WQN = wt_n[:, None] * self.QN
         lhs = self.QN.T.dot(WQN) + bend_coef * self.NKN + self.NRN
-        wy_nd = wt_n[:, None] * y_nd
-        rhs = self.NR + self.QN.T.dot(wy_nd)
+        rhs = self.NR + WQN.T.dot(y_nd)
         z = np.linalg.solve(lhs, rhs)
         theta = self.N.dot(z)
         f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
