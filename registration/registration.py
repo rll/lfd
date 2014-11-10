@@ -61,7 +61,8 @@ class RegistrationFactory(object):
         """Inits RegistrationFactory with demonstrations
         
         Args:
-            demos: dict that maps from demonstration name to Demonstration
+            demos: dict that maps from demonstration name to Demonstration. 
+                This is used by batch_registration and batch_cost.
         """
         self.demos = demos
         
@@ -79,10 +80,18 @@ class RegistrationFactory(object):
         """
         raise NotImplementedError
 
-    def batch_register(self, test_scene_state):
+    def batch_register(self, test_scene_state, plotting=False, plot_cb=None):
+        """Registers every demonstration scene in demos onto the test scene
+        
+        Returns:
+            A dict that maps from the demonstration names that are in demos 
+            to the Registration
+        
+        Note: derived classes might ignore the arguments plotting and plot_cb
+        """
         registrations = {}
         for name, demo in self.demos.iteritems():
-            registrations[name] = self.register(demo, test_scene_state)
+            registrations[name] = self.register(demo, test_scene_state, plotting=plotting, plot_cb=plot_cb)
         return registrations
     
     def cost(self, demo, test_scene_state):
@@ -102,6 +111,13 @@ class RegistrationFactory(object):
         raise NotImplementedError
 
     def batch_cost(self, test_scene_state):
+        """Gets costs of every demonstration scene in demos registered onto 
+        the test scene
+        
+        Returns:
+            A dict that maps from the demonstration names that are in demos 
+            to the numpy.array of partial cost
+        """
         costs = {}
         for name, demo in self.demos.iteritems():
             costs[name] = self.cost(demo, test_scene_state)
