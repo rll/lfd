@@ -53,7 +53,7 @@ class TpsGpuSolver(TpsSolver):
             culinalg.dot(self.N_gpu, self.rhs_gpu, out=self.theta_gpu)
             theta = self.theta_gpu.get()
         else: # if cula is not install perform the last two computations in the CPU
-            z = np.linalg.solve(self.lhs.get(), self.rhs_gpu.get())
+            z = np.linalg.solve(self.lhs_gpu.get(), self.rhs_gpu.get())
             theta = self.N.dot(z)
         f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
 
