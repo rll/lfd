@@ -242,79 +242,205 @@ def batch_sum(a_arr_gpu, a_ptr_gpu):
     res_arr, res_ptrs = dot_batch(flat_a_gpu, ones_arr_gpu, a_ptr_gpu, ones_ptr_gpu)
     return [r.get()[0] for r in res_arr]
 
-
-def gemm(A_gpu, B_gpu, C_gpu, transa='N', transb='N', alpha=1, beta=0, handle=None):
+def gemm(a_gpu, b_gpu, c_gpu, transa='N', transb='N', alpha=1, beta=0, handle=None):
     if handle is None:
         handle = misc._global_cublas_handle
-    if len(A_gpu.shape) == 1 and len(B_gpu.shape) == 1:
+    if len(a_gpu.shape) == 1 and len(b_gpu.shape) == 1:
         raise RuntimeError('dot products not supported for gemm')
 
     # Get the shapes of the arguments (accounting for the
     # possibility that one of them may only have one dimension):
-    A_shape = A_gpu.shape
-    B_shape = B_gpu.shape
-    if len(A_shape) == 1:
-        A_shape = (1, A_shape[0])
-    if len(B_shape) == 1:
-        B_shape = (1, B_shape[0])
-        
-    # Perform matriA multiplication for 2D arrays:
-    if (A_gpu.dtype == np.complex64 and B_gpu.dtype == np.complex64):
+    a_shape = a_gpu.shape
+    b_shape = b_gpu.shape
+    if len(a_shape) == 1:
+        a_shape = (1, a_shape[0])
+    if len(b_shape) == 1:
+        b_shape = (1, b_shape[0])
+
+    # Perform matrix multiplication for 2D arrays:
+    if (a_gpu.dtype == np.complex64 and b_gpu.dtype == np.complex64):
         cublas_func = cublas.cublasCgemm
         alpha = np.complex64(alpha)
         beta = np.complex64(beta)
-    elif (A_gpu.dtype == np.float32 and B_gpu.dtype == np.float32):
+    elif (a_gpu.dtype == np.float32 and b_gpu.dtype == np.float32):
         cublas_func = cublas.cublasSgemm
         alpha = np.float32(alpha)
         beta = np.float32(beta)
-    elif (A_gpu.dtype == np.complex128 and B_gpu.dtype == np.complex128):
+    elif (a_gpu.dtype == np.complex128 and b_gpu.dtype == np.complex128):
         cublas_func = cublas.cublasZgemm
         alpha = np.complex128(alpha)
         beta = np.complex128(beta)
-    elif (A_gpu.dtype == np.float64 and B_gpu.dtype == np.float64):
+    elif (a_gpu.dtype == np.float64 and b_gpu.dtype == np.float64):
         cublas_func = cublas.cublasDgemm
         alpha = np.float64(alpha)
         beta = np.float64(beta)
     else:
         raise ValueError('unsupported combination of input types')
 
-    transa = lower(transa)
-    transb = lower(transb)
-    
-    if transb in ['t', 'c']:
-        m, k = B_shape
-    elif transb in ['n']:
-        k, m = B_shape
-    else:
-        raise ValueError('invalid value for transb')
+    transa = transa.lower()
+    transb = transb.lower()
 
-    if transa in ['t', 'c']:
-        l, n = A_shape
-    elif transa in ['n']:
-        n, l = A_shape
-    else:
-        raise ValueError('invalid value for transa')
-    
-    if l != k:
-        raise ValueError('objects are not aligned')
-    
-    if transb == 'n':
-        lda = max(1, m)
-    else:
-        lda = max(1, k)
-        
-    if transa == 'n':
-        ldb = max(1, k)
-    else:
-        ldb = max(1, n)
+    if a_gpu.flags.c_contiguous != b_gpu.flags.c_contiguous:
+        raise ValueError('unsupported combination of input order')
 
-    ldc = max(1, m)
-    if C_gpu.shape != (n, ldc):
-        raise ValueError('objects are not aligned')
-    if C_gpu.dtype != A_gpu.dtype:
+    if a_gpu.flags.f_contiguous:
+        if transa in ['t', 'c']:
+            k, m = a_shape
+        elif transa in ['n']:
+            m, k = a_shape
+        else:
+            raise ValueError('invalid value for transa')
+
+        if transb in ['t', 'c']:
+            n, l = b_shape
+        elif transb in ['n']:
+            l, n = b_shape
+        else:
+            raise ValueError('invalid value for transb')
+
+        if l != k:
+            raise ValueError('objects are not aligned')
+
+        lda = max(1, a_shape[0])
+        ldb = max(1, b_shape[0])
+        ldc = max(1, m)
+
+        if c_gpu.shape != (m, n) or c_gpu.dtype != a_gpu.dtype:
+            raise ValueError('invalid value for c_gpu')
+        if a_gpu.flags.f_contiguous != c_gpu.flags.f_contiguous:
+            raise ValueError('invalid order for c_gpu')
+        cublas_func(handle, transa, transb, m, n, k, alpha, a_gpu.gpudata,
+                lda, b_gpu.gpudata, ldb, beta, c_gpu.gpudata, ldc)
+    else:
+        if transb in ['t', 'c']:
+            m, k = b_shape
+        elif transb in ['n']:
+            k, m = b_shape
+        else:
+            raise ValueError('invalid value for transb')
+
+        if transa in ['t', 'c']:
+            l, n = a_shape
+        elif transa in ['n']:
+            n, l = a_shape
+        else:
+            raise ValueError('invalid value for transa')
+
+        if l != k:
+            raise ValueError('objects are not aligned')
+
+        lda = max(1, b_shape[1])
+        ldb = max(1, a_shape[1])
+        ldc = max(1, m)
+
+        # Note that the desired shape of the output matrix is the transpose
+        # of what CUBLAS assumes:
+        if c_gpu.shape != (n, ldc) or c_gpu.dtype != a_gpu.dtype:
+            raise ValueError('invalid value for c_gpu')
+        if a_gpu.flags.f_contiguous != c_gpu.flags.f_contiguous:
+            raise ValueError('invalid order for c_gpu')
+        cublas_func(handle, transb, transa, m, n, k, alpha, b_gpu.gpudata,
+                lda, a_gpu.gpudata, ldb, beta, c_gpu.gpudata, ldc)
+
+def geam(a_gpu, b_gpu, c_gpu, transa='N', transb='N', alpha=1, beta=1, handle=None):
+    if handle is None:
+        handle = misc._global_cublas_handle
+    if len(a_gpu.shape) == 1 and len(b_gpu.shape) == 1:
+        raise RuntimeError('dot products not supported for geam')
+
+    # Get the shapes of the arguments (accounting for the
+    # possibility that one of them may only have one dimension):
+    a_shape = a_gpu.shape
+    b_shape = b_gpu.shape
+    if len(a_shape) == 1:
+        a_shape = (1, a_shape[0])
+    if len(b_shape) == 1:
+        b_shape = (1, b_shape[0])
+
+    # Perform matrix multiplication for 2D arrays:
+    if (a_gpu.dtype == np.complex64 and b_gpu.dtype == np.complex64):
+        cublas_func = cublas.cublasCgeam
+        alpha = np.complex64(alpha)
+        beta = np.complex64(beta)
+    elif (a_gpu.dtype == np.float32 and b_gpu.dtype == np.float32):
+        cublas_func = cublas.cublasSgeam
+        alpha = np.float32(alpha)
+        beta = np.float32(beta)
+    elif (a_gpu.dtype == np.complex128 and b_gpu.dtype == np.complex128):
+        cublas_func = cublas.cublasZgeam
+        alpha = np.complex128(alpha)
+        beta = np.complex128(beta)
+    elif (a_gpu.dtype == np.float64 and b_gpu.dtype == np.float64):
+        cublas_func = cublas.cublasDgeam
+        alpha = np.float64(alpha)
+        beta = np.float64(beta)
+    else:
         raise ValueError('unsupported combination of input types')
-    cublas_func(handle, transb, transa, m, n, k, alpha, B_gpu.gpudata,
-                lda, A_gpu.gpudata, ldb, beta, C_gpu.gpudata, ldc)
+
+    transa = transa.lower()
+    transb = transb.lower()
+
+    if a_gpu.flags.c_contiguous != b_gpu.flags.c_contiguous:
+        raise ValueError('unsupported combination of input order')
+
+    if a_gpu.flags.f_contiguous:
+        if transa in ['t', 'c']:
+            k, m = a_shape
+        elif transa in ['n']:
+            m, k = a_shape
+        else:
+            raise ValueError('invalid value for transa')
+
+        if transb in ['t', 'c']:
+            n, l = b_shape
+        elif transb in ['n']:
+            l, n = b_shape
+        else:
+            raise ValueError('invalid value for transb')
+
+        if m != l or k != n:
+            raise ValueError('objects are not aligned')
+
+        lda = max(1, a_shape[0])
+        ldb = max(1, b_shape[0])
+        ldc = max(1, m)
+
+        if c_gpu.shape != (m, n) or c_gpu.dtype != a_gpu.dtype:
+            raise ValueError('invalid value for c_gpu')
+        if a_gpu.flags.f_contiguous != c_gpu.flags.f_contiguous:
+            raise ValueError('invalid order for c_gpu')
+        cublas_func(handle, transa, transb, m, n, alpha, a_gpu.gpudata,
+                lda, beta, b_gpu.gpudata, ldb, c_gpu.gpudata, ldc)
+    else:
+        if transb in ['t', 'c']:
+            m, k = b_shape
+        elif transb in ['n']:
+            k, m = b_shape
+        else:
+            raise ValueError('invalid value for transb')
+
+        if transa in ['t', 'c']:
+            l, n = a_shape
+        elif transa in ['n']:
+            n, l = a_shape
+        else:
+            raise ValueError('invalid value for transa')
+
+        if m != l or k != n:
+            raise ValueError('objects are not aligned')
+
+        lda = max(1, b_shape[1])
+        ldb = max(1, a_shape[1])
+        ldc = max(1, m)
+
+        # Note that the desired shape of the output matrix is the transpose
+        # of what CUBLAS assumes:
+        if c_gpu.shape != (n, ldc) or c_gpu.dtype != a_gpu.dtype:
+            raise ValueError('invalid value for c_gpu')
+        if a_gpu.flags.f_contiguous != c_gpu.flags.f_contiguous:
+            raise ValueError('invalid order for c_gpu')
+        cublas_func(handle, transb, transa, m, n, alpha, a_gpu.gpudata,
+                lda, beta, b_gpu.gpudata, ldb, c_gpu.gpudata, ldc)
 
 if __name__ == '__main__':
     import pycuda.autoinit
