@@ -10,7 +10,9 @@ from rapprentice import knot_identification
 
 MIN_SEG_LEN = 3
 
+# Cloud MUST BE downsampled at a rate of 0.01 from original collected data!
 def find_path_through_point_cloud(xyzs, plotting=False, perturb_peak_dist=None, num_perturb_points=7):
+    print 'Finding path through point cloud'
     xyzs = np.asarray(xyzs).reshape(-1,3)
     S = skeletonize_point_cloud(xyzs)
     segs = get_segments(S)
@@ -36,7 +38,7 @@ def find_path_through_point_cloud(xyzs, plotting=False, perturb_peak_dist=None, 
     PG = make_path_graph(C, [len(path) for path in segs3d])
 
     (score, nodes) = longest_path_through_segment_graph(PG)
-    print nodes
+#    print nodes
 
     total_path = []
     for node in nodes[::2]:
@@ -46,7 +48,8 @@ def find_path_through_point_cloud(xyzs, plotting=False, perturb_peak_dist=None, 
     total_path_3d = remove_duplicate_rows(np.array([S.node[i]["xyz"] for i in total_path]))
 
     # perturb the path, if requested
-    if perturb_peak_dist is not None:
+    if perturb_peak_dist is not None and perturb_peak_dist != 0:
+        print "Perturbing the Path"
         orig_path_length = np.sqrt(((total_path_3d[1:,:2] - total_path_3d[:-1,:2])**2).sum(axis=1)).sum()
         perturb_centers = np.linspace(0, len(total_path_3d)-1, num_perturb_points).astype(int)
         perturb_xy = np.zeros((len(total_path_3d), 2))
@@ -348,7 +351,7 @@ def make_cost_matrix(paths):
             features[np.isnan(features)] = 0
             cost_matrix[i,j] = cost_matrix[j,i] =  np.dot(WEIGHTS, features)
         #cost_matrix[i,j] = cost_matrix[j,i] =  np.linalg.norm(pdi[0] - pdj[0])*1000
-    print cost_matrix
+#    print cost_matrix
     return cost_matrix    
 
 def make_path_graph(cost_matrix, lengths):

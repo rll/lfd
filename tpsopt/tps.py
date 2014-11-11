@@ -39,6 +39,7 @@ def tps_apply_kernel(distmat, dim):
     elif dim ==3:
         return -distmat
     else:
+        print 'dim =', dim
         raise NotImplementedError
     
     

@@ -110,6 +110,7 @@ class SimulationEnv:
             self.env.LoadData(make_cylinder_xml("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5))
     
         cc = trajoptpy.GetCollisionChecker(self.env)
+        #if self.env.GetKinBody('table'):
         for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
             if self.env.GetKinBody('table'):
                 cc.ExcludeCollisionPair(gripper_link, self.env.GetKinBody('table').GetLinks()[0])
@@ -376,7 +377,6 @@ def split_trajectory_by_lr_gripper(seg_info, lr):
     return seg_starts, seg_ends
 
 def get_opening_closing_inds(finger_traj):
-    GRIPPER_OPEN_CLOSE_THRESH = 0.01 # TODO in constants
     
     mult = 5.0
     GRIPPER_L_FINGER_OPEN_CLOSE_THRESH = mult * GRIPPER_OPEN_CLOSE_THRESH
@@ -419,7 +419,7 @@ def set_gripper_maybesim(sim_env, lr, is_open, prev_is_open, animate=False):
     joint_traj = np.linspace(start_val, target_val, np.ceil(abs(target_val - start_val) / .02))
     for val in joint_traj:
         sim_env.robot.SetDOFValues([val], [joint_ind])
-        sim_env.sim.step()
+        sim_env.step()
 #         if args.animation:
 #                sim_env.viewer.Step()
 #             if args.interactive: sim_env.viewer.Idle()
@@ -474,7 +474,7 @@ def sim_traj_maybesim(sim_env, lr2traj, animate=False, interactive=False, max_ca
 
 def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False, max_cart_vel_trans_traj=.05):
     def sim_callback(i):
-        sim_env.sim.step()
+        sim_env.step()
 
     animate_speed = 20 if animate else 0
 
@@ -637,17 +637,18 @@ def grippers_exceed_rope_length(sim_env, full_traj, thresh):
     This function returns a mask of the trajectory steps in which the distance between the grippers doesn't exceed min_length-thresh.
     If not both of the grippers are holding the rope, this function return None.
     """
-    if sim_env.sim.constraints['l'] and sim_env.sim.constraints['r']:
+    if sim_env.constraints['l'] and sim_env.constraints['r']:
         ee_trajs = {}
         for lr in 'lr':
             ee_trajs[lr] = get_ee_traj(sim_env.robot, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
         min_length = np.inf
+        raise NameError('Hello')
         hs = sim_env.sim.rope.GetHalfHeights()
         rope_links = sim_env.sim.rope.GetKinBody().GetLinks()
-        for l_rope_link in sim_env.sim.constraints_links['l']:
+        for l_rope_link in sim_env.constraints_links['l']:
             if l_rope_link not in rope_links:
                 continue
-            for r_rope_link in sim_env.sim.constraints_links['r']:
+            for r_rope_link in sim_env.constraints_links['r']:
                 if r_rope_link not in rope_links:
                     continue
                 i_cnt_l = rope_links.index(l_rope_link)
@@ -661,17 +662,17 @@ def grippers_exceed_rope_length(sim_env, full_traj, thresh):
         return None
 
 def remove_tight_rope_pull(sim_env, full_traj):
-    if sim_env.sim.constraints['l'] and sim_env.sim.constraints['r']:
+    if sim_env.constraints['l'] and sim_env.constraints['r']:
         ee_trajs = {}
         for lr in 'lr':
             ee_trajs[lr] = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
         min_length = np.inf
         hs = sim_env.sim.rope.GetHalfHeights()
         rope_links = sim_env.sim.rope.GetKinBody().GetLinks()
-        for l_rope_link in sim_env.sim.constraints_links['l']:
+        for l_rope_link in sim_env.constraints_links['l']:
             if l_rope_link not in rope_links:
                 continue
-            for r_rope_link in sim_env.sim.constraints_links['r']:
+            for r_rope_link in sim_env.constraints_links['r']:
                 if r_rope_link not in rope_links:
                     continue
                 i_cnt_l = rope_links.index(l_rope_link)

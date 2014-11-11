@@ -130,6 +130,7 @@ class GPUContext(object):
         if cloud_xyz.dtype != np.float32:
             raise TypeError("only single precision operations supported")
         if cloud_xyz.shape[0] > MAX_CLD_SIZE:
+            print 'Cloud Size: ', cloud_xyz.shape[0]
             raise ValueError("cloud size exceeds {}".format(MAX_CLD_SIZE))
         if cloud_xyz.shape[1] != DATA_DIM:
             raise ValueError("point cloud must have cumn dimension {}".format(DATA_DIM))
