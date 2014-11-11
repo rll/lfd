@@ -9,8 +9,6 @@ from robot_world import RobotWorld
 import sim_util
 import importlib
 
-import ipdb
-
 class StaticSimulation(object):
     def __init__(self, env=None):
         if env is not None:
@@ -467,7 +465,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         If grab_link is None, remove all constraints that attaches the lr gripper,
         else remove all constraints that attaches between the lr gripper and grab_link
         """
-        num_links_to_removed = 0
+        num_links_removed = 0
         for (cnt, link) in zip(self.constraints[lr], self.constraints_links[lr]):
             if grab_link is None or link == grab_link:
                 self.bt_env.RemoveConstraint(cnt)

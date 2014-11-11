@@ -7,7 +7,6 @@ import argparse
 from core import sim_util
 from core.constants import ROPE_RADIUS, ROPE_RADIUS_THICK, MAX_ACTIONS_TO_TRY, NUM_PROCS
 
-from core.transfer_simulate import BatchTransferSimulate
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicRopeSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
