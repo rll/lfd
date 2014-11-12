@@ -2,8 +2,9 @@ from __future__ import division
 
 import numpy as np
 from constants import TpsGpuConstant as tpsgc
-from registration import Registration, TpsRpmRegistrationFactory, TpsRpmBijRegistrationFactory
+from registration import TpsRpmRegistrationFactory, TpsRpmBijRegistrationFactory
 import tps, tpsopt
+from solver import AutoTpsSolverFactory
 from tpsopt.batchtps import GPUContext, TgtContext
 
 class BatchGpuTpsRpmRegistrationFactory(TpsRpmRegistrationFactory):
@@ -28,16 +29,16 @@ class BatchGpuTpsRpmRegistrationFactory(TpsRpmRegistrationFactory):
 class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
     """
     Similar to TpsRpmBijRegistrationFactory but batch_register and batch_cost are computed in batch using the GPU
-    TODO: this class is broken and needs to be implemented
     """
-    def __init__(self, demos, 
+    def __init__(self, demos, actionfile=None, 
                  n_iter=tpsgc.N_ITER, em_iter=tpsgc.EM_ITER, 
                  reg_init=tpsgc.REG[0], reg_final=tpsgc.REG[1], 
                  rad_init=tpsgc.RAD[0], rad_final=tpsgc.RAD[1], 
                  rot_reg = tpsgc.ROT_REG, 
                  outlierprior = tpsgc.OUTLIER_PRIOR, outlierfrac = tpsgc.OURLIER_FRAC, 
                  prior_fn=None, 
-                 f_solver_factory=None, g_solver_factory=None):
+                 f_solver_factory=AutoTpsSolverFactory(), 
+                 g_solver_factory=AutoTpsSolverFactory(use_cache=False)):
         super(BatchGpuTpsRpmBijRegistrationFactory, self).__init__(demos=demos, 
                                                               n_iter=n_iter, em_iter=em_iter, 
                                                               reg_init=reg_init, reg_final=reg_final, 
@@ -46,10 +47,12 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
                                                               outlierprior=outlierprior, outlierfrac=outlierfrac, 
                                                               prior_fn=prior_fn, 
                                                               f_solver_factory=f_solver_factory, g_solver_factory=g_solver_factory)
-        raise NotImplementedError
-        regs = tps.loglinspace(reg_init, reg_final, n_iter)
-        self.src_ctx = GPUContext(regs)
-        self.src_ctx.read_h5(filename)
+
+        self.actionfile = actionfile
+        if self.actionfile:
+            self.bend_coefs = tps.loglinspace(self.reg_init, self.reg_final, self.n_iter)
+            self.src_ctx = GPUContext(self.bend_coefs)
+            self.src_ctx.read_h5(actionfile)
         self.warn_clip_cloud = True
     
     def _clip_cloud(self, cloud):
@@ -65,6 +68,8 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
         raise NotImplementedError
     
     def batch_cost(self, test_scene_state):
+        if not(self.actionfile):
+            raise ValueError('No actionfile provided for gpu context')
         tgt_ctx = TgtContext(self.src_ctx)
         cloud = test_scene_state.cloud
         cloud = self._clip_cloud(cloud)

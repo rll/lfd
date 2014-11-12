@@ -4,10 +4,10 @@ from __future__ import division
 
 import numpy as np
 from core.demonstration import Demonstration, SceneState
-from registration.registration import TpsRpmRegistrationFactory
-from registration import tps, solver
+from core.registration.registration import TpsRpmRegistrationFactory
+from core.registration import tps, solver
 try:
-    from registration import solver_gpu
+    from core.registration import solver_gpu
     _use_gpu = True
 except:
     _use_gpu = False

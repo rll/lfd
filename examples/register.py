@@ -6,11 +6,10 @@ import numpy as np
 import trajoptpy
 from core.simulation import StaticSimulation
 from core.simulation_object import BoxSimulationObject
-from registration.registration import TpsRpmRegistrationFactory
-from registration.plotting_openrave import registration_plot_cb
+from core.registration.registration import TpsRpmRegistrationFactory
+from core.registration.plotting_openrave import registration_plot_cb
 
 from core.demonstration import Demonstration, SceneState
-from registration import solver, solver_gpu
 
 np.random.seed(0)
 

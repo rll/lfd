@@ -11,7 +11,8 @@ from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedT
 from core.simulation import DynamicRopeSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
 from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
+from core.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from core.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 
@@ -324,7 +325,7 @@ def parse_input_args():
         "--rope_param_angStiffness", type=str, default=None)
 
     parser_eval.add_argument("--parallel", action="store_true")
-    parser_eval.add_argument("--gpu", action="store_true", default=False)
+    parser_eval.add_argument("--batch", action="store_true", default=False)
 
     args = parser.parse_args()
     if not args.animation:
@@ -485,12 +486,12 @@ def setup_lfd_environment_sim(args):
 
 def setup_registration_and_trajectory_transferer(args, sim):
     print 'Setting up registration'
-    if args.eval.gpu:
+    if args.eval.batch:
         if args.eval.reg_type == 'rpm':
-            reg_factory = GpuTpsRpmRegistrationFactory(
+            reg_factory = BatchGpuTpsRpmRegistrationFactory(
                 GlobalVars.demos, args.eval.actionfile)
         elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(
+            reg_factory = BatchGpuTpsRpmBijRegistrationFactory(
                 GlobalVars.demos, args.eval.actionfile)
         else:
             raise RuntimeError(

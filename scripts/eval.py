@@ -12,7 +12,8 @@ from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedT
 from core.simulation import DynamicSimulationRobotWorld, DynamicRopeSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
+from core.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from core.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
 from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from core.action_selection import GreedyActionSelection
@@ -377,7 +378,7 @@ def parse_input_args():
 
 
     parser_eval.add_argument("--parallel", action="store_true")
-    parser_eval.add_argument("--gpu", action="store_true", default=False)
+    parser_eval.add_argument("--batch", action="store_true", default=False)
 
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
@@ -510,11 +511,11 @@ def setup_lfd_environment_sim(args):
     return lfd_env, sim
 
 def setup_registration_and_trajectory_transferer(args, sim):
-    if args.eval.gpu:
+    if args.eval.batch:
         if args.eval.reg_type == 'rpm':
-            reg_factory = GpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
+            reg_factory = BatchGpuTpsRpmRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
+            reg_factory = BatchGpuTpsRpmBijRegistrationFactory(GlobalVars.demos, args.eval.actionfile)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:

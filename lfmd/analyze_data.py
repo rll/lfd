@@ -20,7 +20,8 @@ from core.demonstration import SceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicSimulationRobotWorld
 from core.simulation_object import XmlSimulationObject, BoxSimulationObject
 from core.environment import LfdEnvironment
-from core.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, GpuTpsRpmBijRegistrationFactory, GpuTpsRpmRegistrationFactory
+from core.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from core.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
 from core.action_selection import GreedyActionSelection
 from core.transfer import TrajectoryTransferer
 
@@ -938,7 +939,7 @@ def parse_input_args():
     parser_eval.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser_eval.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
-    parser_eval.add_argument("--gpu", action="store_true", default=False)
+    parser_eval.add_argument("--batch", action="store_true", default=False)
 
     parser_eval.add_argument("--beta_pos", type=float, default=1000000.0)
     parser_eval.add_argument("--beta_rot", type=float, default=100.0)
@@ -1095,11 +1096,11 @@ def setup_lfd_environment_sim(args):
     return lfd_env, sim
 
 def setup_registration(args, demos, sim):
-    if args.eval.gpu:
+    if args.eval.batch:
         if args.eval.reg_type == 'rpm':
-            reg_factory = GpuTpsRpmRegistrationFactory(demos, args.eval.actionfile)
+            reg_factory = BatchGpuTpsRpmRegistrationFactory(demos, args.eval.actionfile)
         elif args.eval.reg_type == 'bij':
-            reg_factory = GpuTpsRpmBijRegistrationFactory(demos, args.eval.actionfile)
+            reg_factory = BatchGpuTpsRpmBijRegistrationFactory(demos, args.eval.actionfile)
         else:
             raise RuntimeError("Invalid reg_type option %s"%args.eval.reg_type)
     else:
