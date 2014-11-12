@@ -6,11 +6,12 @@ import bulletsimpy
 from lfd.rapprentice import animate_traj, ropesim
 import numpy as np
 from robot_world import RobotWorld
+from PR2 import BerkeleyPR2
 import sim_util
 import importlib
 
 class StaticSimulation(object):
-    def __init__(self, env=None):
+    def __init__(self, robot_type=BerkeleyPR2, env=None):
         if env is not None:
             self.env = env
         else:
@@ -18,11 +19,11 @@ class StaticSimulation(object):
             self.env.StopSimulation()
         self.sim_objs = []
         self.robot = None
+        self.robot_type = robot_type
         self.__viewer_cache = None
     
-    def add_objects(self, objs_to_add, consider_finger_collisions=True):
-        if consider_finger_collisions:
-            self._include_gripper_finger_collisions()
+    def add_objects(self, objs_to_add):
+        self.robot_type.pre_add_objects(self)
         for obj_to_add in objs_to_add:
             if obj_to_add.dynamic:
                 raise RuntimeError("Dynamic object can't be added to StaticSimulation")
@@ -32,12 +33,10 @@ class StaticSimulation(object):
         if len(self.env.GetRobots()) > 1:
             raise NotImplementedError("Behavior for adding more than one robot has not been defined")
         self.robot = self.env.GetRobots()[-1]
-        if consider_finger_collisions:
-            self._exclude_gripper_finger_collisions()
+        self.robot_type.post_add_objects(self)
     
-    def remove_objects(self, objs_to_remove, consider_finger_collisions=True):
-        if consider_finger_collisions:
-            self._include_gripper_finger_collisions()
+    def remove_objects(self, objs_to_remove):
+        self.robot_type.pre_remove_objects(self)
         for obj_to_remove in objs_to_remove:
             if obj_to_remove.dynamic:
                 raise RuntimeError("Dynamic object can't be removed from StaticSimulation")
@@ -46,8 +45,7 @@ class StaticSimulation(object):
                 obj_to_remove.remove_from_env()
         if self.robot and self.robot not in self.env.GetRobots():
             raise NotImplementedError("Behavior for removing robots has not been defined")
-        if consider_finger_collisions:
-            self._exclude_gripper_finger_collisions()
+        self.robot_type.post_remove_objects(self)
     
     def get_state(self):
         sim_objs_constructor_infos = [sim_obj._get_constructor_info() for sim_obj in self.sim_objs]
@@ -98,32 +96,6 @@ class StaticSimulation(object):
             self.__viewer_cache = trajoptpy.GetViewer(self.env)
         return self.__viewer_cache
 
-    def _exclude_gripper_finger_collisions(self):
-        if not self.robot:
-            return
-        cc = trajoptpy.GetCollisionChecker(self.env)
-        for lr in 'lr':
-            for flr in 'lr':
-                finger_link_name = "%s_gripper_%s_finger_tip_link" % (lr, flr)
-                finger_link = self.robot.GetLink(finger_link_name)
-                for sim_obj in self.sim_objs:
-                    for bt_obj in sim_obj.get_bullet_objects():
-                        for link in bt_obj.GetKinBody().GetLinks():
-                            cc.ExcludeCollisionPair(finger_link, link)
-    
-    def _include_gripper_finger_collisions(self):
-        if not self.robot:
-            return
-        cc = trajoptpy.GetCollisionChecker(self.env)
-        for lr in 'lr':
-            for flr in 'lr':
-                finger_link_name = "%s_gripper_%s_finger_tip_link" % (lr, flr)
-                finger_link = self.robot.GetLink(finger_link_name)
-                for sim_obj in self.sim_objs:
-                    for bt_obj in sim_obj.get_bullet_objects():
-                        for link in bt_obj.GetKinBody().GetLinks():
-                            cc.IncludeCollisionPair(finger_link, link)
-
     @staticmethod
     def simulation_state_equal(s0, s1):
         if s0[0] != s1[0]:
@@ -140,8 +112,8 @@ class StaticSimulation(object):
 
 
 class DynamicSimulation(StaticSimulation):
-    def __init__(self, env=None):
-        super(DynamicSimulation, self).__init__(env=env)
+    def __init__(self, robot_type=BerkeleyPR2, env=None):
+        super(DynamicSimulation, self).__init__(robot_type=robot_type, env=env)
         self.dyn_sim_objs = []
         self.bt_env = None
         self.bt_robot = None   
@@ -150,30 +122,30 @@ class DynamicSimulation(StaticSimulation):
     def add_objects(self, sim_objs):
         static_sim_objs = [sim_obj for sim_obj in sim_objs if not sim_obj.dynamic]
         dyn_sim_objs = [sim_obj for sim_obj in sim_objs if sim_obj.dynamic]
-        self._include_gripper_finger_collisions()
+        self.robot_type.pre_add_objects(self)
         # add static objects
-        super(DynamicSimulation, self).add_objects(static_sim_objs, consider_finger_collisions=False)
+        super(DynamicSimulation, self).add_objects(static_sim_objs)
         # add dynamic objects
         self._remove_bullet()
         for sim_obj in dyn_sim_objs:
             self.sim_objs.append(sim_obj)
             self.dyn_sim_objs.append(sim_obj)
         self._create_bullet()
-        self._exclude_gripper_finger_collisions()
+        self.robot_type.post_add_objects(self)
     
     def remove_objects(self, sim_objs):
         static_sim_objs = [sim_obj for sim_obj in sim_objs if not sim_obj.dynamic]
         dyn_sim_objs = [sim_obj for sim_obj in sim_objs if sim_obj.dynamic]
-        self._include_gripper_finger_collisions()
+        self.robot_type.pre_remove_objects(self)
         # remove static objects
-        super(DynamicSimulation, self).remove_objects(static_sim_objs, consider_finger_collisions=False)
+        super(DynamicSimulation, self).remove_objects(static_sim_objs)
         # remove dynamic objects
         self._remove_bullet()
         for sim_obj in dyn_sim_objs:
             self.sim_objs.remove(sim_obj)
             self.dyn_sim_objs.remove(sim_obj)
         self._create_bullet()
-        self._exclude_gripper_finger_collisions()
+        self.robot_type.post_remove_objects(self)
     
     def set_state(self, sim_state):
         """
@@ -185,10 +157,10 @@ class DynamicSimulation(StaticSimulation):
         set_state(sim_state)
         execution2()
         """
-        self._include_gripper_finger_collisions()
+        self.robot_type.pre_set_state(self)
         self._remove_bullet()
         self._create_bullet()
-        self._exclude_gripper_finger_collisions()
+        self.robot_type.post_set_state(self)
         super(DynamicSimulation, self).set_state(sim_state)
         self.update()
 
