@@ -9,9 +9,10 @@ This code has been tested on Ubuntu 12.04.
 - trajopt
 - h5py
 - joblib
+- CULA R12 or later (recommended)
 
 ###Instructions
-- Install [bulletsim ](https://github.com/hojonathanho/bulletsim) from source. Use the `lite` branch and follow its README instructions.
+- Install [bulletsim](https://github.com/hojonathanho/bulletsim) from source. Use the `lite` branch and follow its README instructions.
 - Install [trajopt](http://rll.berkeley.edu/trajopt) from source. Follow the installation instructions except that use [this fork](https://github.com/erictzeng/trajopt) and the `trajopt-jointopt` branch.
 - Install h5py. You can install it using `pip`:
 ```
@@ -21,6 +22,15 @@ sudo pip install h5py
 ```
 sudo easy_install joblib
 ```
+- CULA (optional):
+  - Linear systems can optionally be solved on the GPU using the CULA Dense toolkit.
+  - Download and install the full edition of [CULA](http://www.culatools.com/downloads/dense/). The full edition is required since the free edition only has single precision functions. The full edition is free for academic use, but requires registration.
+  - As recommended by the installation, set the environment variables CULA_ROOT and CULA_INC_PATH to point to the CULA root and include directories. Also, add the CULA library directory to your LD_LIBRARY_PATH. On my linux development machine, that would be
+  ```
+  export CULA_ROOT=/usr/local/cula
+  export CULA_INC_PATH=$CULA_ROOT/include
+  export LD_LIBRARY_PATH=${CULA_ROOT}/lib64:$LD_LIBRARY_PATH
+  ```
 
 Now you should be able to run the scripts in the `examples` directory.
 
