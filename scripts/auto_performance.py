@@ -1,6 +1,6 @@
 import argparse
 import h5py
-from rapprentice import eval_util
+from lfd.rapprentice import eval_util
 
 def estimate_performance(fname):
     results_file = h5py.File(fname, 'r')

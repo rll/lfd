@@ -3,11 +3,11 @@
 from __future__ import division
 
 import numpy as np
-from core.demonstration import Demonstration, SceneState
-from core.registration.registration import TpsRpmRegistrationFactory
-from core.registration import tps, solver
+from lfd.demonstration.demonstration import Demonstration, SceneState
+from lfd.registration.registration import TpsRpmRegistrationFactory
+from lfd.registration import tps, solver
 try:
-    from core.registration import solver_gpu
+    from lfd.registration import solver_gpu
     _use_gpu = True
 except:
     _use_gpu = False

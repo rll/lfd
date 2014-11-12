@@ -2,12 +2,16 @@
 
 from __future__ import division
 
+import openravepy
+
 import numpy as np
-import trajoptpy, openravepy
+import trajoptpy
+
 from rapprentice import planning, resampling
-from core.simulation import DynamicSimulationRobotWorld
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject
-from core import sim_util
+from lfd.environment.simulation import DynamicSimulationRobotWorld
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
+from lfd.environment import sim_util
+
 
 table_height = 0.77
 box_length = 0.04

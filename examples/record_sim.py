@@ -1,39 +1,31 @@
 from __future__ import division
 
-import pprint
-import argparse
-from core import demonstration, registration, transfer, sim_util
-from core.constants import ROPE_RADIUS
-
-from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from core.environment import RecordingSimulationEnvironment
-from core.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from core.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
-from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
-from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
-from core.action_selection import GreedyActionSelection
-
-from rapprentice import eval_util, util
-from rapprentice import tps_registration, planning
- 
-from rapprentice import berkeley_pr2, \
-     animate_traj, ros2rave, plotting_openrave, task_execution, \
-     tps, func_utils, resampling, ropesim, rope_initialization
-from rapprentice import math_utils as mu
-from rapprentice.yes_or_no import yes_or_no
-import pdb, time
-
-import trajoptpy, openravepy
-from rapprentice.knot_classifier import isKnot as is_knot, calculateCrossings
-import os, os.path, numpy as np, h5py
-from rapprentice.util import redprint, yellowprint
+import time
+import os
+import os.path
+import h5py
 import atexit
-import importlib
-from itertools import combinations
+
+import trajoptpy
+import numpy as np
 import IPython as ipy
-import random
-import hashlib
+
+from lfd.environment import sim_util
+from lfd.constants import ROPE_RADIUS
+from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
+from lfd.environment.environment import RecordingSimulationEnvironment
+from lfd.rapprentice import eval_util
+from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.transfer.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
+from lfd.action_selection import GreedyActionSelection
+from lfd.rapprentice import util
+from lfd.rapprentice import task_execution
+from lfd.rapprentice.knot_classifier import isKnot as is_knot
+from lfd.rapprentice.util import redprint
+
 
 class GlobalVars:
     exec_log = None

@@ -2,27 +2,22 @@
 
 from __future__ import division
 
-import copy
-import argparse
-from core import sim_util
-
-from core.simulation import DynamicSimulation
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
-
-from rapprentice import util
-
-from rapprentice import task_execution, rope_initialization
-import pdb, time
-
-from mmqe import search
-
-import trajoptpy
-import os, os.path, numpy as np, h5py
-from rapprentice.util import redprint, yellowprint
+import time
+import os.path
+import h5py
 import atexit
-import IPython as ipy
 import random
 import sys
+
+import trajoptpy
+import numpy as np
+
+from lfd.environment import sim_util
+from lfd.environment.simulation import DynamicSimulation
+from lfd.environment.simulation_object import BoxSimulationObject, RopeSimulationObject
+from lfd.rapprentice import util
+from lfd.rapprentice import task_execution, rope_initialization
+from lfd.rapprentice.util import redprint
 
 class GlobalVars:
     exec_log = None

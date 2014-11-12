@@ -3,12 +3,14 @@
 from __future__ import division
 
 import numpy as np
-import trajoptpy, openravepy
+import trajoptpy
+
 from rapprentice import planning, resampling
 import rapprentice.math_utils as mu
-from core.simulation import DynamicSimulationRobotWorld
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from core import sim_util
+from lfd.environment.simulation import DynamicSimulationRobotWorld
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
+from lfd.environment import sim_util
+
 
 table_height = 0.77
 cyl_radius = 0.025

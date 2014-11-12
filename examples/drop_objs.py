@@ -2,11 +2,15 @@
 
 from __future__ import division
 
+import openravepy
+
 import numpy as np
-import trajoptpy, openravepy
-from core.simulation import DynamicSimulation
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject, CylinderSimulationObject
-from core import sim_util
+import trajoptpy
+
+from lfd.environment.simulation import DynamicSimulation
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject, CylinderSimulationObject
+from lfd.environment import sim_util
+
 
 table_height = 0.77
 helix_ang0 = 0

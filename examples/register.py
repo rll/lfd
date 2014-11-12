@@ -4,12 +4,13 @@ from __future__ import division
 
 import numpy as np
 import trajoptpy
-from core.simulation import StaticSimulation
-from core.simulation_object import BoxSimulationObject
-from core.registration.registration import TpsRpmRegistrationFactory
-from core.registration.plotting_openrave import registration_plot_cb
 
-from core.demonstration import Demonstration, SceneState
+from lfd.environment.simulation import StaticSimulation
+from lfd.environment.simulation_object import BoxSimulationObject
+from lfd.registration.registration import TpsRpmRegistrationFactory
+from lfd.registration.plotting_openrave import registration_plot_cb
+from lfd.demonstration.demonstration import Demonstration, SceneState
+
 
 np.random.seed(0)
 

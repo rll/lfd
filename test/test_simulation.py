@@ -2,12 +2,16 @@
 
 from __future__ import division
 
-import numpy as np
-import openravepy, trajoptpy
-from core.simulation import DynamicSimulation
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from core import sim_util
+import openravepy
 import unittest
+
+import numpy as np
+import trajoptpy
+
+from lfd.environment.simulation import DynamicSimulation
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
+from lfd.environment import sim_util
+
 
 class TestSimulation(unittest.TestCase):
     def setUp(self):

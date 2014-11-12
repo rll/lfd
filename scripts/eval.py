@@ -2,45 +2,32 @@
 
 from __future__ import division
 
-import copy
-import pprint
-import argparse
-from core import demonstration, registration, transfer, sim_util
-from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
-
-from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
-from core.simulation import DynamicSimulationRobotWorld, DynamicRopeSimulationRobotWorld
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from core.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from core.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
-from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
-from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
-from core.action_selection import GreedyActionSelection
-from core.action_selection import FeatureActionSelection
-
-from rapprentice import eval_util, util
-from rapprentice import tps_registration, planning
-
-from rapprentice import berkeley_pr2, \
-     animate_traj, ros2rave, plotting_openrave, task_execution, \
-     tps, func_utils, resampling, ropesim, rope_initialization
-from rapprentice import math_utils as mu
-from rapprentice.yes_or_no import yes_or_no
-import pdb, time
-
-from mmqe import search
-
-import trajoptpy, openravepy
-from rapprentice.knot_classifier import isKnot as is_knot, isFig8Knot as is_fig8knot, calculateCrossings
-import os, os.path, numpy as np, h5py
-from rapprentice.util import redprint, yellowprint
+import time
+import os.path
+import h5py
 import atexit
-import importlib
-from itertools import combinations
-import IPython as ipy
-import random
-import hashlib
+
+import trajoptpy
+import numpy as np
+
+from lfd.environment import sim_util
+from lfd.environment.constants import RopeConstant as ropec
+from constants import MAX_ACTIONS_TO_TRY
+from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
+from lfd.environment.simulation import DynamicRopeSimulationRobotWorld
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
+from lfd.environment.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
+from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.transfer.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
+from lfd.action_selection import GreedyActionSelection
+from lfd.action_selection import FeatureActionSelection
+from lfd.rapprentice import eval_util, util
+from lfd.rapprentice import task_execution
+from lfd.rapprentice.knot_classifier import isKnot as is_knot
+from lfd.rapprentice.util import redprint, yellowprint
+
 
 class GlobalVars:
     exec_log = None
@@ -409,7 +396,7 @@ def set_global_vars(args):
     for action, seg_info in GlobalVars.actions.iteritems():
         if args.eval.ground_truth:
             rope_nodes = seg_info['rope_nodes'][()]
-            scene_state = GroundTruthRopeSceneState(rope_nodes, ROPE_RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
+            scene_state = GroundTruthRopeSceneState(rope_nodes, ropec.RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
         else:
             full_cloud = seg_info['cloud_xyz'][()]
             scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
@@ -544,27 +531,27 @@ def setup_registration_and_trajectory_transferer(args, sim):
 def get_features(args):
     feat_type = args.eval.feature_type
     if feat_type== 'base':
-        from mmqe.features import BatchRCFeats as feat
+        from lfd.mmqe.features import BatchRCFeats as feat
     elif feat_type == 'mul':
-        from mmqe.features import MulFeats as feat
+        from lfd.mmqe.features import MulFeats as feat
     elif feat_type == 'mul_quad':
-        from mmqe.features import QuadSimpleMulFeats as feat
+        from lfd.mmqe.features import QuadSimpleMulFeats as feat
     elif feat_type == 'mul_quad_ind':
-        from mmqe.features import QuadSimpleMulIndFeats as feat
+        from lfd.mmqe.features import QuadSimpleMulIndFeats as feat
     elif feat_type == 'mul_quad_mapind':
-        from mmqe.features import QuadSimpleMulMapIndFeats as feat
+        from lfd.mmqe.features import QuadSimpleMulMapIndFeats as feat
     elif feat_type == 'mul_quad_bendind':
-        from mmqe.features import QuadSimpleMulBendIndFeats as feat
+        from lfd.mmqe.features import QuadSimpleMulBendIndFeats as feat
     elif feat_type == 'mul_s':
-        from mmqe.features import SimpleMulFeats as feat
+        from lfd.mmqe.features import SimpleMulFeats as feat
     elif feat_type == 'mul_grip':
-        from mmqe.features import SimpleMulGripperFeats as feat
+        from lfd.mmqe.features import SimpleMulGripperFeats as feat
     elif feat_type == 'mul_s_map':
-        from mmqe.features import SimpleMulMapIndFeats as feat
+        from lfd.mmqe.features import SimpleMulMapIndFeats as feat
     elif feat_type == 'landmark':
-        from mmqe.features import LandmarkFeats as feat
+        from lfd.mmqe.features import LandmarkFeats as feat
     elif feat_type == 'timestep':
-        from mmqe.features import TimestepActionMulFeats as feat
+        from lfd.mmqe.features import TimestepActionMulFeats as feat
     else:
         raise ValueError('Incorrect Feature Type')
 

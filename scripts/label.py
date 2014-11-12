@@ -2,39 +2,33 @@
 
 from __future__ import division
 
-import copy
-import argparse
-from core import sim_util
-from core.constants import ROPE_RADIUS, ROPE_RADIUS_THICK, MAX_ACTIONS_TO_TRY, NUM_PROCS
-
-from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
-from core.simulation import DynamicRopeSimulationRobotWorld
-from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
-from core.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from core.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from core.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
-from core.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
-from core.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
-
-from rapprentice import eval_util, util
-from rapprentice import tps_registration
-
-from rapprentice import plotting_openrave, task_execution, \
-    resampling, ropesim, rope_initialization
-from rapprentice.knot_classifier import remove_consecutive_crossings, remove_consecutive_cross_pairs, calculateCrossings, crossingsToString, isFig8Knot
-import pdb
-import time
-
-import trajoptpy
-import os
 import os.path
-import numpy as np
 import h5py
-from rapprentice.util import redprint, yellowprint
 import atexit
-import IPython as ipy
 import random
 from string import lower
+
+import trajoptpy
+import numpy as np
+
+from lfd.environment import sim_util
+from lfd.environment.constants import RopeConstant as ropec
+from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
+from lfd.environment.simulation import DynamicRopeSimulationRobotWorld
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
+from lfd.environment.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
+from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
+from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.transfer.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
+from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
+from lfd.rapprentice import util
+from lfd.rapprentice import task_execution, rope_initialization
+from lfd.rapprentice.knot_classifier import isFig8Knot
+from lfd.rapprentice.util import redprint
+
+
+
+
 
 # Usage: python scripts/label.py --animation 2 label bigdata/misc/overhand_actions.h5 data/misc/Sep14_train2.h5 finger bij --gpu
 
@@ -49,7 +43,7 @@ def label_demos_parallel(args, transferer, lfd_env, sim):
     outfile = h5py.File(args.eval.outfile, 'a')
 
     rope_params = sim_util.RopeParams()
-    rope_params.radius = ROPE_RADIUS_THICK
+    rope_params.radius = ropec.RADIUS_THICK
     if args.eval.rope_param_radius is not None:
         rope_params.radius = args.eval.rope_param_radius
     if args.eval.rope_param_angStiffness is not None:
@@ -355,7 +349,7 @@ def set_global_vars(args):
             rope_nodes = seg_info['rope_nodes'][()]
             scene_state = GroundTruthRopeSceneState(
                 rope_nodes,
-                ROPE_RADIUS,
+                ropec.RADIUS,
                 upsample=args.eval.upsample,
                 upsample_rad=args.eval.upsample_rad,
                 downsample_size=args.eval.downsample_size)
