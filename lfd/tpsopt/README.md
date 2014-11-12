@@ -21,7 +21,7 @@ $ git clone https://github.com/lebedov/scikits.cuda.git
 $ cd scikits.cuda
 $ python setup.py install 
 ```
-The last line may need to run as root.
+The last line may need to run as root. CUDA path may need to be set.
 
 Build the additional cuda functionality
 ```
