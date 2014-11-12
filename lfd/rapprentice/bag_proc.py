@@ -1,4 +1,4 @@
-from rapprentice import ros2rave, func_utils, berkeley_pr2
+from lfd.rapprentice import ros2rave, func_utils, berkeley_pr2
 import fastrapp
 import numpy as np
 import cv2

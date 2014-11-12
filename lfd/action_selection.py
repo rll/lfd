@@ -4,7 +4,7 @@ import numpy as np
 
 from lfd.environment import simulation_object
 from lfd.mmqe.search import beam_search
-from rapprentice.knot_classifier import isKnot as is_knot
+from lfd.rapprentice.knot_classifier import isKnot as is_knot
 
 
 class ActionSelection(object):

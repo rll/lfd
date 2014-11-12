@@ -1,6 +1,6 @@
 import sys, traceback
 from time import time
-from rapprentice.colorize import colorize
+from lfd.rapprentice.colorize import colorize
 
 TEST_FUNCS = {}
 

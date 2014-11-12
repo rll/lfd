@@ -279,7 +279,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             if self.robot is None:
                 raise RuntimeError("Can't observe cloud when there is no robot")
             else:
-                from rapprentice import berkeley_pr2
+                from lfd.rapprentice import berkeley_pr2
                 self.T_w_k = berkeley_pr2.get_kinect_transform(self.robot)
         
         # camera's parameters

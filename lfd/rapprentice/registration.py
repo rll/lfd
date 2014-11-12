@@ -17,7 +17,7 @@ from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
-from rapprentice import tps, svds, math_utils
+from lfd.rapprentice import tps, svds, math_utils
 from tps import tps_eval, tps_grad, tps_fit3, tps_fit_regrot, tps_cost, tps_kernel_matrix # ParallelPython can't handle functions from other modules
 from collections import defaultdict
 import IPython as ipy

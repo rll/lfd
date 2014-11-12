@@ -11,7 +11,7 @@ from scikits.cuda.linalg import pinv as cu_pinv
 from constants import GRIPPER_OPEN_CLOSE_THRESH
 from tps import tps_kernel_matrix, tps_kernel_matrix2
 from lfd.tpsopt.registration import unit_boxify, loglinspace
-from rapprentice import clouds
+from lfd.rapprentice import clouds
 from culinalg_exts import get_gpu_ptrs, dot_batch_nocheck, m_dot_batch
 from constants import N_ITER_CHEAP, DEFAULT_LAMBDA, DS_SIZE, BEND_COEF_DIGITS, EXACT_LAMBDA, N_ITER_EXACT
 

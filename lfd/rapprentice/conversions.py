@@ -1,5 +1,5 @@
 import numpy as np
-from rapprentice import transformations
+from lfd.rapprentice import transformations
 try:
     import geometry_msgs.msg as gm
     import rospy

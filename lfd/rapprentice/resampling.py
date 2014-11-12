@@ -3,8 +3,8 @@ Resample time serieses to reduce the number of datapoints
 """
 from __future__ import division
 import numpy as np
-from rapprentice import LOG
-import rapprentice.math_utils as mu
+from lfd.rapprentice import LOG
+import lfd.rapprentice.math_utils as mu
 #import fastrapp
 import scipy.interpolate as si
 import openravepy

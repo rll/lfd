@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.interpolate as si
 from numpy import pi
-from rapprentice import math_utils as mu
+from lfd.rapprentice import math_utils as mu
 
 def smaller_ang(x):
     return (x + pi)%(2*pi) - pi

@@ -40,7 +40,7 @@ class SceneState(object):
         self.full_color = full_color
         if downsample_size > 0:
             global clouds
-            from rapprentice import clouds
+            from lfd.rapprentice import clouds
             if full_color is not None:
                 cloud_color = clouds.downsample(np.c_[full_cloud, full_color], downsample_size)
                 self.cloud = cloud_color[:,:3]

@@ -7,7 +7,7 @@ import openravepy
 import numpy as np
 import trajoptpy
 
-from rapprentice import planning, resampling
+from lfd.rapprentice import planning, resampling
 from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
 from lfd.environment import sim_util

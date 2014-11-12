@@ -5,8 +5,8 @@ from __future__ import division
 import numpy as np
 import trajoptpy
 
-from rapprentice import planning, resampling
-import rapprentice.math_utils as mu
+from lfd.rapprentice import planning, resampling
+import lfd.rapprentice.math_utils as mu
 from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from lfd.environment import sim_util

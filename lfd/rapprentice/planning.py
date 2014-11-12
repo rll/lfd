@@ -2,8 +2,8 @@ from __future__ import division
 import openravepy,trajoptpy, numpy as np, json
 from lfd.environment import sim_util
 import util
-from rapprentice import tps, registration, math_utils as mu
-from rapprentice.registration import ThinPlateSpline
+from lfd.rapprentice import tps, registration, math_utils as mu
+from lfd.rapprentice.registration import ThinPlateSpline
 import IPython as ipy
 
 def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj, 

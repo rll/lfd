@@ -3,8 +3,8 @@
 from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
-from rapprentice import registration, math_utils
-from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
+from lfd.rapprentice import registration, math_utils
+from lfd.rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
 import tps
 import knot_classifier
 

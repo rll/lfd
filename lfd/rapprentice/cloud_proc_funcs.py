@@ -1,5 +1,5 @@
 import cloudprocpy
-from rapprentice import berkeley_pr2, clouds
+from lfd.rapprentice import berkeley_pr2, clouds
 import cv2, numpy as np
 
 DEBUG_PLOTS = False

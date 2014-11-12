@@ -475,7 +475,7 @@ class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
                 handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
             self.sim.viewer.Step()
         
-#         from rapprentice import eval_util
+#         from lfd.rapprentice import eval_util
 #         f = h5py.File("towel_0_0_processed.h5")
 #         M_inv = {}
 #         J = {}
@@ -615,7 +615,7 @@ def register_scenes(sim, reg_factory, scene_state):
     regs = []
     demos = []
     
-#     from rapprentice import plotting_openrave
+#     from lfd.rapprentice import plotting_openrave
 #     def plot_cb(x_nd, y_md, targ_Nd, corr_nm, wt_n, f, demo):
 #         handles = []
 #         handles.append(sim.env.plot3(x_nd, 5, (1,0,0,1)))

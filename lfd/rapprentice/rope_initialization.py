@@ -2,7 +2,7 @@ import networkx as nx, numpy as np, scipy.spatial.distance as ssd, scipy.interpo
 from collections import deque
 import itertools
 from numpy.random import rand
-from rapprentice import knot_identification
+from lfd.rapprentice import knot_identification
 
 
 

@@ -3,7 +3,7 @@ import numpy as np
 import scipy.linalg
 import argparse
 
-from rapprentice.tps import tps_kernel_matrix 
+from lfd.rapprentice.tps import tps_kernel_matrix 
 
 def parse_arguments():
     parser = argparse.ArgumentParser()

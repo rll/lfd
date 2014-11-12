@@ -11,7 +11,7 @@ import numpy as np
 import IPython as ipy
 
 from lfd.environment import sim_util
-from lfd.constants import ROPE_RADIUS
+from lfd.environment.constants import RopeConstant as ropec
 from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from lfd.environment.environment import RecordingSimulationEnvironment
@@ -208,7 +208,7 @@ def set_global_vars(args):
     for action, seg_info in GlobalVars.actions.iteritems():
         if args.eval.ground_truth:
             rope_nodes = seg_info['rope_nodes'][()]
-            scene_state = GroundTruthRopeSceneState(rope_nodes, ROPE_RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
+            scene_state = GroundTruthRopeSceneState(rope_nodes, ropec.RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
         else:
             full_cloud = seg_info['cloud_xyz'][()]
             scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)

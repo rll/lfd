@@ -1,4 +1,4 @@
-from rapprentice.colorize import colorize
+from lfd.rapprentice.colorize import colorize
 import subprocess
 
 def call_and_print(cmd,color='green'):

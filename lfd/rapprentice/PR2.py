@@ -5,7 +5,7 @@ from numpy import inf, zeros, dot, r_, pi
 from numpy.linalg import norm, inv
 from threading import Thread
 
-from rapprentice import retiming, math_utils as mu,conversions as conv, func_utils, resampling
+from lfd.rapprentice import retiming, math_utils as mu,conversions as conv, func_utils, resampling
 
 import roslib
 roslib.load_manifest("pr2_controllers_msgs")

@@ -15,7 +15,7 @@ index name conventions:
 
 from __future__ import division
 import numpy as np
-from rapprentice import svds, math_utils
+from lfd.rapprentice import svds, math_utils
 
 class Transformation(object):
     """

@@ -2,12 +2,12 @@
 # The purpose of this class is to eventually consolidate the various
 # instantiations of do_task_eval.py
 import argparse
-from lfd import sim_util
+from lfd.environment import sim_util
 import importlib, __builtin__
 import util
 import openravepy, trajoptpy
 import h5py, numpy as np
-from rapprentice import math_utils as mu
+from lfd.rapprentice import math_utils as mu
 from string import lower
 
 class EvalStats(object):

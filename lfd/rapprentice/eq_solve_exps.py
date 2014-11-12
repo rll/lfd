@@ -6,7 +6,7 @@ import pycuda.gpuarray as gpuarray
 import pycuda.autoinit
 
 import scikits.cuda.linalg as culinalg
-from rapprentice.culinalg_wrappers import dot
+from lfd.rapprentice.culinalg_wrappers import dot
 
 culinalg.init()
 

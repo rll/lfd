@@ -1,7 +1,7 @@
 from collections import defaultdict
 import multiprocessing
 import numpy as np
-from rapprentice import math_utils, LOG
+from lfd.rapprentice import math_utils, LOG
 
 def intersect_segs(ps_n2, q_22):
     """Takes a list of 2d nodes (ps_n2) of a piecewise linear curve and two points representing a single segment (q_22)

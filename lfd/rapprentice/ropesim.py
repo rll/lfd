@@ -1,6 +1,6 @@
 import bulletsimpy
 import numpy as np
-from rapprentice import math_utils, retiming
+from lfd.rapprentice import math_utils, retiming
 import trajoptpy
 
 def transform(hmat, p):
