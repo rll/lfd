@@ -4,10 +4,10 @@ from __future__ import division
 
 import numpy as np
 import trajoptpy
+from lfd.environment.berkeley_PR2 import BerkeleyPR2DynamicSimulation
 
 from lfd.rapprentice import planning, resampling
 import lfd.rapprentice.math_utils as mu
-from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from lfd.environment import sim_util
 
@@ -39,7 +39,7 @@ for (i,cyl_pos) in enumerate(cyl_positions):
 sim_objs.extend(cyl_sim_objs)
 sim_objs.append(RopeSimulationObject("rope", init_rope_nodes, rope_params))
 
-sim = DynamicSimulationRobotWorld()
+sim = BerkeleyPR2DynamicSimulation()
 sim.add_objects(sim_objs)
 sim.robot.SetDOFValues([0.25], [sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
 sim_util.reset_arms_to_side(sim)

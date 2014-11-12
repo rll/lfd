@@ -6,9 +6,9 @@ import openravepy
 
 import numpy as np
 import trajoptpy
+from lfd.environment.berkeley_PR2 import BerkeleyPR2DynamicSimulation
 
 from lfd.rapprentice import planning, resampling
-from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
 from lfd.environment import sim_util
 
@@ -24,7 +24,7 @@ sim_objs.append(BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85,
 sim_objs.append(BoxSimulationObject("box0", box0_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True))
 sim_objs.append(BoxSimulationObject("box1", box1_pos, [box_length/2, box_length/2, box_depth/2], dynamic=True))
 
-sim = DynamicSimulationRobotWorld()
+sim = BerkeleyPR2DynamicSimulation()
 sim.add_objects(sim_objs)
 sim.robot.SetDOFValues([0.25], [sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
 sim_util.reset_arms_to_side(sim)

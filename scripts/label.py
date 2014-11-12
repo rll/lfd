@@ -12,9 +12,9 @@ import trajoptpy
 import numpy as np
 
 from lfd.environment import sim_util
+from lfd.environment.berkeley_PR2 import BerkeleyPR2DynamicRopeSimulation
 from lfd.environment.constants import RopeConstant as ropec
 from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
-from lfd.environment.simulation import DynamicRopeSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
 from lfd.environment.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
 from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
@@ -409,7 +409,7 @@ def setup_lfd_environment_sim(args):
         "table", [1, 0, table_height + (-.1 + .01)], [.85, .85, .1], dynamic=False))
 
     print 'Setting up lfd environment'
-    sim = DynamicRopeSimulationRobotWorld()
+    sim = BerkeleyPR2DynamicRopeSimulation()
     world = sim
     sim.add_objects(sim_objs)
     if args.eval.ground_truth:

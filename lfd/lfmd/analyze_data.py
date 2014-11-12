@@ -18,10 +18,10 @@ import trajoptpy
 import IPython as ipy
 
 from lfd.demonstration import demonstration
+from lfd.environment.berkeley_PR2 import BerkeleyPR2DynamicSimulation
 from lfd.rapprentice import util, math_utils, planning, resampling
 from lfd.environment import sim_util
 from lfd.demonstration.demonstration import SceneState, AugmentedTrajectory, Demonstration
-from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
 from lfd.environment.environment import LfdEnvironment
 from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
@@ -1057,7 +1057,7 @@ def setup_lfd_environment_sim(args):
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height -.1], [.85, .85, .1], dynamic=False))
     
-    sim = DynamicSimulationRobotWorld()
+    sim = BerkeleyPR2DynamicSimulation()
     world = sim
     sim.add_objects(sim_objs)
     lfd_env = LfdEnvironment(sim, world, downsample_size=args.eval.downsample_size)
