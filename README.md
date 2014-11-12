@@ -15,6 +15,7 @@ This code has been tested on Ubuntu 12.04.
 - Install [trajopt](http://rll.berkeley.edu/trajopt) from source. Follow the installation instructions except that use [this fork](https://github.com/erictzeng/trajopt) and the `trajopt-jointopt` branch.
 - Install h5py. You can install it using `pip`:
 ```
+sudo apt-get install libhdf5-dev
 sudo pip install h5py
 ```
 - Install joblib. You can install it using `easy_install`:
