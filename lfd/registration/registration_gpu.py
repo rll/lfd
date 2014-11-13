@@ -1,18 +1,24 @@
 from __future__ import division
 
 import numpy as np
-
 from constants import TpsGpuConstant as tpsgc
 from registration import TpsRpmRegistrationFactory, TpsRpmBijRegistrationFactory
 import tps
 from solver import AutoTpsSolverFactory
-from lfd.tpsopt.batchtps import batch_tps_rpm_bij, GPUContext, TgtContext
+
+try:
+    from lfd.tpsopt.batchtps import batch_tps_rpm_bij, GPUContext, TgtContext
+    _has_cuda = True
+except (ImportError, OSError):
+    _has_cuda = False
 
 class BatchGpuTpsRpmRegistrationFactory(TpsRpmRegistrationFactory):
     """
     Similar to TpsRpmRegistrationFactory but batch_register and batch_cost are computed in batch using the GPU
     """
     def __init__(self, demos):
+        if not _has_cuda:
+            raise NotImplementedError("CUDA not installed")
         raise NotImplementedError
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
@@ -40,6 +46,8 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
                  prior_fn=None, 
                  f_solver_factory=AutoTpsSolverFactory(), 
                  g_solver_factory=AutoTpsSolverFactory(use_cache=False)):
+        if not _has_cuda:
+            raise NotImplementedError("CUDA not installed")
         super(BatchGpuTpsRpmBijRegistrationFactory, self).__init__(demos=demos, 
                                                               n_iter=n_iter, em_iter=em_iter, 
                                                               reg_init=reg_init, reg_final=reg_final, 

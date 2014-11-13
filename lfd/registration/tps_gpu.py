@@ -2,10 +2,14 @@ from __future__ import division
 
 import numpy as np
 
-import pycuda.gpuarray as gpuarray
-import pycuda.autoinit
-import scikits.cuda.linalg as culinalg
-culinalg.init()
+try:
+    import pycuda.gpuarray as gpuarray
+    import pycuda.autoinit
+    import scikits.cuda.linalg as culinalg
+    culinalg.init()
+    _has_cuda = True
+except (ImportError, OSError):
+    _has_cuda = False
 
 def balance_matrix3_gpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
     n,m = prob_nm.shape

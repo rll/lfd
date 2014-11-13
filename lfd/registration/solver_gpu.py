@@ -1,19 +1,23 @@
 from __future__ import division
 
 import numpy as np
-import pycuda.gpuarray as gpuarray
-import pycuda.driver as drv
-import scikits.cuda.linalg as culinalg
-
 import tps
 from solver import TpsSolver, TpsSolverFactory
 
-
-culinalg.init()
-from lfd.tpsopt.culinalg_exts import gemm, geam
+try:
+    import pycuda.gpuarray as gpuarray
+    import pycuda.driver as drv
+    import scikits.cuda.linalg as culinalg
+    culinalg.init()
+    from lfd.tpsopt.culinalg_exts import gemm, geam
+    _has_cuda = True
+except (ImportError, OSError):
+    _has_cuda = False
 
 class GpuTpsSolver(TpsSolver):
     def __init__(self, N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef):
+        if not _has_cuda:
+            raise NotImplementedError("CUDA not installed")
         super(GpuTpsSolver, self).__init__(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
         self.has_cula = culinalg._has_cula
         # the GPU cho_solve requires matrices to be f-contiguous when rhs is a matrix
