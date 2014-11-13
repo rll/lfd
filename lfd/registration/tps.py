@@ -237,24 +237,22 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
         wt_n = corr_nm.sum(axis=1)
         if np.any(wt_n == 0):
             inlier = wt_n != 0
-            x_nd = x_nd[inlier,:]
-            wt_n = wt_n[inlier]
-            xtarg_nd = (corr_nm[inlier,:]/wt_n[:,None]).dot(y_md)
+            xtarg_nd = np.zeros_like(x_nd)
+            xtarg_nd[inlier,:] = (corr_nm[inlier,:]/wt_n[inlier,None]).dot(y_md)
         else:
             xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
         wt_n /= len(x_nd) # normalize by number of points
-        return x_nd, xtarg_nd, wt_n
+        return xtarg_nd, wt_n
     else:
         wt_m = corr_nm.sum(axis=0)
         if np.any(wt_m == 0):
             inlier = wt_m != 0
-            y_md = y_md[inlier,:]
-            wt_m = wt_m[inlier]
-            ytarg_md = (corr_nm[inlier,:]/wt_m[None,:]).T.dot(x_nd)
+            ytarg_md = np.zeros_like(y_md)
+            ytarg_md[inlier,:] = (corr_nm[inlier,:]/wt_m[None,inlier]).T.dot(x_nd)
         else:
             ytarg_md = (corr_nm/wt_m[None,:]).T.dot(x_nd)
         wt_m /= len(y_md) # normalize by number of points
-        return y_md, ytarg_md, wt_m
+        return ytarg_md, wt_m
 
 def tps_rpm(x_nd, y_md, f_solver_factory=None, 
             n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
@@ -294,14 +292,12 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
                 prob_nm *= prior_prob_nm
             
             corr_nm, _, _ =  balance_matrix3(prob_nm, 10, x_priors, y_priors, outlierfrac)
-            corr_nm += 1e-9
             
-            x_nd_inlier, xtarg_nd, wt_n = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm)
-    
+            xtarg_nd, wt_n = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm)
             if fsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
+                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd, xtarg_nd, reg, rot_reg, wt_n)
             else:
-                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source
+                fsolve.solve(wt_n, xtarg_nd, reg, f)
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
@@ -356,19 +352,18 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 prob_nm *= prior_prob_nm
             
             corr_nm, _, _ =  balance_matrix3(prob_nm, 10, x_priors, y_priors, outlierfrac) # edit final value to change outlier percentage
-            corr_nm += 1e-9
             
-            x_nd_inlier, xtarg_nd, wt_n = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm)
-            y_md_inlier, ytarg_md, wt_m = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=False)
+            xtarg_nd, wt_n = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm)
+            ytarg_md, wt_m = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=False)
     
             if fsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
+                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd, xtarg_nd, reg, rot_reg, wt_n)
             else:
-                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source
+                fsolve.solve(wt_n, xtarg_nd, reg, f)
             if gsolve is None:
-                g = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_m)
+                g = ThinPlateSpline.fit_ThinPlateSpline(y_md, ytarg_md, reg, rot_reg, wt_m)
             else:
-                gsolve.solve(wt_m, ytarg_md, reg, g) #TODO: handle ouliers in source
+                gsolve.solve(wt_m, ytarg_md, reg, g)
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
