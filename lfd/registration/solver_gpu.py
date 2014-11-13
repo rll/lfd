@@ -61,6 +61,8 @@ class GpuTpsSolver(TpsSolver):
 
 class GpuTpsSolverFactory(TpsSolverFactory):
     def __init__(self, use_cache=True, cachedir=None):
+        if not _has_cuda:
+            raise NotImplementedError("CUDA not installed")
         super(GpuTpsSolverFactory, self).__init__(use_cache=use_cache, cachedir=cachedir)
     
     def get_solver_mats(self, x_nd, rot_coef):

@@ -12,6 +12,8 @@ except (ImportError, OSError):
     _has_cuda = False
 
 def balance_matrix3_gpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
+    if not _has_cuda:
+        raise NotImplementedError("CUDA not installed")
     n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1), 'f4')
     prob_NM[:n, :m] = prob_nm
