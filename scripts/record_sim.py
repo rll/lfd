@@ -14,7 +14,7 @@ from lfd.environment import sim_util
 from lfd.environment.constants import RopeConstant as ropec
 from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
-from lfd.environment.environment import RecordingSimulationEnvironment
+from lfd.environment.environment import RecordingLfdEnvironment
 from lfd.rapprentice import eval_util
 from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
 from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
@@ -67,7 +67,6 @@ def parse_input_args():
     parser_eval.add_argument("--downsample_size", type=int, default=0.025)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument("--upsample_rad", type=int, default=1, help="upsample_rad > 1 incompatible with downsample != 0")
-    parser_eval.add_argument("--ground_truth", type=int, default=1)
     
     parser_eval.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser_eval.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
@@ -206,30 +205,19 @@ def set_global_vars(args):
     
     GlobalVars.demos = {}
     for action, seg_info in GlobalVars.actions.iteritems():
-        if args.eval.ground_truth:
-            rope_nodes = seg_info['rope_nodes'][()]
-            scene_state = GroundTruthRopeSceneState(rope_nodes, ropec.RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
-        else:
-            full_cloud = seg_info['cloud_xyz'][()]
-            scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
+        rope_nodes = seg_info['scene_state']['rope_nodes'][()]
+        scene_state = GroundTruthRopeSceneState(rope_nodes, ropec.RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
         lr2arm_traj = {}
         lr2finger_traj = {}
         lr2ee_traj = {}
         lr2open_finger_traj = {}
         lr2close_finger_traj = {}
         for lr in 'lr':
-            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            lr2arm_traj[lr] = np.asarray(seg_info[arm_name])
-            lr2finger_traj[lr] = sim_util.gripper_joint2gripper_l_finger_joint_values(np.asarray(seg_info['%s_gripper_joint'%lr]))[:,None]
-            lr2ee_traj[lr] = np.asarray(seg_info["%s_gripper_tool_frame"%lr]['hmat'])
-            lr2open_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
-            lr2close_finger_traj[lr] = np.zeros(len(lr2finger_traj[lr]), dtype=bool)
-            opening_inds, closing_inds = sim_util.get_opening_closing_inds(lr2finger_traj[lr])
-            # opening_inds/closing_inds are indices before the opening/closing happens, so increment those indices (if they are not out of bound)
-            opening_inds = np.clip(opening_inds+1, 0, len(lr2finger_traj[lr])-1) # TODO figure out if +1 is necessary
-            closing_inds = np.clip(closing_inds+1, 0, len(lr2finger_traj[lr])-1)
-            lr2open_finger_traj[lr][opening_inds] = True
-            lr2close_finger_traj[lr][closing_inds] = True
+            lr2arm_traj[lr] = seg_info['aug_traj']['lr2arm_traj'][lr][:]
+            lr2finger_traj[lr] = seg_info['aug_traj']['lr2finger_traj'][lr][:]
+            lr2ee_traj[lr] = seg_info['aug_traj']['lr2ee_traj'][lr][:]
+            lr2open_finger_traj[lr] = seg_info['aug_traj']['lr2open_finger_traj'][lr][:]
+            lr2close_finger_traj[lr] = seg_info['aug_traj']['lr2close_finger_traj'][lr][:]
         aug_traj = AugmentedTrajectory(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
         demo = Demonstration(action, scene_state, aug_traj)
         GlobalVars.demos[action] = demo
@@ -273,7 +261,7 @@ def save_recorded_traj(args, robot, start_state, end_state, demo_ind, seg_ind):
 
 def setup_lfd_environment(args):
     actions = h5py.File(args.eval.actionfile, 'r')
-    
+
     init_rope_xyz, init_joint_names, init_joint_values = sim_util.load_fake_data_segment(actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
     table_height = init_rope_xyz[:,2].mean() - .02
     
@@ -291,7 +279,10 @@ def setup_lfd_environment(args):
         sim_objs.append(CylinderSimulationObject("cylinder2", [.4,.2,table_height+(.01+.65)], .06, .5, dynamic=False))
         sim_objs.append(CylinderSimulationObject("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5, dynamic=False))
     
-    lfd_env = RecordingSimulationEnvironment(sim_objs, downsample_size=args.eval.downsample_size)
+    sim = DynamicRopeSimulationRobotWorld()
+    world = sim
+    sim.add_objects(sim_objs)
+    lfd_env = RecordingLfdEnvironment(sim, world, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
 
     dof_inds = sim_util.dof_inds_from_name(lfd_env.robot, '+'.join(init_joint_names))
     values, dof_inds = zip(*[(value, dof_ind) for value, dof_ind in zip(init_joint_values, dof_inds) if dof_ind != -1])
