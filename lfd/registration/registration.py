@@ -34,17 +34,19 @@ class TpsRpmRegistration(Registration):
         1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
         bend_coef tr(w_ng' K_nn w_ng)
         tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
-        rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
-        -rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+        (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+        -(2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
         """
         cost = np.zeros(5)
-        dist_nm = ssd.cdist(x_nd, y_md, 'sqeuclidean')
-        cost[0] = (corr_nm * dist_nm).sum() / len(x_nd)
+        xwarped_nd = f.transform_points(x_nd)
+        dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
+        n = len(x_nd)
+        cost[0] = (corr_nm * dist_nm).sum() / n
         cost[1:3] = f.get_objective()[1:]
         corr_nm = np.reshape(corr_nm, (1,-1))
         nz_corr_nm = corr_nm[corr_nm != 0]
-        cost[3] = rad * (nz_corr_nm * np.log(nz_corr_nm)).sum()
-        cost[4] = -rad * nz_corr_nm.sum()
+        cost[3] = (2*rad / n) * (nz_corr_nm * np.log(nz_corr_nm)).sum()
+        cost[4] = -(2*rad / n) * nz_corr_nm.sum()
         return cost
 
 class TpsRpmBijRegistration(Registration):
@@ -54,8 +56,29 @@ class TpsRpmBijRegistration(Registration):
         self.g = g
     
     def get_objective(self):
-        raise NotImplementedError
-
+        x_nd = self.demo.scene_state.cloud[:,:3]
+        y_md = self.test_scene_state.cloud[:,:3]
+        cost = self.get_objective2(x_nd, y_md, self.f, self.g, self.corr, self.rad)
+        return cost
+    
+    @staticmethod
+    def get_objective2(x_nd, y_md, f, g, corr_nm, rad):
+        """
+        Returns the following 10 objectives
+        1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
+        bend_coef tr(f.w_ng' K_nn f.w_ng)
+        tr((f.lin_ag - I) diag(rot_coef) (f.lin_ag - I))
+        (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+        -(2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+        1/m \sum{j=1}^m \sum{i=1}^n corr_nm_ij ||x_nd_i - g(y_md_j)||_2^2
+        bend_coef tr(g.w_ng' K_mm g.w_ng)
+        tr((g.lin_ag - I) diag(rot_coef) (g.lin_ag - I))
+        (2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij log corr_nm_ij
+        -(2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij
+        """
+        cost = np.r_[TpsRpmRegistration.get_objective2(x_nd, y_md, f, corr_nm, rad), 
+                     TpsRpmRegistration.get_objective2(y_md, x_nd, g, corr_nm.T, rad)]
+        return cost
 
 class RegistrationFactory(object):
     def __init__(self, demos):
@@ -133,12 +156,13 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
     min_{f,corr_nm} 1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
                     + bend_coef tr(w_ng' K_nn w_ng)
                     + tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
-                    + rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
-                    - rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij
-    s.t. x_na' w_ng = 0
+                    + (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+                    - (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+    s.t. x_nd' w_ng = 0
          1' w_ng = 0
          \sum{i=1}^{n+1} corr_nm_ij = 1
          \sum{j=1}^{m+1} corr_nm_ij = 1
+         corr_nm_ij >= 0
     """
     def __init__(self, demos, 
                  n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
@@ -217,6 +241,25 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-
         Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research 
         (ISRR), 2013.
+    
+    Tries to solve the optimization problem
+    min_{f,g,corr_nm} 1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
+                      + bend_coef tr(f.w_ng' K_nn f.w_ng)
+                      + tr((f.lin_ag - I) diag(rot_coef) (f.lin_ag - I))
+                      + (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+                      - (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+                      1/m \sum{j=1}^m \sum{i=1}^n corr_nm_ij ||x_nd_i - g(y_md_j)||_2^2
+                      + bend_coef tr(g.w_ng' K_mm g.w_ng)
+                      + tr((g.lin_ag - I) diag(rot_coef) (g.lin_ag - I))
+                      + (2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij log corr_nm_ij
+                      - (2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij
+    s.t. x_nd' f.w_ng = 0
+         1' f.w_ng = 0
+         y_md' g.w_ng = 0
+         1' g.w_ng = 0
+         \sum{i=1}^{n+1} corr_nm_ij = 1
+         \sum{j=1}^{m+1} corr_nm_ij = 1
+         corr_nm_ij >= 0
     """
     def __init__(self, demos, 
                  n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 

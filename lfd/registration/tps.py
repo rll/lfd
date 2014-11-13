@@ -253,7 +253,7 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
             ytarg_md = (corr_nm[inlier,:]/wt_m[None,:]).T.dot(x_nd)
         else:
             ytarg_md = (corr_nm/wt_m[None,:]).T.dot(x_nd)
-        wt_m /= len(y_md) # normalize by number of points            
+        wt_m /= len(y_md) # normalize by number of points
         return y_md, ytarg_md, wt_m
 
 def tps_rpm(x_nd, y_md, f_solver_factory=None, 
@@ -289,7 +289,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             xwarped_nd = f.transform_points(x_nd)
 
             dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
-            prob_nm = np.exp( -dist_nm / rad )
+            prob_nm = np.exp( -dist_nm / (2*rad) )
             if prior_prob_nm != None:
                 prob_nm *= prior_prob_nm
             
@@ -301,7 +301,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             if fsolve is None:
                 f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
             else:
-                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
+                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
@@ -348,10 +348,10 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
             xwarped_nd = f.transform_points(x_nd)
             ywarped_md = g.transform_points(y_md)
             
-            fwddist_nm = ssd.cdist(xwarped_nd, y_md, 'euclidean')
-            invdist_nm = ssd.cdist(x_nd, ywarped_md, 'euclidean')
+            fwddist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
+            invdist_nm = ssd.cdist(x_nd, ywarped_md, 'sqeuclidean')
             
-            prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*rad) )
+            prob_nm = np.exp( -((1/n) * fwddist_nm + (1/m) * invdist_nm) / (2*rad * (1/n + 1/m)) )
             if prior_prob_nm != None:
                 prob_nm *= prior_prob_nm
             
@@ -364,11 +364,11 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
             if fsolve is None:
                 f = ThinPlateSpline.fit_ThinPlateSpline(x_nd_inlier, xtarg_nd, reg, rot_reg, wt_n)
             else:
-                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
+                fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source
             if gsolve is None:
                 g = ThinPlateSpline.fit_ThinPlateSpline(y_md_inlier, ytarg_md, reg, rot_reg, wt_m)
             else:
-                gsolve.solve(wt_m, ytarg_md, reg, g) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
+                gsolve.solve(wt_m, ytarg_md, reg, g) #TODO: handle ouliers in source
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
