@@ -29,6 +29,10 @@ This code has been tested on Ubuntu 12.04.
   cmake /path/to/trajopt -DBUILD_CLOUDPROC=ON
   ```
 - You can install SciPy, NumPy, h5py and joblib with pip install to get the latest versions.
+  - Before installing h5py you may need to run
+  ```
+  sudo apt-get install libhdf5-dev
+  ``` 
 
 Add the following path to your PYTHONPATH:
 ```
