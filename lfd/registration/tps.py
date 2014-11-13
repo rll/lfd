@@ -400,8 +400,10 @@ def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, 
     
     return prob_NM[:n, :m].astype(np.float64), r_N, c_M
 
-try:
-    from tps_gpu import balance_matrix3_gpu
-    balance_matrix3 = balance_matrix3_gpu
-except:
-    balance_matrix3 = balance_matrix3_cpu
+def balance_matrix3(*args, **kwargs):
+    from tps_gpu import _has_cuda, balance_matrix3_gpu
+    if _has_cuda:
+        ret = balance_matrix3_gpu(*args, **kwargs)
+    else:
+        ret = balance_matrix3_cpu(*args, **kwargs)
+    return ret
