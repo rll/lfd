@@ -29,13 +29,14 @@ class TpsRpmRegistration(Registration):
     
     @staticmethod
     def get_objective2(x_nd, y_md, f, corr_nm, rad):
-        """
-        Returns the following 5 objectives
-        1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
-        bend_coef tr(w_ng' K_nn w_ng)
-        tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
-        (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
-        -(2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+        r"""
+        Returns the following 5 objectives:
+        
+        .. math:: \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2 \\
+        .. math:: \lambda Tr(A^\top K A) \\
+        .. math:: Tr((B - I) R (B - I)) \\
+        .. math:: \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij} \\
+        .. math:: -\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \\
         """
         cost = np.zeros(5)
         xwarped_nd = f.transform_points(x_nd)
@@ -63,18 +64,19 @@ class TpsRpmBijRegistration(Registration):
     
     @staticmethod
     def get_objective2(x_nd, y_md, f, g, corr_nm, rad):
-        """
-        Returns the following 10 objectives
-        1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
-        bend_coef tr(f.w_ng' K_nn f.w_ng)
-        tr((f.lin_ag - I) diag(rot_coef) (f.lin_ag - I))
-        (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
-        -(2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
-        1/m \sum{j=1}^m \sum{i=1}^n corr_nm_ij ||x_nd_i - g(y_md_j)||_2^2
-        bend_coef tr(g.w_ng' K_mm g.w_ng)
-        tr((g.lin_ag - I) diag(rot_coef) (g.lin_ag - I))
-        (2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij log corr_nm_ij
-        -(2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij
+        r"""
+        Returns the following 10 objectives:
+        
+        .. math:: \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2 \\
+        .. math:: \lambda Tr(A_f^\top K A_f) \\
+        .. math:: Tr((B_f - I) R (B_f - I)) \\
+        .. math:: \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij} \\
+        .. math:: -\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \\
+        .. math:: \frac{1}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} ||x_i - g(y_j)||_2^2 \\
+        .. math:: \lambda Tr(A_g^\top K A_g) \\
+        .. math:: Tr((B_g - I) R (B_g - I)) \\
+        .. math:: \frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \log m_{ij} \\
+        .. math:: -\frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \\
         """
         cost = np.r_[TpsRpmRegistration.get_objective2(x_nd, y_md, f, corr_nm, rad), 
                      TpsRpmRegistration.get_objective2(y_md, x_nd, g, corr_nm.T, rad)]
@@ -111,7 +113,8 @@ class RegistrationFactory(object):
             A dict that maps from the demonstration names that are in demos 
             to the Registration
         
-        Note: derived classes might ignore the arguments plotting and plot_cb
+        Note:
+            Derived classes might ignore the arguments plotting and plot_cb.
         """
         registrations = {}
         for name, demo in self.demos.iteritems():
@@ -148,21 +151,26 @@ class RegistrationFactory(object):
         return costs
 
 class TpsRpmRegistrationFactory(RegistrationFactory):
-    """
+    r"""
     As in:
         H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
     
     Tries to solve the optimization problem
-    min_{f,corr_nm} 1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
-                    + bend_coef tr(w_ng' K_nn w_ng)
-                    + tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
-                    + (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
-                    - (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
-    s.t. x_nd' w_ng = 0
-         1' w_ng = 0
-         \sum{i=1}^{n+1} corr_nm_ij = 1
-         \sum{j=1}^{m+1} corr_nm_ij = 1
-         corr_nm_ij >= 0
+    
+    .. math::
+        :nowrap:
+
+        \begin{align*}
+            & \min_{f, M} 
+                & \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2
+                + \lambda Tr(A^\top K A)
+                + Tr((B - I) R (B - I)) \\
+                && + \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}
+                - \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \\
+            & \text{subject to} 
+                & X^\top A = 0, 1^\top A = 0 \\
+                && \sum_{i=1}^{n+1} m_{ij} = 1, \sum_{j=1}^{m+1} m_{ij} = 1, m_{ij} \geq 0 \\
+        \end{align*}
     """
     def __init__(self, demos, 
                  n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
@@ -184,7 +192,8 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             prior_fn: function that takes the demo and test SceneState and returns the prior probability (i.e. NOT cost)
             f_solver_factory: solver factory for forward registration
         
-        Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
+        Note:
+            Pick a T_init that is about 1/10 of the largest square distance of all point pairs.
         """
         super(TpsRpmRegistrationFactory, self).__init__(demos)
         self.n_iter = n_iter
@@ -236,30 +245,34 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         return cost
 
 class TpsRpmBijRegistrationFactory(RegistrationFactory):
-    """
+    r"""
     As in:
         J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-
         Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research 
         (ISRR), 2013.
     
     Tries to solve the optimization problem
-    min_{f,g,corr_nm} 1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
-                      + bend_coef tr(f.w_ng' K_nn f.w_ng)
-                      + tr((f.lin_ag - I) diag(rot_coef) (f.lin_ag - I))
-                      + (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
-                      - (2 rad / n) \sum{i=1}^n \sum{j=1}^m corr_nm_ij
-                      1/m \sum{j=1}^m \sum{i=1}^n corr_nm_ij ||x_nd_i - g(y_md_j)||_2^2
-                      + bend_coef tr(g.w_ng' K_mm g.w_ng)
-                      + tr((g.lin_ag - I) diag(rot_coef) (g.lin_ag - I))
-                      + (2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij log corr_nm_ij
-                      - (2 rad / m) \sum{j=1}^m \sum{i=1}^n corr_nm_ij
-    s.t. x_nd' f.w_ng = 0
-         1' f.w_ng = 0
-         y_md' g.w_ng = 0
-         1' g.w_ng = 0
-         \sum{i=1}^{n+1} corr_nm_ij = 1
-         \sum{j=1}^{m+1} corr_nm_ij = 1
-         corr_nm_ij >= 0
+    
+    .. math::
+        :nowrap:
+
+        \begin{align*}
+            & \min_{f, M} 
+                & \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2
+                + \lambda Tr(A_f^\top K A_f)
+                + Tr((B_f - I) R (B_f - I)) \\
+                && + \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}
+                - \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \\
+                && + \frac{1}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} ||x_i - g(y_j)||_2^2
+                + \lambda Tr(A_g^\top K A_g)
+                + Tr((B_g - I) R (B_g - I)) \\
+                && + \frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \log m_{ij}
+                - \frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \\
+            & \text{subject to} 
+                & X^\top A_f = 0, 1^\top A_f = 0 \\
+                && Y^\top A_g = 0, 1^\top A_g = 0 \\
+                && \sum_{i=1}^{n+1} m_{ij} = 1, \sum_{j=1}^{m+1} m_{ij} = 1, m_{ij} \geq 0 \\
+        \end{align*}
     """
     def __init__(self, demos, 
                  n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
@@ -283,8 +296,9 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
             f_solver_factory: solver factory for forward registration
             g_solver_factory: solver factory for backward registration
         
-        Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs
-        Tip: Don't cache for the target SolverFactory
+        Note:
+            Pick a T_init that is about 1/10 of the largest square distance of all point pairs.
+            You might not want to cache for the target SolverFactory.
         """
         super(TpsRpmBijRegistrationFactory, self).__init__(demos)
         self.n_iter = n_iter

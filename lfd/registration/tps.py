@@ -138,12 +138,11 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n):
 
 class ThinPlateSpline(Transformation):
     """
-    members:
+    Attributes:
         x_na: centers of basis functions
-        w_ng: 
+        w_ng: weights of basis functions
         lin_ag: transpose of linear part, so you take x_na.dot(lin_ag)
         trans_g: translation part
-    
     """
     def __init__(self, d=3):
         "initialize as identity"
@@ -404,8 +403,7 @@ def balance_matrix4(prob_nm, max_iter, p_n, p_m):
     """
     Like balance_matrix3 but doesn't normalize the p_m row and the p_n column
     
-    Examples
-    --------
+    Example:
     >>> from lfd.registration.tps import balance_matrix4
     >>> import numpy as np
     >>> n, m = (100, 150)
