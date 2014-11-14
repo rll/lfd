@@ -400,6 +400,44 @@ def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, 
     
     return prob_NM[:n, :m].astype(np.float64), r_N, c_M
 
+def balance_matrix4(prob_nm, max_iter, p_n, p_m):
+    """
+    Like balance_matrix3 but doesn't normalize the p_m row and the p_n column
+    
+    Examples
+    --------
+    >>> from lfd.registration.tps import balance_matrix4
+    >>> import numpy as np
+    >>> n, m = (100, 150)
+    >>> prob_nm = np.random.random((n,m))
+    >>> p_n = 0.1 * np.random.random(n)
+    >>> p_m = 0.1 * np.random.random(m)
+    >>> prob_nm0 = balance_matrix4(prob_nm, 10, p_n, p_m)
+    >>> prob_nm1 = prob_nm.copy()
+    >>> for _ in xrange(10):
+    ...     prob_nm1 = prob_nm1 / (prob_nm1.sum(axis=0) + p_m)[None, :]
+    ...     prob_nm1 = prob_nm1 / (prob_nm1.sum(axis=1) + p_n)[:, None]
+    ... 
+    >>> np.allclose(prob_nm0, prob_nm1)
+    True
+    """
+    n,m = prob_nm.shape
+    p_n = p_n.astype('f4')
+    p_m = p_m.astype('f4')
+    a_n = np.ones(n,'f4')
+    b_m = np.ones(m,'f4')
+    
+    r_n = np.ones(n,'f4')
+    c_m = np.ones(m,'f4')
+    prob_nm = prob_nm.astype('f4')
+    for _ in xrange(max_iter):
+        c_m = b_m/(r_n.dot(prob_nm) + p_m/c_m)
+        r_n = a_n/(prob_nm.dot(c_m) + p_n/r_n)
+    prob_nm *= r_n[:,None]
+    prob_nm *= c_m[None,:]
+    
+    return prob_nm.astype(np.float64)
+
 def balance_matrix3(*args, **kwargs):
     from tps_gpu import _has_cuda, balance_matrix3_gpu
     if _has_cuda:
