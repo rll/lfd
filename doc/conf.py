@@ -32,7 +32,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.pngmath',
     'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
+    'sphinxcontrib.napoleon',
 ]
 
 # Napoleon settings
