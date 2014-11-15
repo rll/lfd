@@ -25,11 +25,12 @@ class Mock(MagicMock):
             return Mock()
 
 MOCK_MODULES = ['bulletsimpy', 'trajoptpy', 'openravepy', 
-  'numpy', 'scipy', 
+  'joblib', 'h5py'
+  'numpy', 'numpy.pxd', 
+  'scipy', 'scipy.interpolate', 'scipy.spatial', 'scipy.spatial.distance', 'scipy.optimize', 'scipy.linalg', 
   'pycuda', 'pycuda.autoinit', 'pycuda.driver', 'pycuda.gpuarray', 
   'scikits', 'scikits.cuda', 'scikits.cuda.linalg', 'scikits.umfpack', 
-  'cuda_funcs', 
-  'joblib']
+  'cuda_funcs']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # If extensions (or modules to document with autodoc) are in another directory,
