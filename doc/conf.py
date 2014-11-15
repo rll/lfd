@@ -39,7 +39,7 @@ sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
-needs_sphinx = '1.3'
+needs_sphinx = '1.2'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -48,9 +48,14 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.pngmath',
     'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
     'sphinx.ext.inheritance_diagram',
 ]
+
+import sphinx
+if sphinx.version_info[0] <= 1 and sphinx.version_info[1] <= 2:
+  extensions.append('sphinxcontrib.napoleon')
+else:
+  extensions.append('sphinx.ext.napoleon')
 
 # Napoleon settings
 napoleon_google_docstring = True
