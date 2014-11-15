@@ -25,6 +25,7 @@ class Mock(MagicMock):
             return Mock()
 
 MOCK_MODULES = ['bulletsimpy', 'trajoptpy', 'openravepy', 
+  'numpy', 'scipy', 
   'pycuda', 'pycuda.autoinit', 'pycuda.driver', 'pycuda.gpuarray', 
   'scikits', 'scikits.cuda', 'scikits.cuda.linalg', 'scikits.umfpack', 
   'cuda_funcs', 
