@@ -52,9 +52,7 @@ extensions = [
 ]
 
 import sphinx
-if sphinx.version_info[0] <= 1 and sphinx.version_info[1] <= 2:
-  extensions.append('napoleon')
-else:
+if sphinx.version_info[0] >= 1 and sphinx.version_info[1] >= 3:
   extensions.append('sphinx.ext.napoleon')
 
 # Napoleon settings
