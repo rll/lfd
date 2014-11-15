@@ -7,7 +7,8 @@ This software follows the line of work of these papers: [ISRR2013]_, [IROS2013]_
 
 Source code is available on `github <https://github.com/rll/lfd>`_.
 
-Contents:
+Contents
+--------
 
 .. toctree::
    :maxdepth: 2
@@ -17,8 +18,8 @@ Contents:
    misc
 
 
-Indices and tables
-==================
+Index
+-----
 
 * :ref:`genindex`
 * :ref:`modindex`
@@ -26,7 +27,7 @@ Indices and tables
 
 
 References
-==========
+----------
 
 .. [ISRR2013] John Schulman, Jonathan Ho, Cameron Lee, Pieter Abbeel, "`Learning from Demonstrations through the Use of Non-Rigid Registration <http://www.cs.berkeley.edu/~pabbeel/papers/SchulmanHoLeeAbbeel_ISRR2013.pdf>`_," *in Proceedings of the 16th International Symposium on Robotics Research (ISRR), 2013*.
 .. [IROS2013] John Schulman, Ankush Gupta, Sibi Venkatesan, Mallory Tayson-Frederick, Pieter Abbeel, "`A Case Study of Trajectory Transfer through Non-Rigid Registration for a Simplified Suturing Scenario <http://www.cs.berkeley.edu/~pabbeel/papers/2013-IROS-suturing-final.pdf>`_," *in Proceedings of the 26th IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS), 2013*.

@@ -29,14 +29,13 @@ class TpsRpmRegistration(Registration):
     
     @staticmethod
     def get_objective2(x_nd, y_md, f, corr_nm, rad):
-        r"""
-        Returns the following 5 objectives:
+        r"""Returns the following 5 objectives:
         
-        .. math:: \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2 \\
-        .. math:: \lambda Tr(A^\top K A) \\
-        .. math:: Tr((B - I) R (B - I)) \\
-        .. math:: \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij} \\
-        .. math:: -\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \\
+            - :math:`\frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2`
+            - :math:`\lambda Tr(A^\top K A)`
+            - :math:`Tr((B - I) R (B - I))`
+            - :math:`\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}`
+            - :math:`-\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij}`
         """
         cost = np.zeros(5)
         xwarped_nd = f.transform_points(x_nd)
@@ -64,19 +63,18 @@ class TpsRpmBijRegistration(Registration):
     
     @staticmethod
     def get_objective2(x_nd, y_md, f, g, corr_nm, rad):
-        r"""
-        Returns the following 10 objectives:
+        r"""Returns the following 10 objectives:
         
-        .. math:: \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2 \\
-        .. math:: \lambda Tr(A_f^\top K A_f) \\
-        .. math:: Tr((B_f - I) R (B_f - I)) \\
-        .. math:: \frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij} \\
-        .. math:: -\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \\
-        .. math:: \frac{1}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} ||x_i - g(y_j)||_2^2 \\
-        .. math:: \lambda Tr(A_g^\top K A_g) \\
-        .. math:: Tr((B_g - I) R (B_g - I)) \\
-        .. math:: \frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \log m_{ij} \\
-        .. math:: -\frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \\
+            - :math:`\frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2`
+            - :math:`\lambda Tr(A_f^\top K A_f)`
+            - :math:`Tr((B_f - I) R (B_f - I))`
+            - :math:`\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}`
+            - :math:`-\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij}`
+            - :math:`\frac{1}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} ||x_i - g(y_j)||_2^2`
+            - :math:`\lambda Tr(A_g^\top K A_g)`
+            - :math:`Tr((B_g - I) R (B_g - I))`
+            - :math:`\frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij} \log m_{ij}`
+            - :math:`-\frac{2T}{m} \sum_{j=1}^m \sum_{i=1}^n m_{ij}`
         """
         cost = np.r_[TpsRpmRegistration.get_objective2(x_nd, y_md, f, corr_nm, rad), 
                      TpsRpmRegistration.get_objective2(y_md, x_nd, g, corr_nm.T, rad)]
@@ -151,9 +149,9 @@ class RegistrationFactory(object):
         return costs
 
 class TpsRpmRegistrationFactory(RegistrationFactory):
-    r"""
-    As in:
-        H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
+    r"""As in:
+    
+    H. Chui and A. Rangarajan, "A new point matching algorithm for non-rigid registration," Computer Vision and Image Understanding, vol. 89, no. 2, pp. 114-141, 2003.
     
     Tries to solve the optimization problem
     
@@ -245,11 +243,9 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         return cost
 
 class TpsRpmBijRegistrationFactory(RegistrationFactory):
-    r"""
-    As in:
-        J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-
-        Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research 
-        (ISRR), 2013.
+    r"""As in:
+    
+    J. Schulman, J. Ho, C. Lee, and P. Abbeel, "Learning from Demonstrations through the Use of Non-Rigid Registration," in Proceedings of the 16th International Symposium on Robotics Research (ISRR), 2013.
     
     Tries to solve the optimization problem
     

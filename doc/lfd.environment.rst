@@ -1,6 +1,22 @@
 lfd.environment package
 =======================
 
+Module contents
+---------------
+
+.. automodule:: lfd.environment
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+Class inheritance diagram
+-------------------------
+
+.. inheritance-diagram:: lfd.environment.constants lfd.environment.environment lfd.environment.robot_world lfd.environment.sim_util lfd.environment.simulation lfd.environment.simulation_object
+   :parts: 1
+
+
 Submodules
 ----------
 
@@ -48,15 +64,6 @@ lfd.environment.simulation_object module
 ----------------------------------------
 
 .. automodule:: lfd.environment.simulation_object
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-Module contents
----------------
-
-.. automodule:: lfd.environment
     :members:
     :undoc-members:
     :show-inheritance:

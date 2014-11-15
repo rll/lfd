@@ -1,6 +1,22 @@
 lfd.transfer package
 ====================
 
+Module contents
+---------------
+
+.. automodule:: lfd.transfer
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+Class inheritance diagram
+-------------------------
+
+.. inheritance-diagram:: lfd.transfer.constants lfd.transfer.registration_transfer lfd.transfer.transfer
+   :parts: 1
+
+
 Submodules
 ----------
 
@@ -24,15 +40,6 @@ lfd.transfer.transfer module
 ----------------------------
 
 .. automodule:: lfd.transfer.transfer
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-Module contents
----------------
-
-.. automodule:: lfd.transfer
     :members:
     :undoc-members:
     :show-inheritance:

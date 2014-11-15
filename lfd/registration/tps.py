@@ -158,17 +158,30 @@ class ThinPlateSpline(Transformation):
     
     @staticmethod
     def fit_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n):
-        """
-        x_na: source cloud
-        y_ng: target cloud
-        smoothing: penalize non-affine part
-        angular_spring: penalize rotation
-        wt_n: weight the points
+        r"""Solves the optimization problem
+            
+        .. math::
+            :nowrap:
+    
+            \begin{align*}
+                & \min_{f} 
+                    & \sum_{i=1}^n w_i ||y_i - f(x_i)||_2^2
+                    + \lambda Tr(A^\top K A)
+                    + Tr((B - I) R (B - I)) \\
+                & \text{subject to} 
+                    &  X^\top A = 0 \\
+                    && 1^\top A = 0 \\
+            \end{align*}
         
-        Solves the optimization problem
-        min \sum{i=1}^n wt_n_i ||y_ng_i - f(x_na_i)||_2^2 + bend_coef tr(w_ng' K_nn w_ng) + tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
-        s.t. x_na' w_ng = 0
-             1' w_ng = 0
+        Args:
+            x_na: source cloud, :math:`X`
+            y_ng: target cloud, :math:`Y`
+            bend_coef: smoothing, penalize non-affine part, :math:`\lambda`
+            rot_coef: angular_spring, penalize rotation, :math:`\text{diag}(R)`
+            wt_n: weight the points, :math:`w`
+        
+        Returns:
+            A ThinPlateSpline f
         """
         f = ThinPlateSpline()
         f.set_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n)
@@ -197,13 +210,14 @@ class ThinPlateSpline(Transformation):
         return grad_mga
     
     def get_objective(self):
-        """
-        Returns the following 3 objectives
-        \sum{i=1}^n wt_n_i ||y_ng_i - f(x_na_i)||_2^2
-        bend_coef tr(w_ng' K_nn w_ng)
-        tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
+        r"""Returns the following 3 objectives:
         
-        Implementation covers general case where there is a wt_n and bend_coef per dimension
+            - :math:`\sum_{i=1}^n w_i ||y_i - f(x_i)||_2^2`
+            - :math:`\lambda Tr(A^\top K A)`
+            - :math:`Tr((B - I) R (B - I))`
+        
+        Note:
+            Implementation covers general case where there is a wt_n and bend_coef per dimension
         """
         # expand these
         n, a = self.x_na.shape
@@ -400,10 +414,10 @@ def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, 
     return prob_NM[:n, :m].astype(np.float64), r_N, c_M
 
 def balance_matrix4(prob_nm, max_iter, p_n, p_m):
-    """
-    Like balance_matrix3 but doesn't normalize the p_m row and the p_n column
+    """Like balance_matrix3 but doesn't normalize the p_m row and the p_n column
     
     Example:
+
     >>> from lfd.registration.tps import balance_matrix4
     >>> import numpy as np
     >>> n, m = (100, 150)

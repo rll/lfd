@@ -93,7 +93,7 @@ class CpuTpsSolverFactory(TpsSolverFactory):
         N, QN, NKN, NRN, NR, K_nn = self.get_solver_mats(x_nd, rot_coef)
         return CpuTpsSolver(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
 
-class AutoTpsSolverFactory(object):
+class AutoTpsSolverFactory(TpsSolverFactory):
     def __new__(cls, *args, **kwargs):
         from solver_gpu import _has_cuda, GpuTpsSolverFactory
         if _has_cuda:
