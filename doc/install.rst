@@ -29,25 +29,25 @@ Instructions
 -  Install `trajopt <http://rll.berkeley.edu/trajopt>`_ from source. Follow the installation instructions but with the following modifications:
    
    -  Use `this fork <https://github.com/erictzeng/trajopt>`_ and the ``trajopt-jointopt`` branch instead.
-   -  Install `OpenRAVE <http://openrave.org/docs/latest_stable/install>`_ 0.9 or later from the `OpenRAVE testing <https://launchpad.net/~openrave/+archive/testing>`_ PPA. In Ubuntu, that is::
+   -  Install `OpenRAVE <http://openrave.org/docs/latest_stable/install>`_ 0.9 or later from the `OpenRAVE testing <https://launchpad.net/~openrave/+archive/testing>`_ PPA.::
       
          sudo add-apt-repository ppa:openrave/testing
          sudo apt-get update
          sudo apt-get install openrave
 
-   -  Install `PCL <http://www.pointclouds.org>`_ 1.7. In Ubuntu, that is::
+   -  Install `PCL <http://www.pointclouds.org>`_ 1.7.::
       
          sudo apt-get install libpcl-1.7-all
 
-   -  Run the ``cmake`` command with the option ``BUILD_CLOUDPROC=ON``, that is::
+   -  Run the ``cmake`` command with the option ``BUILD_CLOUDPROC=ON``, that is:::
       
          cmake /path/to/trajopt -DBUILD_CLOUDPROC=ON
 
--  Install NumPy, SciPy and HDF5. In Ubuntu, that is::
+-  Install NumPy, SciPy and HDF5.::
    
       sudo apt-get install python-numpy python-scipy libhdf5-serial-dev
 
-- Install h5py and joblib with pip::
+- Install h5py and joblib with pip.::
    
       sudo pip install h5py joblib
 
