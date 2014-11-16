@@ -48,4 +48,4 @@ To use the compiled libraries from python, add the following path to your ``PYTH
    
    /path/to/build_lfd/lib
 
-For more information, check out the README from the `tpsopt <https://github.com/dhadfieldmenell/lfd/tree/dev/lfd/tpsopt>`_ module.
+For more information, check out the README from the `tpsopt <https://github.com/rll/lfd/tree/master/lfd/tpsopt>`_ module.
