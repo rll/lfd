@@ -32,7 +32,7 @@ def parse_arguments():
     parser.add_argument('--test', action='store_true')
     return parser.parse_args()
 # @profile
-def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef):
     n, d = x_nd.shape
 
     x_gpu = gpuarray.to_gpu(x_nd)
@@ -93,7 +93,7 @@ def batch_get_sol_params(x_nd, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1
 
     return proj_mats, offset_mats
 
-def test_batch_get_sol_params(f, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1], atol=1e-7, index=0):
+def test_batch_get_sol_params(f, bend_coefs, rot_coef, atol=1e-7, index=0):
     seg_info = f.items()[index][1]
     inv_group =  seg_info['inv']
     ds_key = 'DS_SIZE_{}'.format(DS_SIZE)
@@ -182,7 +182,7 @@ def test_batch_get_sol_params(f, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1], a
     offset_mats_list = [N.dot(h_inv.dot(N.T.dot(F))) for h_inv in h_inv_list]
     assert(np.allclose(offset_mats_list, offset_mats[0][index].get(), atol=atol))
 
-def get_exact_solver(x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+def get_exact_solver(x_na, K_nn, bend_coefs, rot_coef):
     """
     precomputes several of the matrix products needed to fit a TPS w/o the approximations
     for the batch computation
@@ -218,7 +218,7 @@ def get_exact_solver(x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
 
 
 # @profile
-def get_sol_params(x_na, K_nn, bend_coef, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+def get_sol_params(x_na, K_nn, bend_coef, rot_coef):
     """
     precomputes the linear operators to solve this linear system. 
     only dependence on data is through the specified targets

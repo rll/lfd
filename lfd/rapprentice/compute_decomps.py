@@ -14,7 +14,7 @@ def parse_arguments():
     parser.add_argument('--verbose', action='store_true')
     return parser.parse_args()
 
-def get_lu_decomp(x_na, bend_coef, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+def get_lu_decomp(x_na, bend_coef, rot_coef):
     """
     precomputes the LU decomposition and other intermediate results needed
     to fit a TPS to x_na with bend_coeff
