@@ -15,8 +15,9 @@ Dependencies
    -  `OpenRAVE <http://openrave.org/docs/latest_stable/install>`_ >= 0.9
    -  `PCL <http://www.pointclouds.org>`_ 1.7
 -  Python 2.7
--  SciPy >= 0.14
 -  NumPy >= 1.8.1
+-  SciPy >= 0.9
+-  HDF5
 -  `h5py <http://www.h5py.org>`_
 -  `joblib <http://packages.python.org/joblib>`_
 
@@ -28,20 +29,29 @@ Instructions
 -  Install `trajopt <http://rll.berkeley.edu/trajopt>`_ from source. Follow the installation instructions but with the following modifications:
    
    -  Use `this fork <https://github.com/erictzeng/trajopt>`_ and the ``trajopt-jointopt`` branch instead.
-   -  Install `OpenRAVE <http://openrave.org/docs/latest_stable/install>`_ 0.9 or later.
+   -  Install `OpenRAVE <http://openrave.org/docs/latest_stable/install>`_ 0.9 or later from the `OpenRAVE testing <https://launchpad.net/~openrave/+archive/testing>`_ PPA. In Ubuntu, that is::
+      
+         sudo add-apt-repository ppa:openrave/testing
+         sudo apt-get update
+         sudo apt-get install openrave
+
    -  Install `PCL <http://www.pointclouds.org>`_ 1.7. In Ubuntu, that is::
       
-            sudo apt-get install libpcl-1.7-all
+         sudo apt-get install libpcl-1.7-all
 
    -  Run the ``cmake`` command with the option ``BUILD_CLOUDPROC=ON``, that is::
       
          cmake /path/to/trajopt -DBUILD_CLOUDPROC=ON
 
--  You can install SciPy, NumPy, h5py and joblib with pip install to get the latest versions.
+-  Install NumPy, SciPy and HDF5. In Ubuntu, that is::
    
-   -  Before installing h5py you may need to run::
-      
-         sudo apt-get install libhdf5-serial-dev
+      sudo apt-get install python-numpy python-scipy libhdf5-serial-dev
+
+- Install h5py and joblib with pip::
+   
+      sudo pip install h5py
+      sudo pip install joblib
+
 
 Add the following path to your ``PYTHONPATH``::
 
