@@ -49,8 +49,7 @@ Instructions
 
 - Install h5py and joblib with pip::
    
-      sudo pip install h5py
-      sudo pip install joblib
+      sudo pip install h5py joblib
 
 
 Add the following path to your ``PYTHONPATH``::
