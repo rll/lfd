@@ -14,17 +14,38 @@
 
 import sys
 import os
-import sphinx_rtd_theme
+# on_rtd is whether we are on readthedocs.org
+on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
+
+from mock import Mock as MagicMock
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+            return Mock()
+
+MOCK_MODULES = ['bulletsimpy', 'trajoptpy', 'openravepy', 
+  'joblib', 'h5py', 
+  'numpy', 'numpy.pxd', 
+  'scipy', 'scipy.interpolate', 'scipy.spatial', 'scipy.spatial.distance', 'scipy.optimize', 'scipy.linalg', 
+  'pycuda', 'pycuda.autoinit', 'pycuda.driver', 'pycuda.gpuarray', 
+  'scikits', 'scikits.cuda', 'scikits.cuda.linalg', 'scikits.umfpack', 
+  'cuda_funcs']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('..'))
 
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
 needs_sphinx = '1.3'
+
+import sphinx
+if not (sphinx.version_info[0] >= 1 and sphinx.version_info[1] >= 3):
+    raise RuntimeError("Sphinx 1.3 or later is required.")
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -112,9 +133,11 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "sphinx_rtd_theme"
-
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+if not on_rtd:  # only import and set the theme if we're building docs locally
+    import sphinx_rtd_theme
+    html_theme = 'sphinx_rtd_theme'
+    html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+# otherwise, readthedocs.org uses their theme by default, so no need to specify it
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the

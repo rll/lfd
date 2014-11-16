@@ -12,7 +12,7 @@ class NoGPUTPSSolver(object):
     class to fit a thin plate spline to data using precomputed
     matrix products
     """
-    def __init__(self, bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef = np.r_[1e-4, 1e-4, 1e-1]):
+    def __init__(self, bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef):
         for b in bend_coefs:
             assert b in NON, 'no solver found for bending coefficient {}'.format(b)
         self.rot_coef = rot_coef
@@ -66,7 +66,7 @@ class NoGPUEmptySolver(object):
         self.bend_coefs = bend_coefs
         self.cur_solver = None
     # @profile
-    def get_solver(self, x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+    def get_solver(self, x_na, K_nn, bend_coefs, rot_coef):
         n,d = x_na.shape
         assert len(bend_coefs) <= len(self.bend_coefs)
         assert n <= self.max_N
@@ -101,7 +101,7 @@ class TPSSolver(object):
     class to fit a thin plate spline to data using precomputed
     matrix products
     """
-    def __init__(self, bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef = np.r_[1e-4, 1e-4, 1e-1], 
+    def __init__(self, bend_coefs, N, QN, NON, NR, x_nd, K_nn, rot_coef, 
                  QN_gpu = None, WQN_gpu = None, NON_gpu = None, NHN_gpu = None):
         for b in bend_coefs:
             assert b in NON, 'no solver found for bending coefficient {}'.format(b)
@@ -191,7 +191,7 @@ class EmptySolver(object):
         self.O_gpu = gpuarray.empty((max_N +d+1)*(max_N+d+1)* len(bend_coefs), np.float64)
         self.N_gpu = gpuarray.empty((max_N +d+1)*(max_N) *len(bend_coefs), np.float64)
     # @profile
-    def get_solver(self, x_na, K_nn, bend_coefs, rot_coef=np.r_[1e-4, 1e-4, 1e-1]):
+    def get_solver(self, x_na, K_nn, bend_coefs, rot_coef):
         n,d = x_na.shape
         assert len(bend_coefs) <= len(self.bend_coefs)
         assert n <= self.max_N

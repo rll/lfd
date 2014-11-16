@@ -15,6 +15,7 @@ Contents
 
    install
    install_gpu
+   documenting
    misc
 
 
