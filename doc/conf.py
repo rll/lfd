@@ -41,7 +41,11 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
-needs_sphinx = '1.2'
+needs_sphinx = '1.3'
+
+import sphinx
+if not (sphinx.version_info[0] >= 1 and sphinx.version_info[1] >= 3):
+    raise RuntimeError("Sphinx 1.3 or later is required.")
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -50,12 +54,9 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.pngmath',
     'sphinx.ext.viewcode',
+    'sphinx.ext.napoleon',
     'sphinx.ext.inheritance_diagram',
 ]
-
-import sphinx
-if sphinx.version_info[0] >= 1 and sphinx.version_info[1] >= 3:
-  extensions.append('sphinx.ext.napoleon')
 
 # Napoleon settings
 napoleon_google_docstring = True
