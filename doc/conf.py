@@ -25,7 +25,7 @@ class Mock(MagicMock):
             return Mock()
 
 MOCK_MODULES = ['bulletsimpy', 'trajoptpy', 'openravepy', 
-  'joblib', 'h5py', 'ipython', 
+  'joblib', 'h5py', 'IPython', 
   'numpy', 'numpy.pxd', 
   'scipy', 'scipy.interpolate', 'scipy.spatial', 'scipy.spatial.distance', 'scipy.optimize', 'scipy.linalg', 
   'pycuda', 'pycuda.autoinit', 'pycuda.driver', 'pycuda.gpuarray', 
