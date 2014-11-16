@@ -8,10 +8,15 @@ Dependencies
 ------------
 
 -  `Sphinx <http://sphinx.pocoo.org>`_ >= 1.3b.
-
+-  `sphinx_rtd_theme <https://github.com/snide/sphinx_rtd_theme>`_
+-  `mock <https://pypi.python.org/pypi/mock>`_
 
 Instructions
 ------------
+
+Install Sphinx, sphinx_rtd_theme and mock with pip. ::
+
+	sudo pip install sphinx>=1.3b1 sphinx_rtd_theme mock
 
 The documentation is generated from ReStructured Text using Sphinx. 
 
