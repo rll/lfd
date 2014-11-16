@@ -451,8 +451,9 @@ def balance_matrix4(prob_nm, max_iter, p_n, p_m):
     return prob_nm.astype(np.float64)
 
 def balance_matrix3(*args, **kwargs):
-    from tps_gpu import _has_cuda, balance_matrix3_gpu
+    from lfd.registration import _has_cuda
     if _has_cuda:
+        from tps_gpu import balance_matrix3_gpu
         ret = balance_matrix3_gpu(*args, **kwargs)
     else:
         ret = balance_matrix3_cpu(*args, **kwargs)

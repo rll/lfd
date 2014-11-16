@@ -5,12 +5,8 @@ from __future__ import division
 import numpy as np
 from lfd.demonstration.demonstration import Demonstration, SceneState
 from lfd.registration.registration import TpsRpmRegistrationFactory
-from lfd.registration import tps, solver
-try:
-    from lfd.registration import solver_gpu
-    _use_gpu = True
-except:
-    _use_gpu = False
+from lfd.registration import tps, solver, solver_gpu
+from lfd.registration import _has_cuda
 from tempfile import mkdtemp
 import sys, time
 import unittest
@@ -59,7 +55,7 @@ class TestRegistration(unittest.TestCase):
         costs_solver_cached = reg_factory_solver.batch_cost(self.test_scene_state)
         print "done in {}s".format(time.time() - start_time)
         
-        if _use_gpu:
+        if _has_cuda:
             reg_factory_gpu = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver_gpu.GpuTpsSolverFactory(cachedir=tmp_cachedir))
             sys.stdout.write("computing costs: gpu solver... ")
             sys.stdout.flush()
@@ -77,7 +73,7 @@ class TestRegistration(unittest.TestCase):
         for demo_name in self.demos.keys():
             self.assertTrue(np.allclose(costs[demo_name], costs_solver[demo_name]))
             self.assertTrue(np.allclose(costs[demo_name], costs_solver_cached[demo_name]))
-            if _use_gpu:
+            if _has_cuda:
                 self.assertTrue(np.allclose(costs[demo_name], costs_gpu[demo_name]))
                 self.assertTrue(np.allclose(costs[demo_name], costs_gpu_cached[demo_name]))
     

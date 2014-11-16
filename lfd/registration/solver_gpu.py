@@ -4,22 +4,18 @@ import numpy as np
 import tps
 from solver import TpsSolver, TpsSolverFactory
 
-try:
+from lfd.registration import _has_cuda, _has_cula
+if _has_cuda:
     import pycuda.gpuarray as gpuarray
     import pycuda.driver as drv
     import scikits.cuda.linalg as culinalg
-    culinalg.init()
     from lfd.tpsopt.culinalg_exts import gemm, geam
-    _has_cuda = True
-except (ImportError, OSError):
-    _has_cuda = False
 
 class GpuTpsSolver(TpsSolver):
     def __init__(self, N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef):
         if not _has_cuda:
             raise NotImplementedError("CUDA not installed")
         super(GpuTpsSolver, self).__init__(N, QN, NKN, NRN, NR, x_nd, K_nn, rot_coef)
-        self.has_cula = culinalg._has_cula
         # the GPU cho_solve requires matrices to be f-contiguous when rhs is a matrix
         self.QN = self.QN.copy(order='F')
         self.sqrtWQN_gpu = gpuarray.empty(self.QN.shape, np.float64, order='F')
@@ -30,7 +26,7 @@ class GpuTpsSolver(TpsSolver):
         self.NR_gpu = gpuarray.to_gpu(self.NR.copy(order='F'))
         self.y_dnW_gpu = gpuarray.empty(self.x_nd.T.shape, np.float64, order='F')
         self.rhs_gpu = gpuarray.empty(self.NR_gpu.shape, np.float64, order='F')
-        if self.has_cula:
+        if _has_cula:
             self.N_gpu = gpuarray.to_gpu(self.N.copy(order='F'))
             self.theta_gpu = gpuarray.empty((1+self.d+self.n, self.d), np.float64, order='F')
         else:
@@ -50,7 +46,7 @@ class GpuTpsSolver(TpsSolver):
         self.y_dnW_gpu.set_async(y_nd.T * wt_n) # use transpose so that it is f_contiguous
         gemm(self.QN_gpu, self.y_dnW_gpu, self.rhs_gpu, transa='T', transb='T', alpha=1, beta=1)
         
-        if self.has_cula:
+        if _has_cula:
             culinalg.cho_solve(self.lhs_gpu, self.rhs_gpu)
             culinalg.dot(self.N_gpu, self.rhs_gpu, out=self.theta_gpu)
             theta = self.theta_gpu.get()

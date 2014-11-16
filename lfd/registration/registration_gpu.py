@@ -6,11 +6,9 @@ from registration import TpsRpmRegistrationFactory, TpsRpmBijRegistrationFactory
 import tps
 from solver import AutoTpsSolverFactory
 
-try:
+from lfd.registration import _has_cuda
+if _has_cuda:
     from lfd.tpsopt.batchtps import batch_tps_rpm_bij, GPUContext, TgtContext
-    _has_cuda = True
-except (ImportError, OSError):
-    _has_cuda = False
 
 class BatchGpuTpsRpmRegistrationFactory(TpsRpmRegistrationFactory):
     """

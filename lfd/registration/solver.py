@@ -95,8 +95,9 @@ class CpuTpsSolverFactory(TpsSolverFactory):
 
 class AutoTpsSolverFactory(TpsSolverFactory):
     def __new__(cls, *args, **kwargs):
-        from solver_gpu import _has_cuda, GpuTpsSolverFactory
+        from lfd.registration import _has_cuda
         if _has_cuda:
+            from solver_gpu import GpuTpsSolverFactory
             new_instance = object.__new__(GpuTpsSolverFactory, *args, **kwargs)
         else:
             new_instance = object.__new__(CpuTpsSolverFactory, *args, **kwargs)
