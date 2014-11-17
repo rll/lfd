@@ -25,10 +25,6 @@ from pdb import pm
 # from svds import svds
 DISCRETIZATION_LEVEL = 40
 MAX_CP_DIST = .05
-rot_matrices = [np.matrix([[np.cos(theta), -1*np.sin(theta), 0], 
-                           [np.sin(theta), np.cos(theta), 0], 
-                           [0, 0, 1]]) 
-                for theta in np.linspace(-1*np.pi, np.pi, DISCRETIZATION_LEVEL)]
 
 
 
@@ -262,6 +258,10 @@ def fit_rotation(tps_fn, src_pts, tgt_pts):
     tps_local.trans_g += src_median # this will translate the points back
     tgt_kd = sp_spat.KDTree(tgt_pts)
     results = []
+    rot_matrices = [np.matrix([[np.cos(theta), -1*np.sin(theta), 0], 
+                           [np.sin(theta), np.cos(theta), 0], 
+                           [0, 0, 1]]) 
+                for theta in np.linspace(-1*np.pi, np.pi, DISCRETIZATION_LEVEL)]
     for rot in rot_matrices:
         tps_local.lin_ag = rot
         rot_pts = tps_fn.transform_points(src_pts)
