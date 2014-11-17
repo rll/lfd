@@ -383,12 +383,35 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
     
     return f, g, corr_nm
 
-def loglinspace(a,b,n):
-    "n numbers between a to b (inclusive) with constant ratio between consecutive numbers"
-    if n == 1:
-        return np.r_[b]
+def loglinspace(start, stop, num):
+    """Return numbers spaced with a constant ratio.
+
+    Returns `num` numbers in the interval [`start`, `stop`],
+    with constant ratio between consecutive numbers.
+
+    Args:
+        start: The starting value of the sequence.
+        stop: The end value of the sequence.
+        num: Number of samples to generate.
+
+    Note:
+        Unlike np.linspace, a singleton sequence with `stop`
+        is returned when `num` is 1.
+
+    Example:
+
+        >>> loglinspace(1.0, 100.0, 3)
+        array([   1.,   10.,  100.])
+        >>> loglinspace(10.0, 0.001, 5)
+        array([  1.00000000e+01,   1.00000000e+00,   1.00000000e-01,
+                 1.00000000e-02,   1.00000000e-03])
+        >>> loglinspace(2, 4, 1)
+        array([ 4.])
+    """
+    if num == 1:
+        return np.array([stop]).astype(np.float64)
     else:
-        return np.exp(np.linspace(np.log(a),np.log(b),n))
+        return np.exp(np.linspace(np.log(start), np.log(stop), num))
 
 def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
     n,m = prob_nm.shape
