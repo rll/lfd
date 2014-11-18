@@ -105,7 +105,8 @@ class RegistrationFactory(object):
         Args:
             demo: Demonstration which has the demonstration scene
             test_scene_state: SceneState of the test scene
-            callback: callback with arguments: i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f
+            callback: callback function; the derived classes define the 
+                arguments of the functoin
         
         Returns:
             A Registration

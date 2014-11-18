@@ -317,7 +317,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
                 fsolve.solve(wt_n, xtarg_nd, reg, f)
             
             if callback:
-                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
+                callback(i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad)
         
     return f, corr_nm
 
@@ -383,7 +383,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 gsolve.solve(wt_m, ytarg_md, reg, g)
             
             if callback:
-                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
+                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f, g, corr_nm, rad)
     
     return f, g, corr_nm
 
@@ -482,20 +482,20 @@ def balance_matrix4(prob_nm, max_iter, p_n, p_m):
     
     Example:
 
-    >>> from lfd.registration.tps import balance_matrix4
-    >>> import numpy as np
-    >>> n, m = (100, 150)
-    >>> prob_nm = np.random.random((n,m))
-    >>> p_n = 0.1 * np.random.random(n)
-    >>> p_m = 0.1 * np.random.random(m)
-    >>> prob_nm0 = balance_matrix4(prob_nm, 10, p_n, p_m)
-    >>> prob_nm1 = prob_nm.copy()
-    >>> for _ in xrange(10):
-    ...     prob_nm1 = prob_nm1 / (prob_nm1.sum(axis=0) + p_m)[None, :]
-    ...     prob_nm1 = prob_nm1 / (prob_nm1.sum(axis=1) + p_n)[:, None]
-    ... 
-    >>> np.allclose(prob_nm0, prob_nm1)
-    True
+        >>> from lfd.registration.tps import balance_matrix4
+        >>> import numpy as np
+        >>> n, m = (100, 150)
+        >>> prob_nm = np.random.random((n,m))
+        >>> p_n = 0.1 * np.random.random(n)
+        >>> p_m = 0.1 * np.random.random(m)
+        >>> prob_nm0 = balance_matrix4(prob_nm, 10, p_n, p_m)
+        >>> prob_nm1 = prob_nm.copy()
+        >>> for _ in xrange(10):
+        ...     prob_nm1 = prob_nm1 / (prob_nm1.sum(axis=0) + p_m)[None, :]
+        ...     prob_nm1 = prob_nm1 / (prob_nm1.sum(axis=1) + p_n)[:, None]
+        ... 
+        >>> np.allclose(prob_nm0, prob_nm1)
+        True
     """
     n,m = prob_nm.shape
     p_n = p_n.astype('f4')

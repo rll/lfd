@@ -46,7 +46,7 @@ for x_center_pert in np.arange(-0.1, 0.6, 0.1):
 test_cloud = generate_cloud(x_center_pert=0.2)
 test_scene_state = SceneState(test_cloud, downsample_size=0.025)
 
-plot_cb = lambda i, i_em, *args: registration_plot_cb(sim, *args)
+plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
 
 reg_factory = TpsRpmRegistrationFactory(demos)
 regs = reg_factory.batch_register(test_scene_state, callback=plot_cb)

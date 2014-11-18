@@ -4,7 +4,7 @@ from lfd.rapprentice import plotting_openrave
 
 # TODO: rapprentice.plotting_openrave and other openrave plottings should go in this file
 
-def registration_plot_cb(sim, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f):
+def registration_plot_cb(sim, x_nd, y_md, f):
     handles = []
     handles.append(sim.env.plot3(x_nd, 5, (1,0,0)))
     handles.append(sim.env.plot3(y_md, 5, (0,0,1)))
