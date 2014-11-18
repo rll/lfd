@@ -13,7 +13,7 @@ Module contents
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.registration.constants lfd.registration.plotting_openrave lfd.registration.registration lfd.registration.registration_gpu lfd.registration.solver lfd.registration.solver_gpu lfd.registration.tps lfd.registration.tps_gpu lfd.registration.transformation
+.. inheritance-diagram:: lfd.registration.constants lfd.registration.plotting_openrave lfd.registration.registration lfd.registration.solver lfd.registration.tps lfd.registration.transformation
    :parts: 1
 
 
@@ -44,14 +44,6 @@ lfd.registration.registration module
     :undoc-members:
     :show-inheritance:
 
-lfd.registration.registration_gpu module
-----------------------------------------
-
-.. automodule:: lfd.registration.registration_gpu
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 lfd.registration.solver module
 ------------------------------
 
@@ -60,26 +52,10 @@ lfd.registration.solver module
     :undoc-members:
     :show-inheritance:
 
-lfd.registration.solver_gpu module
-----------------------------------
-
-.. automodule:: lfd.registration.solver_gpu
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 lfd.registration.tps module
 ---------------------------
 
 .. automodule:: lfd.registration.tps
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-lfd.registration.tps_gpu module
--------------------------------
-
-.. automodule:: lfd.registration.tps_gpu
     :members:
     :undoc-members:
     :show-inheritance:
