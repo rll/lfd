@@ -3,10 +3,14 @@ Functions for fitting and applying thin plate spline transformations
 """
 from __future__ import division
 
-from constants import TpsConstant as tpsc
+import settings
 import numpy as np
 import scipy.spatial.distance as ssd
 from transformation import Transformation
+import lfd.registration
+if lfd.registration._has_cuda:
+    import pycuda.gpuarray as gpuarray
+    import scikits.cuda.linalg as culinalg
 
 def nan2zero(x):
     np.putmask(x, np.isnan(x), 0)
@@ -268,11 +272,11 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
         return ytarg_md, wt_m
 
 def tps_rpm(x_nd, y_md, f_solver_factory=None, 
-            n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
-            reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
-            rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-            rot_reg=tpsc.ROT_REG, 
-            outlierprior=tpsc.OUTLIER_PRIOR, outlierfrac=tpsc.OURLIER_FRAC, 
+            n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+            reg_init=settings.REG[0], reg_final=settings.REG[1], 
+            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+            rot_reg=settings.ROT_REG, 
+            outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
             prior_prob_nm=None, plotting=False, plot_cb=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
@@ -318,11 +322,11 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
     return f, corr_nm
 
 def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None, 
-                n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
-                reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
-                rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-                rot_reg=tpsc.ROT_REG, 
-                outlierprior=tpsc.OUTLIER_PRIOR, outlierfrac=tpsc.OURLIER_FRAC, 
+                n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                rot_reg=settings.ROT_REG, 
+                outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
                 prior_prob_nm=None, plotting=False, plot_cb=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
@@ -436,6 +440,43 @@ def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, 
     
     return prob_NM[:n, :m].astype(np.float64), r_N, c_M
 
+def balance_matrix3_gpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
+    if not lfd.registration._has_cuda:
+        raise NotImplementedError("CUDA not installed")
+    n,m = prob_nm.shape
+    prob_NM = np.empty((n+1, m+1), 'f4')
+    prob_NM[:n, :m] = prob_nm
+    prob_NM[:n, m] = row_priors
+    prob_NM[n, :m] = col_priors
+    prob_NM[n, m] = np.sqrt(np.sum(row_priors)*np.sum(col_priors)) # this can `be weighted bigger weight = fewer outliers
+    a_N = np.ones((n+1),'f4')
+    a_N[n] = m*outlierfrac
+    b_M = np.ones((m+1),'f4')
+    b_M[m] = n*outlierfrac
+    
+    if r_N is None: r_N = np.ones((n+1,1),'f4')
+    
+    prob_NM_gpu = gpuarray.empty((n+1,m+1), dtype=np.float32)
+    prob_MN_gpu = gpuarray.empty((m+1,n+1), dtype=np.float32)
+    r_N_gpu = gpuarray.empty((n+1,1), dtype=np.float32)
+    c_M_gpu = gpuarray.empty((m+1,1), dtype=np.float32)
+    prob_NM_gpu.set_async(prob_NM)
+    prob_MN_gpu.set_async(prob_NM.T.copy())
+    r_N_gpu.set_async(r_N)
+    
+    for _ in xrange(max_iter):
+        culinalg.dot(prob_NM_gpu, r_N_gpu, transa='T', out=c_M_gpu)
+        c_M_gpu.set_async(b_M[:,None]/c_M_gpu.get())
+        culinalg.dot(prob_MN_gpu, c_M_gpu, transa='T', out=r_N_gpu)
+        r_N_gpu.set_async(a_N[:,None]/r_N_gpu.get())
+
+    r_N = r_N_gpu.get()
+    c_M = c_M_gpu.get()
+    prob_NM *= r_N
+    prob_NM *= c_M.T
+    
+    return prob_NM[:n, :m].astype(np.float64), r_N, c_M
+
 def balance_matrix4(prob_nm, max_iter, p_n, p_m):
     """Like balance_matrix3 but doesn't normalize the p_m row and the p_n column
     
@@ -474,9 +515,7 @@ def balance_matrix4(prob_nm, max_iter, p_n, p_m):
     return prob_nm.astype(np.float64)
 
 def balance_matrix3(*args, **kwargs):
-    from lfd.registration import _has_cuda
-    if _has_cuda:
-        from tps_gpu import balance_matrix3_gpu
+    if lfd.registration:
         ret = balance_matrix3_gpu(*args, **kwargs)
     else:
         ret = balance_matrix3_cpu(*args, **kwargs)

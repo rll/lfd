@@ -11,7 +11,7 @@ import random
 
 from lfd.rapprentice import animate_traj, ropesim, math_utils as mu, plotting_openrave
 from lfd.rapprentice.util import yellowprint
-from constants import RopeConstant as ropec, GripperConstant as gripperc
+import settings
 PR2_L_POSTURES = dict(
     untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
     tucked = [0.06, 1.25, 1.79, -1.68, -1.73, -0.10, -0.09],
@@ -27,13 +27,13 @@ class RopeState(object):
 
 class RopeParams(object):
     def __init__(self):
-        self.radius       = ropec.RADIUS
-        self.angStiffness = ropec.ANG_STIFFNESS
-        self.angDamping   = ropec.ANG_DAMPING
-        self.linDamping   = ropec.LIN_DAMPING
-        self.angLimit     = ropec.ANG_LIMIT
-        self.linStopErp   = ropec.LIN_STOP_ERP
-        self.mass         = ropec.MASS
+        self.radius       = settings.ROPE_RADIUS
+        self.angStiffness = settings.ROPE_ANG_STIFFNESS
+        self.angDamping   = settings.ROPE_ANG_DAMPING
+        self.linDamping   = settings.ROPE_LIN_DAMPING
+        self.angLimit     = settings.ROPE_ANG_LIMIT
+        self.linStopErp   = settings.ROPE_LIN_STOP_ERP
+        self.mass         = settings.ROPE_MASS
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -134,10 +134,10 @@ def split_trajectory_by_gripper(seg_info):
     n_steps = len(lgrip)
 
     # indices BEFORE transition occurs
-    l_openings = np.flatnonzero((lgrip[1:] >= gripperc.OPEN_CLOSE_THRESH) & (lgrip[:-1] < gripperc.OPEN_CLOSE_THRESH))
-    r_openings = np.flatnonzero((rgrip[1:] >= gripperc.OPEN_CLOSE_THRESH) & (rgrip[:-1] < gripperc.OPEN_CLOSE_THRESH))
-    l_closings = np.flatnonzero((lgrip[1:] < gripperc.OPEN_CLOSE_THRESH) & (lgrip[:-1] >= gripperc.OPEN_CLOSE_THRESH))
-    r_closings = np.flatnonzero((rgrip[1:] < gripperc.OPEN_CLOSE_THRESH) & (rgrip[:-1] >= gripperc.OPEN_CLOSE_THRESH))
+    l_openings = np.flatnonzero((lgrip[1:] >= settings.GRIPPER_OPEN_CLOSE_THRESH) & (lgrip[:-1] < settings.GRIPPER_OPEN_CLOSE_THRESH))
+    r_openings = np.flatnonzero((rgrip[1:] >= settings.GRIPPER_OPEN_CLOSE_THRESH) & (rgrip[:-1] < settings.GRIPPER_OPEN_CLOSE_THRESH))
+    l_closings = np.flatnonzero((lgrip[1:] < settings.GRIPPER_OPEN_CLOSE_THRESH) & (lgrip[:-1] >= settings.GRIPPER_OPEN_CLOSE_THRESH))
+    r_closings = np.flatnonzero((rgrip[1:] < settings.GRIPPER_OPEN_CLOSE_THRESH) & (rgrip[:-1] >= settings.GRIPPER_OPEN_CLOSE_THRESH))
 
     before_transitions = np.r_[l_openings, r_openings, l_closings, r_closings]
     after_transitions = before_transitions+1
@@ -152,8 +152,8 @@ def split_trajectory_by_lr_gripper(seg_info, lr):
     n_steps = len(grip)
 
     # indices BEFORE transition occurs
-    openings = np.flatnonzero((grip[1:] >= gripperc.OPEN_CLOSE_THRESH) & (grip[:-1] < gripperc.OPEN_CLOSE_THRESH))
-    closings = np.flatnonzero((grip[1:] < gripperc.OPEN_CLOSE_THRESH) & (grip[:-1] >= gripperc.OPEN_CLOSE_THRESH))
+    openings = np.flatnonzero((grip[1:] >= settings.GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] < settings.GRIPPER_OPEN_CLOSE_THRESH))
+    closings = np.flatnonzero((grip[1:] < settings.GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] >= settings.GRIPPER_OPEN_CLOSE_THRESH))
 
     before_transitions = np.r_[openings, closings]
     after_transitions = before_transitions+1
@@ -165,7 +165,7 @@ def split_trajectory_by_lr_gripper(seg_info, lr):
 def get_opening_closing_inds(finger_traj):
     
     mult = 5.0
-    GRIPPER_L_FINGER_OPEN_CLOSE_THRESH = mult * gripperc.OPEN_CLOSE_THRESH
+    GRIPPER_L_FINGER_OPEN_CLOSE_THRESH = mult * settings.GRIPPER_OPEN_CLOSE_THRESH
 
     # indices BEFORE transition occurs
     opening_inds = np.flatnonzero((finger_traj[1:] >= GRIPPER_L_FINGER_OPEN_CLOSE_THRESH) & (finger_traj[:-1] < GRIPPER_L_FINGER_OPEN_CLOSE_THRESH))
@@ -183,7 +183,7 @@ def gripper_joint2gripper_l_finger_joint_values(gripper_joint_vals):
     return gripper_l_finger_joint_vals
 
 def binarize_gripper(angle):
-    return angle > gripperc.OPEN_CLOSE_THRESH
+    return angle > settings.GRIPPER_OPEN_CLOSE_THRESH
 
 def get_binary_gripper_angle(open):
     mult = 5
@@ -555,18 +555,18 @@ def set_rope_transforms(tfs, sim_env):
 
 def get_rope_params(params_id):
     rope_params = bulletsimpy.CapsuleRopeParams()
-    rope_params.radius       = ropec.RADIUS
-    rope_params.angStiffness = ropec.ANG_STIFFNESS
-    rope_params.angDamping   = ropec.ANG_DAMPING
-    rope_params.linDamping   = ropec.LIN_DAMPING
-    rope_params.angLimit     = ropec.ANG_LIMIT
-    rope_params.linStopErp   = ropec.LIN_STOP_ERP
-    rope_params.mass         = ropec.MASS
+    rope_params.radius       = settings.ROPE_RADIUS
+    rope_params.angStiffness = settings.ROPE_ANG_STIFFNESS
+    rope_params.angDamping   = settings.ROPE_ANG_DAMPING
+    rope_params.linDamping   = settings.ROPE_LIN_DAMPING
+    rope_params.angLimit     = settings.ROPE_ANG_LIMIT
+    rope_params.linStopErp   = settings.ROPE_LIN_STOP_ERP
+    rope_params.mass         = settings.ROPE_MASS
 
     if params_id == 'default':
         pass
     elif params_id == 'thick':
-        rope_params.radius = ropec.RADIUS_THICK
+        rope_params.radius = settings.ROPE_RADIUS_THICK
     elif params_id.startswith('stiffness'):
         try:
             stiffness = float(re.search(r'stiffness(.*)', params_id).group(1))

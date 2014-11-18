@@ -11,14 +11,13 @@ import trajoptpy
 import numpy as np
 
 from lfd.environment import sim_util
-from lfd.environment.constants import RopeConstant as ropec
+from lfd.environment import settings
 from constants import MAX_ACTIONS_TO_TRY
 from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from lfd.environment.simulation import DynamicRopeSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from lfd.environment.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
 from lfd.transfer.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from lfd.action_selection import GreedyActionSelection
@@ -396,7 +395,7 @@ def set_global_vars(args):
     for action, seg_info in GlobalVars.actions.iteritems():
         if args.eval.ground_truth:
             rope_nodes = seg_info['rope_nodes'][()]
-            scene_state = GroundTruthRopeSceneState(rope_nodes, ropec.RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
+            scene_state = GroundTruthRopeSceneState(rope_nodes, settings.ROPE_RADIUS, upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, downsample_size=args.eval.downsample_size)
         else:
             full_cloud = seg_info['cloud_xyz'][()]
             scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
