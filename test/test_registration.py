@@ -92,7 +92,7 @@ class TestRegistration(unittest.TestCase):
         
         K_nn = tps.tps_kernel_matrix(x_na)
         Q = np.c_[np.ones((n,1)), x_na, K_nn]
-        rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
+        rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else np.asarray(rot_coef)
         A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_na]].T
         
         WQ = wt_n[:,None] * Q
