@@ -277,7 +277,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
             rot_reg=settings.ROT_REG, 
             outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
-            prior_prob_nm=None, plotting=False, plot_cb=None):
+            prior_prob_nm=None, callback=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -300,7 +300,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
         fsolve = f_solver_factory.get_solver(x_nd, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
-        for _ in range(em_iter):
+        for i_em in range(em_iter):
             xwarped_nd = f.transform_points(x_nd)
 
             dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
@@ -315,9 +315,9 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
                 f = ThinPlateSpline.fit_ThinPlateSpline(x_nd, xtarg_nd, reg, rot_reg, wt_n)
             else:
                 fsolve.solve(wt_n, xtarg_nd, reg, f)
-        
-        if plotting and (i%plotting==0 or i==(n_iter-1)):
-            plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
+            
+            if callback:
+                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
         
     return f, corr_nm
 
@@ -327,7 +327,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
                 rot_reg=settings.ROT_REG, 
                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
-                prior_prob_nm=None, plotting=False, plot_cb=None):
+                prior_prob_nm=None, callback=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -357,7 +357,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
         gsolve = g_solver_factory.get_solver(y_md, rot_reg)
     
     for i, (reg, rad) in enumerate(zip(regs, rads)):
-        for _ in range(em_iter):
+        for i_em in range(em_iter):
             xwarped_nd = f.transform_points(x_nd)
             ywarped_md = g.transform_points(y_md)
             
@@ -381,9 +381,9 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 g = ThinPlateSpline.fit_ThinPlateSpline(y_md, ytarg_md, reg, rot_reg, wt_m)
             else:
                 gsolve.solve(wt_m, ytarg_md, reg, g)
-        
-        if plotting and (i%plotting==0 or i==(n_iter-1)):
-            plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
+            
+            if callback:
+                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
     
     return f, g, corr_nm
 

@@ -99,21 +99,20 @@ class RegistrationFactory(object):
         else:
             self.demos = demos
         
-    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+    def register(self, demo, test_scene_state, callback=None):
         """Registers demonstration scene onto the test scene
         
         Args:
             demo: Demonstration which has the demonstration scene
             test_scene_state: SceneState of the test scene
-            plotting: 0 means don't plot. integer n means plot every n iterations
-            plot_cb: plotting callback with arguments: x_nd, y_md, xtarg_nd, corr_nm, wt_n, f
+            callback: callback with arguments: i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f
         
         Returns:
             A Registration
         """
         raise NotImplementedError
 
-    def batch_register(self, test_scene_state, plotting=False, plot_cb=None):
+    def batch_register(self, test_scene_state, callback=None):
         """Registers every demonstration scene in demos onto the test scene
         
         Returns:
@@ -121,11 +120,11 @@ class RegistrationFactory(object):
             to the Registration
         
         Note:
-            Derived classes might ignore the arguments plotting and plot_cb.
+            Derived classes might ignore the argument callback
         """
         registrations = {}
         for name, demo in self.demos.iteritems():
-            registrations[name] = self.register(demo, test_scene_state, plotting=plotting, plot_cb=plot_cb)
+            registrations[name] = self.register(demo, test_scene_state, callback=callback)
         return registrations
     
     def cost(self, demo, test_scene_state):
@@ -184,8 +183,8 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                  n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-                 rot_reg = settings.ROT_REG, 
-                 outlierprior = settings.OUTLIER_PRIOR, outlierfrac = settings.OURLIER_FRAC, 
+                 rot_reg=settings.ROT_REG, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory()):
         """Inits TpsRpmRegistrationFactory with demonstrations and parameters
@@ -216,7 +215,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         self.prior_fn = prior_fn
         self.f_solver_factory = f_solver_factory
     
-    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+    def register(self, demo, test_scene_state, callback=None):
         if self.prior_fn is not None:
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -231,7 +230,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                               rad_init=self.rad_init, rad_final=self.rad_final, 
                               rot_reg=self.rot_reg, 
                               outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                              prior_prob_nm=prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
+                              prior_prob_nm=prior_prob_nm, callback=callback)
         
         return TpsRpmRegistration(demo, test_scene_state, f, corr, self.rad_final)
     
@@ -248,7 +247,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             rotation cost, each already premultiplied by the respective 
             coefficients.
         """
-        reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
+        reg = self.register(demo, test_scene_state, callback=None)
         cost = reg.f.get_objective()
         return cost
 
@@ -285,8 +284,8 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                  n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-                 rot_reg = settings.ROT_REG, 
-                 outlierprior = settings.OUTLIER_PRIOR, outlierfrac = settings.OURLIER_FRAC, 
+                 rot_reg=settings.ROT_REG, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory(), 
                  g_solver_factory=solver.AutoTpsSolverFactory(use_cache=False)):
@@ -321,7 +320,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.f_solver_factory = f_solver_factory
         self.g_solver_factory = g_solver_factory
     
-    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+    def register(self, demo, test_scene_state, callback=None):
         if self.prior_fn is not None:
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -336,7 +335,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                      rad_init=self.rad_init, rad_final=self.rad_final, 
                                      rot_reg=self.rot_reg, 
                                      outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                                     prior_prob_nm=prior_prob_nm, plotting=plotting, plot_cb=plot_cb)
+                                     prior_prob_nm=prior_prob_nm, callback=callback)
         
         return TpsRpmBijRegistration(demo, test_scene_state, f, g, corr, self.rad_final)
     
@@ -353,7 +352,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
             rotation cost of the forward and backward spline, each already 
             premultiplied by the respective coefficients.
         """
-        reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
+        reg = self.register(demo, test_scene_state, callback=None)
         cost = np.r_[reg.f.get_objective(), reg.g.get_objective()]
         return cost
 
@@ -367,7 +366,7 @@ class BatchGpuTpsRpmRegistrationFactory(TpsRpmRegistrationFactory):
             raise NotImplementedError("CUDA not installed")
         raise NotImplementedError
     
-    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+    def register(self, demo, test_scene_state, callback=None):
         raise NotImplementedError
     
     def batch_register(self, test_scene_state):
@@ -388,8 +387,8 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
                  n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-                 rot_reg = settings.ROT_REG, 
-                 outlierprior = settings.OUTLIER_PRIOR, outlierfrac = settings.OURLIER_FRAC, 
+                 rot_reg=settings.ROT_REG, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory(), 
                  g_solver_factory=solver.AutoTpsSolverFactory(use_cache=False)):
@@ -445,7 +444,7 @@ class TpsSegmentRegistrationFactory(RegistrationFactory):
     def __init__(self, demos):
         raise NotImplementedError
     
-    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+    def register(self, demo, test_scene_state, callback=None):
         raise NotImplementedError
     
     def batch_register(self, test_scene_state):
@@ -465,7 +464,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     def __init__(self, demos):
         raise NotImplementedError
     
-    def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
+    def register(self, demo, test_scene_state, callback=None):
         raise NotImplementedError
     
     def batch_register(self, test_scene_state):
