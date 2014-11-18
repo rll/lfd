@@ -2,8 +2,7 @@ from __future__ import division
 
 import numpy as np
 import scipy.spatial.distance as ssd
-from constants import TpsConstant as tpsc
-from constants import TpsGpuConstant as tpsgc
+import settings
 import tps
 import solver
 import lfd.registration
@@ -182,11 +181,11 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         \end{align*}
     """
     def __init__(self, demos=None, 
-                 n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
-                 reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
-                 rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-                 rot_reg = tpsc.ROT_REG, 
-                 outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
+                 n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                 reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                 rot_reg = settings.ROT_REG, 
+                 outlierprior = settings.OUTLIER_PRIOR, outlierfrac = settings.OURLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory()):
         """Inits TpsRpmRegistrationFactory with demonstrations and parameters
@@ -283,11 +282,11 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         \end{align*}
     """
     def __init__(self, demos=None, 
-                 n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
-                 reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
-                 rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-                 rot_reg = tpsc.ROT_REG, 
-                 outlierprior = tpsc.OUTLIER_PRIOR, outlierfrac = tpsc.OURLIER_FRAC, 
+                 n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                 reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                 rot_reg = settings.ROT_REG, 
+                 outlierprior = settings.OUTLIER_PRIOR, outlierfrac = settings.OURLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory(), 
                  g_solver_factory=solver.AutoTpsSolverFactory(use_cache=False)):
@@ -386,11 +385,11 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
     Similar to TpsRpmBijRegistrationFactory but batch_register and batch_cost are computed in batch using the GPU
     """
     def __init__(self, demos, actionfile=None, 
-                 n_iter=tpsgc.N_ITER, em_iter=tpsgc.EM_ITER, 
-                 reg_init=tpsgc.REG[0], reg_final=tpsgc.REG[1], 
-                 rad_init=tpsgc.RAD[0], rad_final=tpsgc.RAD[1], 
-                 rot_reg = tpsgc.ROT_REG, 
-                 outlierprior = tpsgc.OUTLIER_PRIOR, outlierfrac = tpsgc.OURLIER_FRAC, 
+                 n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                 reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                 rot_reg = settings.ROT_REG, 
+                 outlierprior = settings.OUTLIER_PRIOR, outlierfrac = settings.OURLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory(), 
                  g_solver_factory=solver.AutoTpsSolverFactory(use_cache=False)):
@@ -413,8 +412,8 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
         self.warn_clip_cloud = True
     
     def _clip_cloud(self, cloud):
-        if len(cloud) > tpsgc.MAX_CLD_SIZE:
-            cloud = cloud[np.random.choice(range(len(cloud)), size=tpsgc.MAX_CLD_SIZE, replace=False)]
+        if len(cloud) > settings.MAX_CLD_SIZE:
+            cloud = cloud[np.random.choice(range(len(cloud)), size=settings.MAX_CLD_SIZE, replace=False)]
         if self.warn_clip_cloud:
             import warnings
             warnings.warn("The cloud has more points than the maximum for GPU and it is being clipped")
@@ -435,7 +434,7 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
         cost_array = batch_tps_rpm_bij(self.src_ctx, tgt_ctx,
                                        T_init=self.rad_init, T_final=self.rad_final, 
                                        outlierfrac=self.outlierfrac, outlierprior=self.outlierprior, 
-                                       outliercutoff=tpsgc.OUTLIER_CUTOFF, 
+                                       outliercutoff=settings.OUTLIER_CUTOFF, 
                                        em_iter=self.em_iter, 
                                        component_cost=True)
         costs = dict(zip(self.src_ctx.seg_names, cost_array))

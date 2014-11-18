@@ -3,7 +3,7 @@ Functions for fitting and applying thin plate spline transformations
 """
 from __future__ import division
 
-from constants import TpsConstant as tpsc
+import settings
 import numpy as np
 import scipy.spatial.distance as ssd
 from transformation import Transformation
@@ -272,11 +272,11 @@ def prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=True):
         return ytarg_md, wt_m
 
 def tps_rpm(x_nd, y_md, f_solver_factory=None, 
-            n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
-            reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
-            rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-            rot_reg=tpsc.ROT_REG, 
-            outlierprior=tpsc.OUTLIER_PRIOR, outlierfrac=tpsc.OURLIER_FRAC, 
+            n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+            reg_init=settings.REG[0], reg_final=settings.REG[1], 
+            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+            rot_reg=settings.ROT_REG, 
+            outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
             prior_prob_nm=None, plotting=False, plot_cb=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
@@ -322,11 +322,11 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
     return f, corr_nm
 
 def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None, 
-                n_iter=tpsc.N_ITER, em_iter=tpsc.EM_ITER, 
-                reg_init=tpsc.REG[0], reg_final=tpsc.REG[1], 
-                rad_init=tpsc.RAD[0], rad_final=tpsc.RAD[1], 
-                rot_reg=tpsc.ROT_REG, 
-                outlierprior=tpsc.OUTLIER_PRIOR, outlierfrac=tpsc.OURLIER_FRAC, 
+                n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                rot_reg=settings.ROT_REG, 
+                outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
                 prior_prob_nm=None, plotting=False, plot_cb=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)

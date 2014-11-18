@@ -1,6 +1,6 @@
 from __future__ import division
 
-from constants import PlanningConstant as planningc
+import settings
 import numpy as np
 from lfd.demonstration import demonstration
 from lfd.rapprentice import planning
@@ -60,8 +60,8 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
         for lr in 'lr':
             if sim_util.arm_moved(demo.aug_traj.lr2arm_traj[lr]):
                 active_lr += lr
-        _, timesteps_rs = sim_util.unif_resample(np.c_[(1./planningc.JOINT_LENGTH_PER_STEP) * np.concatenate([demo.aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1), 
-                                                       (1./planningc.FINGER_CLOSE_RATE) * np.concatenate([demo.aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)], 
+        _, timesteps_rs = sim_util.unif_resample(np.c_[(1./settings.JOINT_LENGTH_PER_STEP) * np.concatenate([demo.aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1), 
+                                                       (1./settings.FINGER_CLOSE_RATE) * np.concatenate([demo.aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)], 
                                                  1.)
         demo_aug_traj_rs = demo.aug_traj.get_resampled_traj(timesteps_rs)
 
@@ -142,8 +142,8 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
         for lr in 'lr':
             if sim_util.arm_moved(demo.aug_traj.lr2arm_traj[lr]):
                 active_lr += lr
-        _, timesteps_rs = sim_util.unif_resample(np.c_[(1./planningc.JOINT_LENGTH_PER_STEP) * np.concatenate([demo.aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1), 
-                                                       (1./planningc.FINGER_CLOSE_RATE) * np.concatenate([demo.aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)], 
+        _, timesteps_rs = sim_util.unif_resample(np.c_[(1./settings.JOINT_LENGTH_PER_STEP) * np.concatenate([demo.aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1), 
+                                                       (1./settings.FINGER_CLOSE_RATE) * np.concatenate([demo.aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)], 
                                                  1.)
         demo_aug_traj_rs = demo.aug_traj.get_resampled_traj(timesteps_rs)
 

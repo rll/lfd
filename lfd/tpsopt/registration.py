@@ -20,7 +20,7 @@ import scipy.spatial.distance as ssd
 
 from lfd.tpsopt.transformations import ThinPlateSpline, fit_ThinPlateSpline
 import tps
-from constants import BEND_COEF_DIGITS
+from settings import BEND_COEF_DIGITS
 
 # from svds import svds
 

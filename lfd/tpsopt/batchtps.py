@@ -20,7 +20,7 @@ from lfd.tpsopt.precompute import downsample_cloud, batch_get_sol_params
 from cuda_funcs import init_prob_nm, norm_prob_nm, get_targ_pts, check_cuda_err, fill_mat, reset_cuda, sq_diffs, \
     closest_point_cost, scale_points, gram_mat_dist
 from lfd.tpsopt.registration import unit_boxify, loglinspace
-from lfd.tpsopt.constants import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
+from lfd.tpsopt.settings import N_ITER_CHEAP, EM_ITER_CHEAP, DEFAULT_LAMBDA, MAX_CLD_SIZE, DATA_DIM, DS_SIZE, N_STREAMS, \
     DEFAULT_NORM_ITERS, BEND_COEF_DIGITS, MAX_TRAJ_LEN
 
 import IPython as ipy

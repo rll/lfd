@@ -12,13 +12,12 @@ import trajoptpy
 import numpy as np
 
 from lfd.environment import sim_util
-from lfd.environment.constants import RopeConstant as ropec
+from lfd.environment import settings
 from lfd.demonstration.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from lfd.environment.simulation import DynamicRopeSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject
 from lfd.environment.environment import LfdEnvironment, GroundTruthRopeLfdEnvironment
-from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
 from lfd.transfer.transfer import PoseTrajectoryTransferer, FingerTrajectoryTransferer
 from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
 from lfd.rapprentice import util
@@ -43,7 +42,7 @@ def label_demos_parallel(args, transferer, lfd_env, sim):
     outfile = h5py.File(args.eval.outfile, 'a')
 
     rope_params = sim_util.RopeParams()
-    rope_params.radius = ropec.RADIUS_THICK
+    rope_params.radius = settings.ROPE_RADIUS_THICK
     if args.eval.rope_param_radius is not None:
         rope_params.radius = args.eval.rope_param_radius
     if args.eval.rope_param_angStiffness is not None:
@@ -349,7 +348,7 @@ def set_global_vars(args):
             rope_nodes = seg_info['rope_nodes'][()]
             scene_state = GroundTruthRopeSceneState(
                 rope_nodes,
-                ropec.RADIUS,
+                settings.ROPE_RADIUS,
                 upsample=args.eval.upsample,
                 upsample_rad=args.eval.upsample_rad,
                 downsample_size=args.eval.downsample_size)
