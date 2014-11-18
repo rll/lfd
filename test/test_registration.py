@@ -4,7 +4,7 @@ from __future__ import division
 
 import numpy as np
 from lfd.demonstration.demonstration import Demonstration, SceneState
-from lfd.registration.registration import TpsRpmRegistrationFactory
+from lfd.registration.registration import TpsRpmRegistration, TpsRpmRegistrationFactory
 from lfd.registration import tps, solver
 from lfd.registration import _has_cuda
 from tempfile import mkdtemp
@@ -113,6 +113,18 @@ class TestRegistration(unittest.TestCase):
         obj = np.trace(theta.T.dot(H.dot(theta))) + 2*np.trace(f.T.dot(theta)) \
         + np.trace(y_ng.T.dot(wt_n[:,None]*y_ng)) + rot_coefs.sum() # constant
         self.assertTrue(np.allclose(obj, reg.f.get_objective().sum()))
+
+    def test_tpsrpm_objective_monotonicity(self):
+        n_iter = 10
+        em_iter = 10
+        reg_factory = TpsRpmRegistrationFactory(n_iter=n_iter, em_iter=em_iter, f_solver_factory=solver.AutoTpsSolverFactory(use_cache=False))
+        
+        objs = np.zeros((n_iter, em_iter))
+        def callback(i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad):
+            objs[i, i_em] = TpsRpmRegistration.get_objective2(x_nd, y_md, f, corr_nm, rad).sum()
+        
+        reg = reg_factory.register(self.demos.values()[0], self.test_scene_state, callback=callback)
+        print np.diff(objs, axis=1) <= 0 # TODO assert when monotonicity is more robust
 
 if __name__ == '__main__':
     unittest.main()
