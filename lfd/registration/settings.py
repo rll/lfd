@@ -1,5 +1,3 @@
-import os
-
 # registration
 N_ITER        = 20
 EM_ITER       = 1
@@ -17,4 +15,4 @@ OUTLIER_CUTOFF  = 1e-2
 try:
 	from lfd_settings.registration.settings import *
 except ImportError:
-    pass
+	pass

@@ -5,7 +5,7 @@ from __future__ import division
 import numpy as np
 from lfd.demonstration.demonstration import Demonstration, SceneState
 from lfd.registration.registration import TpsRpmRegistrationFactory
-from lfd.registration import tps, solver, solver_gpu
+from lfd.registration import tps, solver
 from lfd.registration import _has_cuda
 from tempfile import mkdtemp
 import sys, time
@@ -56,7 +56,7 @@ class TestRegistration(unittest.TestCase):
         print "done in {}s".format(time.time() - start_time)
         
         if _has_cuda:
-            reg_factory_gpu = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver_gpu.GpuTpsSolverFactory(cachedir=tmp_cachedir))
+            reg_factory_gpu = TpsRpmRegistrationFactory(self.demos, f_solver_factory=solver.GpuTpsSolverFactory(cachedir=tmp_cachedir))
             sys.stdout.write("computing costs: gpu solver... ")
             sys.stdout.flush()
             start_time = time.time()
