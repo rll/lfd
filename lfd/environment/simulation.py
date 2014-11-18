@@ -23,15 +23,17 @@ class StaticSimulation(object):
     def add_objects(self, objs_to_add, consider_finger_collisions=True):
         if consider_finger_collisions:
             self._include_gripper_finger_collisions()
+        n_robots = len(self.env.GetRobots())
         for obj_to_add in objs_to_add:
             if obj_to_add.dynamic:
                 raise RuntimeError("Dynamic object can't be added to StaticSimulation")
             else:
                 self.sim_objs.append(obj_to_add)
                 obj_to_add.add_to_env(self)
-        if len(self.env.GetRobots()) > 1:
-            raise NotImplementedError("Behavior for adding more than one robot has not been defined")
-        self.robot = self.env.GetRobots()[-1]
+        if len(self.env.GetRobots()) > n_robots:
+            if self.robot:
+                raise NotImplementedError("Behavior for adding more than one robot has not been defined")
+            self.robot = self.env.GetRobots()[-1]
         if consider_finger_collisions:
             self._exclude_gripper_finger_collisions()
     
