@@ -11,11 +11,7 @@ ROPE_LIN_STOP_ERP  = .2
 ROPE_MASS          = 1.0
 ROPE_RADIUS_THICK  = .008
 
-lfd_settings_name = os.environ.get('LFD_SETTINGS_PACKAGE')
-if lfd_settings_name:
-    import importlib
-    lfd_settings = importlib.import_module(lfd_settings_name)
-    try:
-        from lfd_settings.environment.settings import *
-    except ImportError:
-        pass
+try:
+	from lfd_settings.environment.settings import *
+except ImportError:
+    pass

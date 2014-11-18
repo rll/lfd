@@ -15,11 +15,7 @@ DEFAULT_NORM_ITERS = 10
 BEND_COEF_DIGITS   = 6
 GRIPPER_OPEN_CLOSE_THRESH = 0.04 # 0.07 for thick rope...
 
-lfd_settings_name = os.environ.get('LFD_SETTINGS_PACKAGE')
-if lfd_settings_name:
-    import importlib
-    lfd_settings = importlib.import_module(lfd_settings_name)
-    try:
-        from lfd_settings.tpsopt.settings import *
-    except ImportError:
-        pass
+try:
+	from lfd_settings.tpsopt.settings import *
+except ImportError:
+    pass

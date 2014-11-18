@@ -14,11 +14,7 @@ MAX_CLD_SIZE       = 150
 BEND_COEF_DIGITS   = 6
 OUTLIER_CUTOFF  = 1e-2
 
-lfd_settings_name = os.environ.get('LFD_SETTINGS_PACKAGE')
-if lfd_settings_name:
-    import importlib
-    lfd_settings = importlib.import_module(lfd_settings_name)
-    try:
-        from lfd_settings.registration.settings import *
-    except ImportError:
-        pass
+try:
+	from lfd_settings.registration.settings import *
+except ImportError:
+    pass
