@@ -13,17 +13,17 @@ Module contents
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.registration.constants lfd.registration.plotting_openrave lfd.registration.registration lfd.registration.solver lfd.registration.tps lfd.registration.transformation
+.. inheritance-diagram:: lfd.registration.settings lfd.registration.plotting_openrave lfd.registration.registration lfd.registration.solver lfd.registration.tps lfd.registration.transformation
    :parts: 1
 
 
 Submodules
 ----------
 
-lfd.registration.constants module
----------------------------------
+lfd.registration.settings module
+--------------------------------
 
-.. automodule:: lfd.registration.constants
+.. automodule:: lfd.registration.settings
     :members:
     :undoc-members:
     :show-inheritance:

@@ -13,7 +13,7 @@ Module contents
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.tpsopt.batchtps lfd.tpsopt.clouds lfd.tpsopt.constants lfd.tpsopt.culinalg_exts lfd.tpsopt.precompute lfd.tpsopt.registration lfd.tpsopt.tps lfd.tpsopt.transformations
+.. inheritance-diagram:: lfd.tpsopt.batchtps lfd.tpsopt.clouds lfd.tpsopt.settings lfd.tpsopt.culinalg_exts lfd.tpsopt.precompute lfd.tpsopt.registration lfd.tpsopt.tps lfd.tpsopt.transformations
    :parts: 1
 
 
@@ -36,10 +36,10 @@ lfd.tpsopt.clouds module
     :undoc-members:
     :show-inheritance:
 
-lfd.tpsopt.constants module
----------------------------
+lfd.tpsopt.settings module
+--------------------------
 
-.. automodule:: lfd.tpsopt.constants
+.. automodule:: lfd.tpsopt.settings
     :members:
     :undoc-members:
     :show-inheritance:

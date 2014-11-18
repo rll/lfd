@@ -25,6 +25,14 @@ Module contents
 Submodules
 ----------
 
+lfd.settings module
+-------------------
+
+.. automodule:: lfd.settings
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 lfd.action_selection module
 ---------------------------
 

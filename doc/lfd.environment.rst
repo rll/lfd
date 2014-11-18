@@ -13,17 +13,17 @@ Module contents
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.environment.constants lfd.environment.environment lfd.environment.robot_world lfd.environment.sim_util lfd.environment.simulation lfd.environment.simulation_object
+.. inheritance-diagram:: lfd.environment.settings lfd.environment.environment lfd.environment.robot_world lfd.environment.sim_util lfd.environment.simulation lfd.environment.simulation_object
    :parts: 1
 
 
 Submodules
 ----------
 
-lfd.environment.constants module
---------------------------------
+lfd.environment.settings module
+-------------------------------
 
-.. automodule:: lfd.environment.constants
+.. automodule:: lfd.environment.settings
     :members:
     :undoc-members:
     :show-inheritance:
