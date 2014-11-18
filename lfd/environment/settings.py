@@ -1,5 +1,3 @@
-import os
-
 GRIPPER_OPEN_CLOSE_THRESH = 0.04 # .06 for fig8 (thick rope), 0.04 for thin rope (overhand)
 
 ROPE_RADIUS        = .005
@@ -14,4 +12,4 @@ ROPE_RADIUS_THICK  = .008
 try:
 	from lfd_settings.environment.settings import *
 except ImportError:
-    pass
+	pass

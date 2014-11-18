@@ -1,5 +1,3 @@
-import os
-
 N_ITER_CHEAP       = 10
 N_ITER_EXACT       = 50
 EM_ITER_CHEAP      = 1
@@ -18,4 +16,4 @@ GRIPPER_OPEN_CLOSE_THRESH = 0.04 # 0.07 for thick rope...
 try:
 	from lfd_settings.tpsopt.settings import *
 except ImportError:
-    pass
+	pass
