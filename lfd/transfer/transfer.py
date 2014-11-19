@@ -67,7 +67,7 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
         
         active_lr = ""
         for lr in 'lr':
-            if sim_util.arm_moved(demo.aug_traj.lr2arm_traj[lr]):
+            if lr in demo.aug_traj.lr2arm_traj and sim_util.arm_moved(demo.aug_traj.lr2arm_traj[lr]):
                 active_lr += lr
         _, timesteps_rs = sim_util.unif_resample(np.c_[(1./settings.JOINT_LENGTH_PER_STEP) * np.concatenate([demo.aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1), 
                                                        (1./settings.FINGER_CLOSE_RATE) * np.concatenate([demo.aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)], 
@@ -153,7 +153,7 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
         
         active_lr = ""
         for lr in 'lr':
-            if sim_util.arm_moved(demo.aug_traj.lr2arm_traj[lr]):
+            if lr in demo.aug_traj.lr2arm_traj and sim_util.arm_moved(demo.aug_traj.lr2arm_traj[lr]):
                 active_lr += lr
         _, timesteps_rs = sim_util.unif_resample(np.c_[(1./settings.JOINT_LENGTH_PER_STEP) * np.concatenate([demo.aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1), 
                                                        (1./settings.FINGER_CLOSE_RATE) * np.concatenate([demo.aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)], 
