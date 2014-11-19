@@ -7,7 +7,11 @@ from lfd.rapprentice import planning
 from lfd.environment import sim_util
 
 class TrajectoryTransferer(object):
-    def __init__(self, sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=None):
+    def __init__(self, sim, 
+                 beta_pos=settings.BETA_POS, 
+                 gamma=settings.GAMMA, 
+                 use_collision_cost=settings.USE_COLLISION_COST, 
+                 init_trajectory_transferer=None):
         """Inits TrajectoryTransferer
         
         Args:
@@ -41,7 +45,12 @@ class TrajectoryTransferer(object):
         raise NotImplementedError
 
 class PoseTrajectoryTransferer(TrajectoryTransferer):
-    def __init__(self, sim, beta_pos, beta_rot, gamma, use_collision_cost, init_trajectory_transferer=None):
+    def __init__(self, sim, 
+                 beta_pos=settings.BETA_POS, 
+                 beta_rot=settings.BETA_ROT, 
+                 gamma=settings.GAMMA, 
+                 use_collision_cost=settings.USE_COLLISION_COST, 
+                 init_trajectory_transferer=None):
         super(PoseTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)
         self.beta_rot = beta_rot
         
@@ -124,7 +133,11 @@ class PoseTrajectoryTransferer(TrajectoryTransferer):
         return test_aug_traj
 
 class FingerTrajectoryTransferer(TrajectoryTransferer):
-    def __init__(self, sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=None):
+    def __init__(self, sim, 
+                 beta_pos=settings.BETA_POS, 
+                 gamma=settings.GAMMA, 
+                 use_collision_cost=settings.USE_COLLISION_COST, 
+                 init_trajectory_transferer=None):
         super(FingerTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost, init_trajectory_transferer=init_trajectory_transferer)
 
     def transfer(self, reg, demo, plotting=False):
