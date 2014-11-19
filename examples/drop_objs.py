@@ -5,7 +5,6 @@ from __future__ import division
 import openravepy
 
 import numpy as np
-import trajoptpy
 
 from lfd.environment.simulation import DynamicSimulation
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject, CylinderSimulationObject
@@ -40,16 +39,10 @@ sim_objs.append(CylinderSimulationObject("cyl1", cyl_pos1, cyl_radius, cyl_heigh
 
 sim = DynamicSimulation()
 sim.add_objects(sim_objs)
+sim.create_viewer()
+
 sim.robot.SetDOFValues([0.25], [sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
 sim_util.reset_arms_to_side(sim)
-
-viewer = trajoptpy.GetViewer(sim.env)
-camera_matrix = np.array([[ 0,    1, 0,   0],
-                          [-1,    0, 0.5, 0],
-                          [ 0.5,  0, 1,   0],
-                          [ 2.25, 0, 4.5, 1]])
-viewer.SetWindowProp(0,0,1500,1500)
-viewer.SetCameraManipulatorMatrix(camera_matrix)
 
 # rotate cylinders by 90 deg
 for i in range(2):
@@ -60,4 +53,4 @@ for i in range(2):
 sim.update()
 
 sim.settle(max_steps=1000)
-viewer.Idle()
+sim.viewer.Idle()

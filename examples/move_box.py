@@ -5,7 +5,6 @@ from __future__ import division
 import openravepy
 
 import numpy as np
-import trajoptpy
 
 from lfd.rapprentice import planning, resampling
 from lfd.environment.simulation import DynamicSimulationRobotWorld
@@ -26,16 +25,10 @@ sim_objs.append(BoxSimulationObject("box1", box1_pos, [box_length/2, box_length/
 
 sim = DynamicSimulationRobotWorld()
 sim.add_objects(sim_objs)
+sim.create_viewer()
+
 sim.robot.SetDOFValues([0.25], [sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
 sim_util.reset_arms_to_side(sim)
-
-viewer = trajoptpy.GetViewer(sim.env)
-camera_matrix = np.array([[ 0,    1, 0,   0],
-                          [-1,    0, 0.5, 0],
-                          [ 0.5,  0, 1,   0],
-                          [ 2.25, 0, 4.5, 1]])
-viewer.SetWindowProp(0,0,1500,1500)
-viewer.SetCameraManipulatorMatrix(camera_matrix)
 
 # rotate box0 by 22.5 degrees
 bt_box0 = sim.bt_env.GetObjectByName('box0')
@@ -82,4 +75,4 @@ traj = get_move_traj(box1_pos + np.r_[0,0,box_depth+box_depth/2-0.02+0.002], box
 sim.execute_trajectory((traj, dof_inds))
 
 sim.settle()
-viewer.Idle()
+sim.viewer.Idle()
