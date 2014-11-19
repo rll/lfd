@@ -7,6 +7,7 @@ from lfd.rapprentice import animate_traj, ropesim
 import numpy as np
 from robot_world import RobotWorld
 import sim_util
+import settings
 import importlib
 
 class StaticSimulation(object):
@@ -99,7 +100,16 @@ class StaticSimulation(object):
         if not self.__viewer_cache and trajoptpy.ViewerExists(self.env):
             self.__viewer_cache = trajoptpy.GetViewer(self.env)
         return self.__viewer_cache
-
+    
+    def create_viewer(self, window_prop=None, camera_matrix=None):
+        trajoptpy.GetViewer(self.env) # creates viewer
+        if window_prop is None:
+            window_prop = settings.WINDOW_PROP
+        self.viewer.SetWindowProp(*window_prop)
+        if camera_matrix is None:
+            camera_matrix = settings.CAMERA_MATRIX
+        self.viewer.SetCameraManipulatorMatrix(np.asarray(camera_matrix))
+    
     def _exclude_gripper_finger_collisions(self):
         if not self.robot:
             return

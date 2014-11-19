@@ -9,6 +9,12 @@ ROPE_LIN_STOP_ERP  = .2
 ROPE_MASS          = 1.0
 ROPE_RADIUS_THICK  = .008
 
+WINDOW_PROP = [0,0,1500,1500]
+CAMERA_MATRIX = [[    0, 1,   0, 0],
+				 [   -1, 0, 0.5, 0],
+				 [  0.5, 0,   1, 0],
+				 [ 2.25, 0, 4.5, 1]]
+
 try:
 	from lfd_settings.environment.settings import *
 except ImportError:

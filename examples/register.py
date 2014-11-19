@@ -3,7 +3,6 @@
 from __future__ import division
 
 import numpy as np
-import trajoptpy
 
 from lfd.environment.simulation import StaticSimulation
 from lfd.environment.simulation_object import BoxSimulationObject
@@ -19,14 +18,7 @@ table = BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85, .1], dy
 
 sim = StaticSimulation()
 sim.add_objects([table])
-
-viewer = trajoptpy.GetViewer(sim.env)
-camera_matrix = np.array([[ 0,    1, 0,   0],
-                          [-1,    0, 0.5, 0],
-                          [ 0.5,  0, 1,   0],
-                          [ 2.25, 0, 4.5, 1]])
-viewer.SetWindowProp(0,0,1500,1500)
-viewer.SetCameraManipulatorMatrix(camera_matrix)
+sim.create_viewer()
 
 def generate_cloud(x_center_pert=0, max_noise=0.02):
     # generates 40 cm by 60 cm cloud with optional pertubation along the x-axis
