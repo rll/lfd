@@ -1,6 +1,7 @@
 from __future__ import division
 
 import trajoptpy, bulletsimpy
+import sim_util
 import numpy as np
 
 class SimulationObject(object):
@@ -125,11 +126,14 @@ class CylinderSimulationObject(XmlSimulationObject):
 
 class RopeSimulationObject(SimulationObject):
     add_after = True
-    def __init__(self, name, ctrl_points, rope_params, dynamic=True, upsample=0, upsample_rad=1):
+    def __init__(self, name, ctrl_points, rope_params=None, dynamic=True, upsample=0, upsample_rad=1):
         super(RopeSimulationObject, self).__init__([name], dynamic=True)
         self.name = name
         self.init_ctrl_points = np.asarray(ctrl_points)
-        self.rope_params = rope_params
+        if rope_params is None:
+            self.rope_params = sim_util.RopeParams()
+        else:
+            self.rope_params = rope_params
         self.upsample = upsample
         self.upsample_rad = upsample_rad
         self.rope = None
