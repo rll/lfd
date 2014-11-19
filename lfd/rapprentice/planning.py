@@ -19,7 +19,7 @@ def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj,
     assert len(ee_link_names) == len(ee_trajs)
         
     if no_collision_cost_first:
-        init_traj, _ = plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj, 
+        init_traj, _, _ = plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj, 
                                         no_collision_cost_first=False, use_collision_cost=False, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
                                         beta_pos = beta_pos, beta_rot = beta_rot, gamma = gamma)
     else:
