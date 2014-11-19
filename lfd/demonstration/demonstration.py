@@ -95,10 +95,20 @@ class AugmentedTrajectory(object):
                 else:
                     assert lr2traj[lr].shape[0] == self.n_steps
 
-        self.lr2arm_traj = lr2arm_traj
-        self.lr2finger_traj = lr2finger_traj
+        if lr2arm_traj is None:
+            self.lr2arm_traj = {}
+        else:
+            self.lr2arm_traj = lr2arm_traj
         
-        self.lr2ee_traj = lr2ee_traj
+        if lr2finger_traj is None:
+            self.lr2finger_traj = {}
+        else:
+            self.lr2finger_traj = lr2finger_traj
+        
+        if lr2ee_traj is None:
+            self.lr2ee_traj = {}
+        else:
+            self.lr2ee_traj = lr2ee_traj
         
         if lr2open_finger_traj is None:
             self.lr2open_finger_traj = {}
