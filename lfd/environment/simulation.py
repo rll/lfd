@@ -391,13 +391,9 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
             to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
             
-            for i in range(ray_froms.shape[0]):
-                self.viewer.Step()
             ray_collisions = [rc for rcs in [from_to_ray_collisions, to_from_ray_collisions] for rc in rcs]
 
             for rc in ray_collisions:
-                if rc.link == bt_obj.GetKinBody().GetLink('rope_59'):
-                    self.viewer.Step()
                 if np.linalg.norm(rc.pt - rc.rayFrom) < grab_dist_thresh:
                     link_tf = rc.link.GetTransform()
                     link_tf[:3, 3] = rc.pt
