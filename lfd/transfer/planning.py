@@ -7,11 +7,18 @@ import trajoptpy
 from lfd.environment import sim_util
 from lfd.util import util
 from lfd.rapprentice import math_utils as mu
-from lfd.registration import tps
+import settings
+
+def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, 
+                     no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
+                     beta_pos=settings.BETA_POS, beta_rot=settings.BETA_ROT, gamma=settings.GAMMA):
+    return plan_follow_trajs(robot, manip_name, [ee_link.GetName()], [new_hmats], old_traj, 
+                     no_collision_cost_first=no_collision_cost_first, use_collision_cost=use_collision_cost, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
+                     beta_pos=beta_pos, beta_rot=beta_rot, gamma=gamma)
 
 def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj, 
                      no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                     beta_pos = 1000000.0, beta_rot = 100.0, gamma = 1000.0):
+                     beta_pos=settings.BETA_POS, beta_rot=settings.BETA_ROT, gamma=settings.GAMMA):
     orig_dof_inds = robot.GetActiveDOFIndices()
     orig_dof_vals = robot.GetDOFValues()
     
@@ -150,9 +157,16 @@ def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj,
     
     return traj, obj_value, pose_costs
 
+def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2finger_pts_traj, old_traj, 
+                                no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
+                                beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
+    return plan_follow_finger_pts_trajs(robot, manip_name, [flr2finger_link.GetName()], flr2finger_rel_pts, [flr2finger_pts_traj], old_traj, 
+                                no_collision_cost_first=no_collision_cost_first, use_collision_cost=use_collision_cost, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
+                                beta_pos=beta_pos, gamma=gamma)
+
 def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2finger_pts_trajs, old_traj, 
                                 no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                                beta_pos = 1000000.0, gamma=1000.0):
+                                beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
     orig_dof_inds = robot.GetActiveDOFIndices()
     orig_dof_vals = robot.GetDOFValues()
     
@@ -298,106 +312,19 @@ def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2f
     obj_value = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts()])
     return traj, obj_value, rel_pts_costs
 
-def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, 
-                     no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                     beta_pos = 1000000.0, beta_rot = 100.0, gamma = 1000.0):
-    return plan_follow_trajs(robot, manip_name, [ee_link.GetName()], [new_hmats], old_traj, 
-                     no_collision_cost_first=no_collision_cost_first, use_collision_cost=use_collision_cost, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
-                     beta_pos = beta_pos, beta_rot = beta_rot, gamma = gamma)
-
-def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2finger_pts_traj, old_traj, 
-                                no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                                beta_pos = 1000000.0, gamma=1000.0):
-    return plan_follow_finger_pts_trajs(robot, manip_name, [flr2finger_link.GetName()], flr2finger_rel_pts, [flr2finger_pts_traj], old_traj, 
-                                no_collision_cost_first=no_collision_cost_first, use_collision_cost=use_collision_cost, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
-                                beta_pos = beta_pos, gamma=gamma)
-
-def tps_fit3_ext(x_na, y_ng, bend_coef, rot_coef, wt_n):
-    if wt_n is None: wt_n = np.ones(len(x_na))
-    n,d = x_na.shape
-    
-    K_nn = tps.tps_kernel_matrix(x_na)
-    Q = np.c_[np.ones((n,1)), x_na, K_nn]
-    rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
-
-    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_na]].T
-    n_cnts = A.shape[0]
-    _u,_s,_vh = np.linalg.svd(A.T)
-    N = _u[:,n_cnts:]
-    
-    solve_dim_separately = not np.isscalar(bend_coef) or (wt_n.ndim > 1 and wt_n.shape[1] > 1)
-    
-    if solve_dim_separately:
-        bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
-        if wt_n.ndim == 1:
-            wt_n = wt_n[:,None]
-        if wt_n.shape[1] == 1:
-            wt_n = np.tile(wt_n, (1,d))
-        z = np.empty((n,d))
-        for i in range(d):
-            WQ = wt_n[:,i][:,None] * Q
-            QWQ = Q.T.dot(WQ)
-            H = QWQ
-            H[d+1:,d+1:] += bend_coefs[i] * K_nn
-            H[1:d+1, 1:d+1] += np.diag(rot_coefs)
-             
-            f = -WQ.T.dot(y_ng[:,i])
-            f[1+i] -= rot_coefs[i]
-             
-            z[:,i] = np.linalg.solve(N.T.dot(H.dot(N)), -N.T.dot(f))
-    else:
-        WQ = wt_n[:,None] * Q
-        QWQ = Q.T.dot(WQ)
-        H = QWQ
-        H[d+1:,d+1:] += bend_coef * K_nn
-        H[1:d+1, 1:d+1] += np.diag(rot_coefs)
-        
-        f = -WQ.T.dot(y_ng)
-        f[1:d+1,0:d] -= np.diag(rot_coefs)
-        
-        z = np.linalg.solve(N.T.dot(H.dot(N)), -N.T.dot(f))
-    
-    return N, z
-
-def tps_obj(f, x_na, y_ng, bend_coef, rot_coef, wt_n):
-    # expand these
-    _,d = x_na.shape
-    bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
-    rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
-    if wt_n is None: wt_n = np.ones(len(x_na))
-    if wt_n.ndim == 1:
-        wt_n = wt_n[:,None]
-    if wt_n.shape[1] == 1:
-        wt_n = np.tile(wt_n, (1,d))
-    
-    K_nn = tps.tps_kernel_matrix(x_na)
-    _,d = x_na.shape
-    cost = 0
-    # matching cost
-    cost += np.linalg.norm((f.transform_points(x_na) - y_ng) * np.sqrt(wt_n))**2
-    # same as (np.square(np.apply_along_axis(np.linalg.norm, 1, f.transform_points(x_na) - y_ng)) * wt_n).sum()
-    # bending cost
-    cost += np.trace(np.diag(bend_coefs).dot(f.w_ng.T.dot(K_nn.dot(f.w_ng))))
-    # rotation cost
-    cost += np.trace((f.lin_ag - np.eye(d)).T.dot(np.diag(rot_coefs).dot((f.lin_ag - np.eye(d)))))
-#     # constants
-#     cost -= np.linalg.norm(y_ng * np.sqrt(wt_n))**2
-#     cost -= np.trace(np.diag(rot_coefs))
-    return cost
-
 def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2finger_pts_traj, old_traj, 
                                               f, closing_pts=None, 
                                               no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None, 
-                                              alpha=1000000.0, beta_pos=1000000.0, gamma=1000.0):
+                                              alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
     return joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, [flr2finger_link.GetName()], flr2finger_rel_pts, [flr2finger_pts_traj], old_traj, 
                                                  f, closing_pts=closing_pts, 
                                                  no_collision_cost_first=no_collision_cost_first, use_collision_cost=use_collision_cost, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
-                                                 beta_pos = beta_pos, gamma=gamma)
+                                                 alpha=alpha, beta_pos=beta_pos, gamma=gamma)
 
 def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2old_finger_pts_trajs, old_traj, 
                                          f, closing_pts=None,
                                          no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                                         alpha=1000000.0, beta_pos=1000000.0, gamma=1000.0):
+                                          alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
     orig_dof_inds = robot.GetActiveDOFIndices()
     orig_dof_vals = robot.GetDOFValues()
     
