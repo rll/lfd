@@ -170,7 +170,6 @@ class FingerTrajectoryTransferer(TrajectoryTransferer):
         for lr in active_lr:
             arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
             finger_name = "%s_gripper_l_finger_joint"%lr
-            ee_link_name = "%s_gripper_tool_frame"%lr
             
             if manip_name:
                 manip_name += "+"
