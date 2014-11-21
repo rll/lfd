@@ -24,6 +24,9 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
             return Mock()
 
+    def __getitem__(self, v):
+        return Mock()
+
 MOCK_MODULES = ['bulletsimpy', 'trajoptpy', 'openravepy', 
   'joblib', 'h5py', 'IPython', 
   'numpy', 'numpy.pxd', 
