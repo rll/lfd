@@ -1,9 +1,13 @@
 from __future__ import division
-import openravepy,trajoptpy, numpy as np, json
+
+import numpy as np
+import json
+import openravepy
+import trajoptpy
 from lfd.environment import sim_util
-import util
-from lfd.rapprentice import tps, math_utils as mu
-from lfd.rapprentice.registration import ThinPlateSpline
+from lfd.util import util
+from lfd.rapprentice import math_utils as mu
+from lfd.registration import tps
 
 def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj, 
                      no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
@@ -382,16 +386,16 @@ def tps_obj(f, x_na, y_ng, bend_coef, rot_coef, wt_n):
     return cost
 
 def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2finger_pts_traj, old_traj, 
-                                              x_na, y_ng, bend_coef, rot_coef, wt_n, old_N_z=None, closing_pts=None, 
+                                              f, closing_pts=None, 
                                               no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None, 
                                               alpha=1000000.0, beta_pos=1000000.0, gamma=1000.0):
     return joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, [flr2finger_link.GetName()], flr2finger_rel_pts, [flr2finger_pts_traj], old_traj, 
-                                                 x_na, y_ng, bend_coef, rot_coef, wt_n, old_N_z=old_N_z, closing_pts=closing_pts, 
+                                                 f, closing_pts=closing_pts, 
                                                  no_collision_cost_first=no_collision_cost_first, use_collision_cost=use_collision_cost, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
                                                  beta_pos = beta_pos, gamma=gamma)
 
 def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2old_finger_pts_trajs, old_traj, 
-                                         x_na, y_ng, bend_coef, rot_coef, wt_n, old_N_z=None, closing_pts=None,
+                                         f, closing_pts=None,
                                          no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
                                          alpha=1000000.0, beta_pos=1000000.0, gamma=1000.0):
     orig_dof_inds = robot.GetActiveDOFIndices()
@@ -404,13 +408,15 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
         for old_finger_pts_traj in flr2old_finger_pts_traj.values():
             assert len(old_finger_pts_traj)== n_steps
     assert len(flr2finger_link_names) == len(flr2old_finger_pts_trajs)
-
-    (n,d) = x_na.shape
-
+    
     # expand these
-    bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
-    rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
-    if wt_n is None: wt_n = np.ones(len(x_na))
+    (n,d) = f.x_na.shape
+    bend_coefs = np.ones(d) * f.bend_coef if np.isscalar(f.bend_coef) else f.bend_coef
+    rot_coefs = np.ones(d) * f.rot_coef if np.isscalar(f.rot_coef) else f.rot_coef
+    if f.wt_n is None:
+        wt_n = np.ones(n)
+    else:
+        wt_n = f.wt_n
     if wt_n.ndim == 1:
         wt_n = wt_n[:,None]
     if wt_n.shape[1] == 1:
@@ -418,16 +424,14 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     
     if no_collision_cost_first:
         init_traj, _, (N, init_z) , _, _ = joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2old_finger_pts_trajs, old_traj, 
-                                                                                 x_na, y_ng, bend_coefs, rot_coefs, wt_n, old_N_z=old_N_z, closing_pts=closing_pts, 
+                                                                                 f, closing_pts=closing_pts, 
                                                                                  no_collision_cost_first=False, use_collision_cost=False, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits, 
                                                                                  alpha=alpha, beta_pos=beta_pos, gamma=gamma)
     else:
         init_traj = old_traj.copy()
-        if old_N_z is None:
-            N, init_z = tps_fit3_ext(x_na, y_ng, bend_coefs, rot_coefs, wt_n)
-        else:
-            N, init_z = old_N_z
-
+        N = f.N
+        init_z = f.z
+    
     if start_fixed:
         init_traj = np.r_[robot.GetDOFValues(dof_inds)[None,:], init_traj[1:]]
         sim_util.unwrap_in_place(init_traj, dof_inds)
@@ -449,8 +453,8 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
         {
             "type" : "tps",
             "name" : "tps",
-            "params" : {"x_na" : [row.tolist() for row in x_na],
-                        "y_ng" : [row.tolist() for row in y_ng],
+            "params" : {"x_na" : [row.tolist() for row in f.x_na],
+                        "y_ng" : [row.tolist() for row in f.y_ng],
                         "bend_coefs" : bend_coefs.tolist(),
                         "rot_coefs" : rot_coefs.tolist(),
                         "wt_n" : [row.tolist() for row in wt_n],
@@ -526,13 +530,11 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
             result = trajoptpy.OptimizeProblem(prob) # do optimization
     
     traj = result.GetTraj()
-    z = result.GetExt()
-    theta = N.dot(z)
-    f = ThinPlateSpline()
-    f.trans_g = theta[0,:];
-    f.lin_ag = theta[1:d+1,:];
-    f.w_ng = theta[d+1:];
-    f.x_na = x_na
+    f.z = result.GetExt()
+    theta = N.dot(f.z)
+    f.trans_g = theta[0,:]
+    f.lin_ag = theta[1:d+1,:]
+    f.w_ng = theta[d+1:]
     
     tps_rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "tps_rel_pts"])
     tps_rel_pts_err = []
@@ -552,8 +554,8 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     tps_rel_pts_costs2 = (beta_pos/n_steps) * np.square(tps_rel_pts_err).sum() # TODO don't square n_steps
 
     tps_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "tps"])
-    tps_cost2 = alpha * tps_obj(f, x_na, y_ng, bend_coefs, rot_coefs, wt_n)
-    matching_err = f.transform_points(x_na) - y_ng
+    tps_cost2 = alpha * f.get_objective().sum()
+    matching_err = f.transform_points(f.x_na) - f.y_ng
     
     joint_vel_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "joint_vel"])
     joint_vel_err = np.diff(traj, axis=0)
@@ -605,4 +607,4 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     assert not np.any(orig_dof_inds - robot.GetActiveDOFIndices())
     assert not np.any(orig_dof_vals - robot.GetDOFValues())
     
-    return traj, f, (N, z), obj_value, tps_rel_pts_costs, tps_cost
+    return traj, obj_value, tps_rel_pts_costs, tps_cost

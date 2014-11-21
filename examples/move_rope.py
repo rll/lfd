@@ -4,13 +4,13 @@ from __future__ import division
 
 import numpy as np
 
-from lfd.rapprentice import planning
 import lfd.rapprentice.math_utils as mu
 from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject, RopeSimulationObject
 from lfd.environment import sim_util
 from lfd.demonstration.demonstration import AugmentedTrajectory
 from lfd.environment import environment
+from lfd.transfer import planning
 
 def create_cylinder_grid(cyl_pos0, cyl_pos1, cyl_pos2, cyl_radius, cyl_height):
     sample_grid = np.array(np.meshgrid(np.linspace(0,1,5), np.linspace(0,1,5))).T.reshape((-1,2))

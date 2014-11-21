@@ -4,7 +4,7 @@ Functions for fitting and applying thin plate spline transformations
 import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.optimize as opt
-from lfd.rapprentice.colorize import colorize
+from lfd.util import colorize
 
 VERBOSE = False
 ENABLE_SLOW_TESTS = False

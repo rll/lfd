@@ -74,7 +74,7 @@ class CpuTpsSolver(TpsSolver):
         rhs = self.NR + WQN.T.dot(y_nd)
         z = np.linalg.solve(lhs, rhs)
         theta = self.N.dot(z)
-        f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
+        f_res.update(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta, N=self.N, z=z)
 
 
 class CpuTpsSolverFactory(TpsSolverFactory):
@@ -140,12 +140,13 @@ class GpuTpsSolver(TpsSolver):
         
         if lfd.registration._has_cula:
             culinalg.cho_solve(self.lhs_gpu, self.rhs_gpu)
+            z = self.rhs_gpu.get()
             culinalg.dot(self.N_gpu, self.rhs_gpu, out=self.theta_gpu)
             theta = self.theta_gpu.get()
         else: # if cula is not install perform the last two computations in the CPU
             z = np.linalg.solve(self.lhs_gpu.get(), self.rhs_gpu.get())
             theta = self.N.dot(z)
-        f_res.set_ThinPlateSpline(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta=theta)
+        f_res.update(self.x_nd, y_nd, bend_coef, self.rot_coef, wt_n, theta, N=self.N, z=z)
 
 
 class GpuTpsSolverFactory(TpsSolverFactory):

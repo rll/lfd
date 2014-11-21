@@ -3,8 +3,8 @@ from __future__ import division
 import settings
 import numpy as np
 from lfd.demonstration import demonstration
-from lfd.rapprentice import planning
 from lfd.environment import sim_util
+from lfd.transfer import planning
 
 class TrajectoryTransferer(object):
     def __init__(self, sim, 

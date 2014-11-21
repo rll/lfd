@@ -10,7 +10,7 @@ import re
 import random
 
 from lfd.rapprentice import animate_traj, ropesim, math_utils as mu, plotting_openrave
-from lfd.rapprentice.util import yellowprint
+from lfd.util import util
 import settings
 PR2_L_POSTURES = dict(
     untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
@@ -312,7 +312,7 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False,
     animate_traj.animate_traj(traj, sim_env.robot, restore=False, pause=interactive,
         callback=sim_callback, step_viewer=animate_speed, execute_step_cond=is_rope_pulled_too_tight)
     if min_gripper_dist[0] != np.inf:
-        yellowprint("Some steps of the trajectory were not executed because the gripper was pulling the rope too tight.")
+        util.yellowprint("Some steps of the trajectory were not executed because the gripper was pulling the rope too tight.")
     if animate:
         sim_env.viewer.Step()
     return True
@@ -469,7 +469,7 @@ def remove_tight_rope_pull(sim_env, full_traj):
         valid_inds = np.apply_along_axis(np.linalg.norm, 1, (ee_trajs['r'][:,:3,3] - ee_trajs['l'][:,:3,3])) < min_length - 0.02
         if not np.all(valid_inds):
             full_traj = (full_traj[0][valid_inds,:], full_traj[1])
-            yellowprint("The grippers of the trajectory goes too far apart. Some steps of the trajectory are being removed.")
+            util.yellowprint("The grippers of the trajectory goes too far apart. Some steps of the trajectory are being removed.")
     return full_traj
 
 def load_random_start_segment(demofile):
