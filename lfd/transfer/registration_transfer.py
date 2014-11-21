@@ -5,7 +5,7 @@ class RegistrationAndTrajectoryTransferer(object):
         self.registration_factory = registration_factory
         self.trajectory_transferer = trajectory_transferer
     
-    def transfer(self, demo, test_scene_state, plotting=False):
+    def transfer(self, demo, test_scene_state, callback=None, plotting=False):
         """Registers demonstration scene onto the test scene and uses this registration to transfer the demonstration trajectory
         
         Args:

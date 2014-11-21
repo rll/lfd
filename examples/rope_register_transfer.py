@@ -11,7 +11,8 @@ from lfd.environment import sim_util
 from lfd.demonstration.demonstration import Demonstration
 from lfd.registration.registration import TpsRpmRegistrationFactory
 from lfd.registration.plotting_openrave import registration_plot_cb
-from lfd.transfer.transfer import PoseTrajectoryTransferer
+from lfd.transfer.transfer import FingerTrajectoryTransferer
+from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
 from move_rope import create_augmented_traj, create_rope
 
 def create_rope_demo(env, rope_poss):
@@ -68,11 +69,11 @@ def main():
     test_scene_state = env.observe_scene()
     
     reg_factory = TpsRpmRegistrationFactory()
-    traj_transferer = PoseTrajectoryTransferer(sim)
+    traj_transferer = FingerTrajectoryTransferer(sim)
     
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
-    reg = reg_factory.register(demo, test_scene_state, callback=plot_cb)
-    test_aug_traj = traj_transferer.transfer(reg, demo, plotting=True)
+    reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
     
     env.execute_augmented_trajectory(test_aug_traj)
 
