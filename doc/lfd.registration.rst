@@ -1,32 +1,19 @@
 lfd.registration package
 ========================
 
-Module contents
----------------
-
 .. automodule:: lfd.registration
     :members:
     :undoc-members:
     :show-inheritance:
 
-
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.registration.settings lfd.registration.plotting_openrave lfd.registration.registration lfd.registration.solver lfd.registration.tps lfd.registration.transformation
-   :parts: 1
-
+.. inheritance-diagram:: lfd.registration.plotting_openrave lfd.registration.registration lfd.registration.settings lfd.registration.solver lfd.registration.tps lfd.registration.transformation
+    :parts: 1
 
 Submodules
 ----------
-
-lfd.registration.settings module
---------------------------------
-
-.. automodule:: lfd.registration.settings
-    :members:
-    :undoc-members:
-    :show-inheritance:
 
 lfd.registration.plotting_openrave module
 -----------------------------------------
@@ -40,6 +27,14 @@ lfd.registration.registration module
 ------------------------------------
 
 .. automodule:: lfd.registration.registration
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+lfd.registration.settings module
+--------------------------------
+
+.. automodule:: lfd.registration.settings
     :members:
     :undoc-members:
     :show-inheritance:
@@ -67,3 +62,5 @@ lfd.registration.transformation module
     :members:
     :undoc-members:
     :show-inheritance:
+
+

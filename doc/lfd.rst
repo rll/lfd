@@ -1,6 +1,11 @@
 lfd package
 ===========
 
+.. automodule:: lfd
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 Subpackages
 -----------
 
@@ -12,18 +17,22 @@ Subpackages
     lfd.tpsopt
     lfd.transfer
 
+Class inheritance diagram
+-------------------------
 
-Module contents
----------------
-
-.. automodule:: lfd
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
+.. inheritance-diagram:: lfd.action_selection lfd.settings
+    :parts: 1
 
 Submodules
 ----------
+
+lfd.action_selection module
+---------------------------
+
+.. automodule:: lfd.action_selection
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 lfd.settings module
 -------------------
@@ -33,10 +42,4 @@ lfd.settings module
     :undoc-members:
     :show-inheritance:
 
-lfd.action_selection module
----------------------------
 
-.. automodule:: lfd.action_selection
-    :members:
-    :undoc-members:
-    :show-inheritance:
