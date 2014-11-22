@@ -72,7 +72,7 @@ def tps_grad(x_ma, lin_ag, _trans_g, w_ng, x_na):
         grad_mga[:,:,a] = lin_ga[None,:,a] - np.dot(nan2zero(diffa_mn/dist_mn),w_ng)
     return grad_mga
 
-def solve_eqp1(H, f, A):
+def solve_eqp1(H, f, A, ret_factorization=False):
     """solve equality-constrained qp
     min .5 tr(x'Hx) + tr(f'x)
     s.t. Ax = 0
@@ -95,9 +95,11 @@ def solve_eqp1(H, f, A):
     z = np.linalg.solve(L, R)
     x = N.dot(z)
     
+    if ret_factorization:
+        return x, (N, z)
     return x
 
-def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n):
+def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
     if wt_n is None: wt_n = np.ones(len(x_na))
     n,d = x_na.shape
     
@@ -118,14 +120,18 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n):
         f = -WQ.T.dot(y_ng)
         f[1:d+1,0:d] -= np.diag(rot_coefs)
         
-        Theta = solve_eqp1(H,f,A)
+        if ret_factorization:
+            theta, (N, z) = solve_eqp1(H, f, A, ret_factorization=True)
+        else:
+            theta = solve_eqp1(H, f, A)
     else:
         bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
         if wt_n.ndim == 1:
             wt_n = wt_n[:,None]
         if wt_n.shape[1] == 1:
             wt_n = np.tile(wt_n, (1,d))
-        Theta = np.empty((1+d+n,d))
+        theta = np.empty((1+d+n,d))
+        z = np.empty((n,d))
         for i in range(d):
             WQ = wt_n[:,i][:,None] * Q
             QWQ = Q.T.dot(WQ)
@@ -135,10 +141,15 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n):
              
             f = -WQ.T.dot(y_ng[:,i])
             f[1+i] -= rot_coefs[i]
-             
-            Theta[:,i] = solve_eqp1(H,f,A)
-                                                            
-    return Theta[1:d+1], Theta[0], Theta[d+1:]
+            
+            if ret_factorization:
+                theta[:,i], (N, z[:,i]) = solve_eqp1(H, f, A, ret_factorization=True)
+            else:
+                theta[:,i] = solve_eqp1(H, f, A)
+    
+    if ret_factorization:
+        return theta, (N, z)
+    return theta
 
 class ThinPlateSpline(Transformation):
     """
@@ -154,6 +165,8 @@ class ThinPlateSpline(Transformation):
         self.lin_ag = np.eye(d)
         self.trans_g = np.zeros(d)
         self.w_ng = np.zeros((0,d))
+        self.N = None
+        self.z = None
         
         self.y_ng = np.zeros((0,d))
         self.bend_coef = 0
@@ -161,7 +174,7 @@ class ThinPlateSpline(Transformation):
         self.wt_n = np.zeros(0)
     
     @staticmethod
-    def fit_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n):
+    def create_from_optimization(x_na, y_ng, bend_coef, rot_coef, wt_n):
         r"""Solves the optimization problem
             
         .. math::
@@ -188,17 +201,17 @@ class ThinPlateSpline(Transformation):
             A ThinPlateSpline f
         """
         f = ThinPlateSpline()
-        f.set_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n)
+        theta, (N, z) = tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=True)
+        f.update(x_na, y_ng, bend_coef, rot_coef, wt_n, theta, N=N, z=z)
         return f
 
-    def set_ThinPlateSpline(self, x_na, y_ng, bend_coef, rot_coef, wt_n, theta=None):
-        if theta is None:
-            self.lin_ag, self.trans_g, self.w_ng = tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n)
-        else:
-            d = x_na.shape[1]
-            self.trans_g = theta[0]
-            self.lin_ag  = theta[1:d+1]
-            self.w_ng    = theta[d+1:]
+    def update(self, x_na, y_ng, bend_coef, rot_coef, wt_n, theta, N=None, z=None):
+        d = x_na.shape[1]
+        self.trans_g = theta[0]
+        self.lin_ag = theta[1:d+1]
+        self.w_ng = theta[d+1:]
+        self.N = N
+        self.z = z
         self.x_na = x_na
         self.y_ng = y_ng
         self.bend_coef = bend_coef
@@ -224,7 +237,7 @@ class ThinPlateSpline(Transformation):
             Implementation covers general case where there is a wt_n and bend_coef per dimension
         """
         # expand these
-        n, a = self.x_na.shape
+        _, a = self.x_na.shape
         bend_coefs = np.ones(a) * self.bend_coef if np.isscalar(self.bend_coef) else self.bend_coef
         rot_coefs = np.ones(a) * self.rot_coef if np.isscalar(self.rot_coef) else self.rot_coef
         wt_n = self.wt_n
@@ -312,7 +325,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             
             xtarg_nd, wt_n = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm)
             if fsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd, xtarg_nd, reg, rot_reg, wt_n)
+                f = ThinPlateSpline.create_from_optimization(x_nd, xtarg_nd, reg, rot_reg, wt_n)
             else:
                 fsolve.solve(wt_n, xtarg_nd, reg, f)
             
@@ -374,11 +387,11 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
             ytarg_md, wt_m = prepare_fit_ThinPlateSpline(x_nd, y_md, corr_nm, fwd=False)
     
             if fsolve is None:
-                f = ThinPlateSpline.fit_ThinPlateSpline(x_nd, xtarg_nd, reg, rot_reg, wt_n)
+                f = ThinPlateSpline.create_from_optimization(x_nd, xtarg_nd, reg, rot_reg, wt_n)
             else:
                 fsolve.solve(wt_n, xtarg_nd, reg, f)
             if gsolve is None:
-                g = ThinPlateSpline.fit_ThinPlateSpline(y_md, ytarg_md, reg, rot_reg, wt_m)
+                g = ThinPlateSpline.create_from_optimization(y_md, ytarg_md, reg, rot_reg, wt_m)
             else:
                 gsolve.solve(wt_m, ytarg_md, reg, g)
             
@@ -515,7 +528,7 @@ def balance_matrix4(prob_nm, max_iter, p_n, p_m):
     return prob_nm.astype(np.float64)
 
 def balance_matrix3(*args, **kwargs):
-    if lfd.registration:
+    if lfd.registration._has_cuda:
         ret = balance_matrix3_gpu(*args, **kwargs)
     else:
         ret = balance_matrix3_cpu(*args, **kwargs)

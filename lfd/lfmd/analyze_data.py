@@ -18,14 +18,15 @@ import trajoptpy
 import IPython as ipy
 
 from lfd.demonstration import demonstration
-from lfd.rapprentice import util, math_utils, planning, resampling
+from lfd.util import util
+from lfd.rapprentice import math_utils, resampling
 from lfd.environment import sim_util
 from lfd.demonstration.demonstration import SceneState, AugmentedTrajectory, Demonstration
 from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
 from lfd.environment.environment import LfdEnvironment
-from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory
-from lfd.registration.registration_gpu import BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
+from lfd.transfer import planning
 from lfd.transfer.transfer import TrajectoryTransferer
 
 

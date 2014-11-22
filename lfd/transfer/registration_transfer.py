@@ -3,10 +3,10 @@ from __future__ import division
 import settings
 import numpy as np
 from lfd.demonstration import demonstration
-from lfd.rapprentice import planning
 from lfd.environment import sim_util
 from lfd.registration import registration
 from lfd.transfer import transfer
+from lfd.transfer import planning
 
 class RegistrationAndTrajectoryTransferer(object):
     def __init__(self, registration_factory, trajectory_transferer):
@@ -123,10 +123,10 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
             init_traj[:,dof_inds.index(joint_ind)] = self.sim.robot.GetDOFLimits([joint_ind])[0][0]
 
         print "planning joint TPS and finger points trajectory following"
-        test_traj, f, new_N_z, obj_value, tps_rel_pts_costs, tps_cost = planning.joint_fit_tps_follow_finger_pts_trajs(self.sim.robot, manip_name, 
+        test_traj, obj_value, tps_rel_pts_costs, tps_cost = planning.joint_fit_tps_follow_finger_pts_trajs(self.sim.robot, manip_name, 
                                                                               flr2finger_link_names, flr2finger_rel_pts, 
                                                                               flr2demo_finger_pts_trajs_rs, init_traj, 
-                                                                              reg.f.x_na, reg.f.y_ng, reg.f.bend_coef, reg.f.rot_coef, reg.f.wt_n, old_N_z=None, 
+                                                                              reg.f, 
                                                                               use_collision_cost=self.use_collision_cost,
                                                                               start_fixed=False,
                                                                               alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma)
@@ -138,7 +138,7 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
             for lr in active_lr:
                 flr2new_transformed_finger_pts_traj_rs = {}
                 for finger_lr in 'lr':
-                    flr2new_transformed_finger_pts_traj_rs[finger_lr] = f.transform_points(np.concatenate(flr2demo_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
+                    flr2new_transformed_finger_pts_traj_rs[finger_lr] = reg.f.transform_points(np.concatenate(flr2demo_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
                 handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
                 handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
                 flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
