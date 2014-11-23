@@ -1,21 +1,16 @@
 lfd.tpsopt package
 ==================
 
-Module contents
----------------
-
 .. automodule:: lfd.tpsopt
     :members:
     :undoc-members:
     :show-inheritance:
 
-
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.tpsopt.batchtps lfd.tpsopt.clouds lfd.tpsopt.settings lfd.tpsopt.culinalg_exts lfd.tpsopt.precompute lfd.tpsopt.registration lfd.tpsopt.tps lfd.tpsopt.transformations
-   :parts: 1
-
+.. inheritance-diagram:: lfd.tpsopt.batchtps lfd.tpsopt.clouds lfd.tpsopt.culinalg_exts lfd.tpsopt.precompute lfd.tpsopt.registration lfd.tpsopt.settings lfd.tpsopt.tps lfd.tpsopt.transformations
+    :parts: 1
 
 Submodules
 ----------
@@ -32,14 +27,6 @@ lfd.tpsopt.clouds module
 ------------------------
 
 .. automodule:: lfd.tpsopt.clouds
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-lfd.tpsopt.settings module
---------------------------
-
-.. automodule:: lfd.tpsopt.settings
     :members:
     :undoc-members:
     :show-inheritance:
@@ -68,6 +55,14 @@ lfd.tpsopt.registration module
     :undoc-members:
     :show-inheritance:
 
+lfd.tpsopt.settings module
+--------------------------
+
+.. automodule:: lfd.tpsopt.settings
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 lfd.tpsopt.tps module
 ---------------------
 
@@ -83,3 +78,5 @@ lfd.tpsopt.transformations module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
