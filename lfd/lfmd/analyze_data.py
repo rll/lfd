@@ -136,16 +136,6 @@ def flipped_angle_axis(aa_trajs):
                 angle_traj[t] %= 2*np.pi
                 angle_traj[t] *= -1
                 angle_traj[t] += 2*np.pi
-    # TODO: check if this is equivalent
-#     for axis_traj, angle_traj in zip(axis_trajs, angle_trajs):
-#         dot_products = np.einsum('ij,ij->t', axis_traj[:-1], axis_traj[1:]) # pairwise dot products axis_traj[t].dot(axis_traj[t-1])
-#         flip_inds = np.r_[False, dot_products < 0]
-#         for flip_ind in  np.where(flip_inds)[0]:
-#             if flip_ind != len(flip_inds)-1:
-#                 flip_inds[flip_ind+1:] = np.invert(flip_inds[flip_ind+1:])
-#         axis_traj[flip_inds] *= -1
-#         angle_traj[flip_inds] = -1 * (angle_traj[flip_inds] % 2*np.pi) + 2*np.pi
-    # make all angles be between 0 and 2*np.pi
     for angle_traj in angle_trajs:
         angle_traj[:] = np.unwrap(angle_traj)
     return angle_trajs, axis_trajs
@@ -212,282 +202,6 @@ def flip_wrist_rotations(aug_trajs):
             if angle_diff_flipped < angle_diff:
                 aug_traj.lr2ee_traj[lr] = np.asarray([hmat.dot(T_x) for hmat in aug_traj.lr2ee_traj[lr]]) # rotate ee_traj by T_x
 
-class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
-    def __init__(self, sim, pos_coef, rot_coef, pos_vel_coef, rot_vel_coef, force_coef, torque_coef, 
-                 beta_pos, beta_rot, gamma, use_collision_cost, 
-                 downsample_traj=1):
-        super(MultipleDemosPoseTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost)
-        self.pos_coef = pos_coef
-        self.rot_coef = rot_coef
-        self.pos_vel_coef = pos_vel_coef
-        self.rot_vel_coef = rot_vel_coef
-        self.force_coef = force_coef
-        self.torque_coef = torque_coef
-
-        self.beta_rot = beta_rot
-        
-        self.downsample_traj = downsample_traj
-    
-    def transfer(self, regs, demos, plotting=False, plotting_std_dev=1.):
-        if not self.sim:
-            plotting = False
-        handles = []
-        if plotting:
-            test_cloud = regs[0].test_scene_state.cloud
-            test_color = regs[0].test_scene_state.color
-            handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
-            self.sim.viewer.Step()
-        
-        trajs = None
-        active_lr = 'lr'
-
-        if plotting:
-            for demo in demos:
-                aug_traj = demo.aug_traj
-                color = np.r_[np.random.random(3),1]
-                for lr in active_lr:
-                    handles.append(self.sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
-            self.sim.viewer.Idle()
-        
-        aug_trajs = [demo.aug_traj.get_transformed_traj(reg) for (reg, demo) in zip(regs, demos)]
-#         for lr in active_lr:
-#             for aug_traj in aug_trajs:
-#                 for t in range(aug_traj.n_steps)[::self.downsample_traj]:
-#                     handles.extend(sim_util.draw_axis(self.sim, aug_traj.lr2ee_traj[lr][t], arrow_length=.01, arrow_width=.001))
-        
-        if plotting:
-            for aug_traj in aug_trajs:
-                color = np.r_[np.random.random(3),1]
-                for lr in active_lr:
-                    handles.append(self.sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
-            self.sim.viewer.Step()
-            
-            lr2trajs = {}
-            for aug_traj in aug_trajs:
-                lr2traj = stack_traj(aug_traj)
-                flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
-                for lr in active_lr:
-                    if lr not in lr2trajs:
-                        lr2trajs[lr] = []
-                    lr2trajs[lr].append(lr2traj[lr])
-            n_dof = lr2trajs.values()[0][0].shape[1] # n_dof is per arm
-        
-            plt.ion()
-            fig = plt.figure()
-            for i_lr, lr in enumerate(active_lr):
-                for i_dof in range(n_dof):
-                    plt.subplot(n_dof, len(active_lr), i_dof*len(active_lr)+i_lr+1)
-                    for traj in lr2trajs[lr]:
-                        plt.plot(traj[:,i_dof])
-            plt.draw()
-        
-        sys.stdout.write("aligning trajectories... ")
-        sys.stdout.flush()
-        coefs = np.r_[self.pos_coef, self.rot_coef, self.pos_vel_coef, self.rot_vel_coef, self.force_coef, self.torque_coef]
-        if self.downsample_traj > 1:
-            ds_aug_trajs = [aug_traj.get_resampled_traj(np.arange(aug_traj.n_steps)[::self.downsample_traj]) for aug_traj in aug_trajs]
-        else:
-            ds_aug_trajs = aug_trajs
-        if len(active_lr) == 1:
-            dof_cost = lambda aug_traj1, aug_traj2, t1, t2: dof_val_cost(aug_traj1, aug_traj2, t1, t2, active_lr[0], coefs)
-        elif len(active_lr) == 2:
-            dof_cost = lambda aug_traj1, aug_traj2, t1, t2: dof_val_cost(aug_traj1, aug_traj2, t1, t2, active_lr[0], coefs) + dof_val_cost(aug_traj1, aug_traj2, t1, t2, active_lr[1], coefs)
-        else:
-            raise RuntimeError
-        ds_trajs_timesteps_rs = align_trajs(ds_aug_trajs, dof_cost)
-        print "done"
-        
-        aligned_aug_trajs = []
-        trajs_timesteps_rs = []
-        for aug_traj, ds_traj_timesteps_rs in zip(aug_trajs, ds_trajs_timesteps_rs):
-            traj_timesteps_rs0 = np.arange(self.downsample_traj*(len(ds_traj_timesteps_rs)-1)+1)
-            ds_traj_timesteps_rs, ds_traj_timesteps_rs0 = np.unique(ds_traj_timesteps_rs, return_index=True)
-            ds_traj_timesteps_rs0 = ds_traj_timesteps_rs0.astype(float)
-            ds_traj_timesteps_rs0[:-1] += (np.diff(ds_traj_timesteps_rs0)-1)/2
-            traj_timesteps_rs = np.interp(traj_timesteps_rs0, ds_traj_timesteps_rs0*self.downsample_traj, ds_traj_timesteps_rs*self.downsample_traj)
-            aligned_aug_trajs.append(aug_traj.get_resampled_traj(traj_timesteps_rs))
-            trajs_timesteps_rs.append(traj_timesteps_rs)
-        trajs_timesteps_rs = np.asarray(trajs_timesteps_rs)
-        
-#         if plotting:
-#             for i, (ds_traj_timesteps_rs, traj_timesteps_rs) in enumerate(zip(ds_trajs_timesteps_rs, trajs_timesteps_rs)):
-#                 fig = plt.figure()
-#                 plt.plot(np.arange(len(ds_traj_timesteps_rs))*self.downsample_traj, ds_traj_timesteps_rs*self.downsample_traj)
-#                 plt.plot(traj_timesteps_rs)
-        
-        aligned_lr2trajs = {}
-        for aug_traj in aligned_aug_trajs:
-            lr2traj = stack_traj(aug_traj)
-            flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
-            for lr in active_lr:
-                if lr not in aligned_lr2trajs:
-                    aligned_lr2trajs[lr] = []
-                aligned_lr2trajs[lr].append(lr2traj[lr])
-        for lr in active_lr:
-            aligned_lr2trajs[lr] = np.asarray(aligned_lr2trajs[lr])
-            t_steps = aligned_lr2trajs[lr].shape[1]
-        
-        if plotting:
-            fig = plt.figure()
-            for i_lr, lr in enumerate(active_lr):
-                for i_dof in range(n_dof):
-                    plt.subplot(n_dof, len(active_lr), i_dof*len(active_lr)+i_lr+1)
-                    for traj in aligned_lr2trajs[lr]:
-                        plt.plot(traj[:,i_dof])
-            plt.draw()
-        
-#         for lr in active_lr:
-#             for t in range(t_steps)[::self.downsample_traj]:
-#                 for i_demo in range(dof_val.shape[0]):
-#                     dof_val = aligned_lr2trajs[lr][:,t,:]
-#                     hmat = np.eye(4)
-#                     hmat[:3,:3] = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
-#                     hmat[:3,3] = dof_val[i_demo,:3]
-#                     handles.extend(sim_util.draw_axis(self.sim, hmat, arrow_length=.01, arrow_width=.001))
-
-        lr2dof_mu_traj = {}
-        lr2dof_sigma_traj = {}
-        for lr in active_lr:
-            n_dof = aligned_lr2trajs[lr].shape[2]
-            dof_mu_traj = np.empty((t_steps, n_dof))
-            dof_sigma_traj = np.empty((t_steps, n_dof, n_dof))
-            for t in range(t_steps):
-                dof_val = aligned_lr2trajs[lr][:,t,:]
-                dof_mu_traj[t,:] = dof_val.mean(axis=0)
-                dof_sigma_traj[t,:,:] = (dof_val-dof_mu_traj[t,:]).T.dot(dof_val-dof_mu_traj[t,:])/dof_val.shape[0]
-                
-                # recompute rotation means
-                rot0 = openravepy.rotationMatrixFromAxisAngle(dof_val[0,3:6])
-                aa_devs = [np.zeros(3)] # deviation from the rotation of demo 0
-                for i_demo in range(1, dof_val.shape[0]):
-                    rot = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
-                    rot_dev = rot0.T.dot(rot)
-                    aa_devs.append(openravepy.axisAngleFromRotationMatrix(rot_dev))
-                aa_devs = np.asarray(aa_devs)
-                rot_mu_dev = openravepy.rotationMatrixFromAxisAngle(aa_devs.mean(axis=0))
-                rot_mu = rot0.dot(rot_mu_dev)
-                dof_mu_traj[t,3:6] = openravepy.axisAngleFromRotationMatrix(rot_mu)
-                # recompute rotation covariances
-                aa_mu_devs = [] # deviation from the mean rotation
-                for i_demo in range(dof_val.shape[0]):
-                    rot = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
-                    rot_mu_dev = rot_mu.T.dot(rot)
-                    aa_mu_devs.append(openravepy.axisAngleFromRotationMatrix(rot_mu_dev))
-                aa_mu_devs = np.asarray(aa_mu_devs)
-                dof_sigma_traj[t,3:6,3:6] = aa_mu_devs.T.dot(aa_mu_devs)/dof_val.shape[0]
-                
-            lr2dof_mu_traj[lr] = dof_mu_traj
-            lr2dof_sigma_traj[lr] = dof_sigma_traj
-
-#         for lr in active_lr:
-#             for t in range(t_steps)[::self.downsample_traj]:
-#                 for i_demo in range(dof_val.shape[0]):
-#                     dof_val = aligned_lr2trajs[lr][:,t,:]
-#                     hmat = np.eye(4)
-#                     hmat[:3,:3] = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
-#                     hmat[:3,3] = dof_val[i_demo,:3]
-#                     handles.extend(sim_util.draw_axis(self.sim, hmat, arrow_length=.01, arrow_width=.001))
-        
-        if plotting:
-            for lr in active_lr:
-                for t in range(t_steps)[::self.downsample_traj]:
-                    pos_mu = lr2dof_mu_traj[lr][t,:3]
-                    pos_sigma = lr2dof_sigma_traj[lr][t,:3,:3]
-                    U, s, V = np.linalg.svd(pos_sigma)
-                    T = np.eye(4)
-                    T[:3,:3] = plotting_std_dev * U * np.sqrt(s)
-                    T[:3,3] = pos_mu
-                    handles.append(self.sim.viewer.PlotEllipsoid(T, (0,1,0,1), True))
-                    
-                    rot_mu = lr2dof_mu_traj[lr][t,3:6]
-                    rot_sigma = lr2dof_sigma_traj[lr][t,3:6,3:6]
-                    U, s, V = np.linalg.svd(rot_sigma)
-                    rt_sigma_rot = (U * np.sqrt(s)).dot(U.T)
-                    rot_sigma_pts = [rot_mu]
-                    for i in range(3):
-                        rot_sigma_pts.append(rot_mu + plotting_std_dev * rt_sigma_rot[:,i])
-                        rot_sigma_pts.append(rot_mu - plotting_std_dev * rt_sigma_rot[:,i])
-                    for sigma_pt in rot_sigma_pts:
-                        hmat = np.eye(4)
-                        hmat[:3,:3] = openravepy.rotationMatrixFromAxisAngle(sigma_pt)
-                        hmat[:3,3] = pos_mu
-                        handles.extend(sim_util.draw_axis(self.sim, hmat, arrow_length=.01, arrow_width=.001))
-            self.sim.viewer.Step()
-        
-        manip_name = ""
-        ee_link_names = []
-        transformed_ee_trajs_rs = []
-        init_traj = np.zeros((ds_aug_trajs[0].n_steps,0))
-        for lr in active_lr:
-            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            ee_link_name = "%s_gripper_tool_frame"%lr
-            
-            if manip_name:
-                manip_name += "+"
-            manip_name += arm_name
-            ee_link_names.append(ee_link_name)
-            
-            init_traj = np.c_[init_traj, ds_aug_trajs[0].lr2arm_traj[lr]] # initialize trajectory with that of the best demo
-        
-        new_ee_trajs = []
-        for lr in active_lr:
-            new_ee_traj = np.empty((t_steps,4,4))
-            new_ee_traj[:] = np.eye(4)
-            new_ee_traj[:,:3,3] = lr2dof_mu_traj[lr][:,:3]
-            for t in range(t_steps):
-                new_ee_traj[t,:3,:3] = openravepy.rotationMatrixFromAxisAngle(lr2dof_mu_traj[lr][t,3:6])
-            new_ee_traj = np.asarray(resampling.interp_hmats(np.arange(ds_aug_trajs[0].n_steps)*self.downsample_traj, np.arange(len(new_ee_traj)), new_ee_traj))
-            new_ee_trajs.append(new_ee_traj)
-        
-        print "planning pose trajectory following"
-        test_traj, obj_value, pose_errs = planning.plan_follow_trajs(self.sim.robot, manip_name, ee_link_names, new_ee_trajs, init_traj, 
-                                                                     start_fixed=False,
-                                                                     use_collision_cost=self.use_collision_cost,
-                                                                     beta_pos=self.beta_pos, beta_rot=self.beta_rot)
-        
-        # the finger trajectory is the same for the demo and the test trajectory
-        for lr in active_lr:
-            finger_name = "%s_gripper_l_finger_joint"%lr
-            manip_name += "+" + finger_name
-            test_traj = np.c_[test_traj, ds_aug_trajs[0].lr2finger_traj[lr]]
-
-        full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
-        test_aug_traj = ForceAugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, None, None)
-        
-        if self.downsample_traj > 1:
-            test_aug_traj = test_aug_traj.get_resampled_traj(np.arange(self.downsample_traj*(test_aug_traj.n_steps-1)+1)/self.downsample_traj)
-        
-        test_aug_traj.lr2open_finger_traj = aligned_aug_trajs[0].lr2open_finger_traj
-        test_aug_traj.lr2close_finger_traj = aligned_aug_trajs[0].lr2close_finger_traj
-        test_aug_traj.lr2force_traj = {}
-        test_aug_traj.lr2x_traj = {}
-        for lr in active_lr:
-            assert lr2dof_mu_traj[lr].shape[0] == test_aug_traj.n_steps
-            assert lr2dof_mu_traj[lr].shape[1] == 18
-            test_aug_traj.lr2force_traj[lr] = lr2dof_mu_traj[lr][:,12:18]
-        
-        test_aug_traj.lr2dof_mu_traj = lr2dof_mu_traj
-        test_aug_traj.lr2dof_sigma_traj = lr2dof_sigma_traj
-        test_aug_traj.lr2dof_trajs = aligned_lr2trajs
-        
-        if plotting:
-            for lr in active_lr:
-                handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-            self.sim.viewer.Step()
-        
-#         from lfd.rapprentice import eval_util
-#         f = h5py.File("towel_0_0_processed.h5")
-#         M_inv = {}
-#         J = {}
-#         for lr in active_lr:
-#             M_inv[lr], J[lr] = mass_calculate3(lr, self.sim.robot, test_aug_traj.lr2arm_traj[lr])
-#         eval_util.add_obj_to_group(f, 'M_inv', M_inv)
-#         eval_util.add_obj_to_group(f, 'J', J)
-#         eval_util.add_obj_to_group(f, 'dof_mu_traj', lr2dof_mu_traj)
-#         eval_util.add_obj_to_group(f, 'dof_sigma_traj', lr2dof_sigma_traj)
-#         eval_util.add_obj_to_group(f, 'aligned_trajs', aligned_lr2trajs)
-
-        return test_aug_traj
 
 def kalman_smoother(Z, M_inv, plotting=False):
     """
@@ -615,19 +329,6 @@ def register_scenes(sim, reg_factory, scene_state):
     regs = []
     demos = []
     
-#     from lfd.rapprentice import plotting_openrave
-#     def plot_cb(x_nd, y_md, targ_Nd, corr_nm, wt_n, f, demo):
-#         handles = []
-#         handles.append(sim.env.plot3(x_nd, 5, (1,0,0,1)))
-#         handles.append(sim.env.plot3(f.transform_points(x_nd), 5, (0,1,0,1)))
-#         handles.append(sim.env.plot3(y_md, 5, (0,0,1,1)))
-#         handles.extend(plotting_openrave.draw_grid(sim.env, f.transform_points, x_nd.min(axis=0) - .1, x_nd.max(axis=0) + .1, xres = .05, yres = .05, zres = .04))
-#         aug_traj = demo.aug_traj
-#         for lr in 'lr':
-#             handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
-#             handles.append(sim.env.drawlinestrip(f.transform_hmats(aug_traj.lr2ee_traj[lr])[:,:3,3], 2, (0,1,0)))
-#         print "plot_cb"
-#         sim.viewer.Idle()
     
     for action, demo in reg_factory.demos.iteritems():
 #         reg = reg_factory.register(demo, scene_state, plotting=5, plot_cb=lambda x_nd, y_md, targ_Nd, corr_nm, wt_n, f: plot_cb(x_nd, y_md, targ_Nd, corr_nm, wt_n, f, demo))
@@ -993,58 +694,6 @@ def setup_demos(args, robot):
         aug_traj = ForceAugmentedTrajectory(lr2force_traj, None, lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
         demo = Demonstration(action, scene_state, aug_traj)
         demos[action] = demo
-
-#     flip_wrist_rotations([demo.aug_traj for demo in demos.values()])
-#     for action, seg_info in actions.iteritems():
-#         aug_traj = demos[action].aug_traj
-#         lr2x_traj = {}
-#         for lr in 'lr':
-#             if "%s_gripper_x"%lr not in seg_info or args.eval.recompute_smoothing:
-#                 sys.stdout.write("running Kalman smoothing for demo %s... "%action)
-#                 sys.stdout.flush()
-#                 lr2M_inv = calculate_masses(aug_traj.lr2arm_traj, robot)
-#                 aas = axisAngleFromRotationMatrix(aug_traj.lr2ee_traj[lr][:,:3,:3])
-#                 flip_angle_axis_in_place([aas])
-#                 Z = np.c_[aug_traj.lr2ee_traj[lr][:,:3,3], 
-#                           aas,
-#                           aug_traj.lr2force_traj[lr]]
-#                 lr2x_traj[lr] = kalman_smoother(Z, lr2M_inv[lr], plotting=False)
-#                 del seg_info["%s_gripper_x"%lr]
-#                 seg_info["%s_gripper_x"%lr] = lr2x_traj[lr]
-#                 print "done"
-#             else:
-#                 lr2x_traj[lr] = np.asarray(seg_info["%s_gripper_x"%lr])
-#         aug_traj.lr2x_traj = lr2x_traj
-#     actions.close()
-    
-#     for demo in demos.values():
-#         aug_traj = demo.aug_traj
-#         for lr in 'lr':
-#             ee_traj = np.empty((len(aug_traj.lr2x_traj[lr]), 4, 4))
-#             ee_traj[:] = np.eye(4)
-#             ee_traj[:,:3,3] = aug_traj.lr2x_traj[lr][:,:3]
-#             ee_traj[:,:3,:3] = rotationMatrixFromAxisAngle(aug_traj.lr2x_traj[lr][:,3:6])
-#             force_traj = aug_traj.lr2x_traj[lr][:,3*6:4*6] + aug_traj.lr2x_traj[lr][:,4*6:5*6]
-#             aug_traj.lr2ee_traj[lr] = ee_traj
-#             aug_traj.lr2force_traj[lr] = force_traj
-
-#             plt.ion()
-#             plt.figure()
-#             plt.subplot(2,1,1)
-#             plt.plot(ee_traj[:,0,3], 'r')
-#             plt.plot(ee_traj[:,1,3], 'g')
-#             plt.plot(ee_traj[:,2,3], 'b')
-#             plt.plot(aug_traj.lr2ee_traj[lr][:,0,3], 'r')
-#             plt.plot(aug_traj.lr2ee_traj[lr][:,1,3], 'g')
-#             plt.plot(aug_traj.lr2ee_traj[lr][:,2,3], 'b')
-#             plt.subplot(2,1,2)
-#             plt.plot(force_traj[:,0], 'r')
-#             plt.plot(force_traj[:,1], 'g')
-#             plt.plot(force_traj[:,2], 'b')
-#             plt.plot(aug_traj.lr2force_traj[lr][:,0], 'r')
-#             plt.plot(aug_traj.lr2force_traj[lr][:,1], 'g')
-#             plt.plot(aug_traj.lr2force_traj[lr][:,2], 'b')
-#             plt.draw()
     return demos
 
 def setup_lfd_environment_sim(args):
@@ -1119,6 +768,435 @@ def setup_registration(args, demos, sim):
 
     return reg_factory
 
+class MultipleDemosPoseTrajectoryTransferer(TrajectoryTransferer):
+    def __init__(self, sim, pos_coef, rot_coef, pos_vel_coef, rot_vel_coef, force_coef, torque_coef, 
+                 beta_pos, beta_rot, gamma, use_collision_cost, 
+                 downsample_traj=1):
+        super(MultipleDemosPoseTrajectoryTransferer, self).__init__(sim, beta_pos, gamma, use_collision_cost)
+        self.pos_coef = pos_coef
+        self.rot_coef = rot_coef
+        self.pos_vel_coef = pos_vel_coef
+        self.rot_vel_coef = rot_vel_coef
+        self.force_coef = force_coef
+        self.torque_coef = torque_coef
+
+        self.beta_rot = beta_rot
+        
+        self.downsample_traj = downsample_traj
+    
+    def transfer(self, regs, demos, plotting=False, plotting_std_dev=1.):
+        if not self.sim:
+            plotting = False
+        handles = []
+        if plotting:
+            test_cloud = regs[0].test_scene_state.cloud
+            test_color = regs[0].test_scene_state.color
+            handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
+            self.sim.viewer.Step()
+        
+        trajs = None
+        active_lr = 'lr'
+
+        if plotting:
+            for demo in demos:
+                aug_traj = demo.aug_traj
+                color = np.r_[np.random.random(3),1]
+                for lr in active_lr:
+                    handles.append(self.sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
+            self.sim.viewer.Idle()
+        
+        aug_trajs = [demo.aug_traj.get_transformed_traj(reg) for (reg, demo) in zip(regs, demos)]
+        
+        if plotting:
+            for aug_traj in aug_trajs:
+                color = np.r_[np.random.random(3),1]
+                for lr in active_lr:
+                    handles.append(self.sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
+            self.sim.viewer.Step()
+            
+            lr2trajs = {}
+            for aug_traj in aug_trajs:
+                lr2traj = stack_traj(aug_traj)
+                flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
+                for lr in active_lr:
+                    if lr not in lr2trajs:
+                        lr2trajs[lr] = []
+                    lr2trajs[lr].append(lr2traj[lr])
+            n_dof = lr2trajs.values()[0][0].shape[1] # n_dof is per arm
+        
+            plt.ion()
+            fig = plt.figure()
+            for i_lr, lr in enumerate(active_lr):
+                for i_dof in range(n_dof):
+                    plt.subplot(n_dof, len(active_lr), i_dof*len(active_lr)+i_lr+1)
+                    for traj in lr2trajs[lr]:
+                        plt.plot(traj[:,i_dof])
+            plt.draw()
+        
+        sys.stdout.write("aligning trajectories... ")
+        sys.stdout.flush()
+        coefs = np.r_[self.pos_coef, self.rot_coef, self.pos_vel_coef, self.rot_vel_coef, self.force_coef, self.torque_coef]
+        if self.downsample_traj > 1:
+            ds_aug_trajs = [aug_traj.get_resampled_traj(np.arange(aug_traj.n_steps)[::self.downsample_traj]) for aug_traj in aug_trajs]
+        else:
+            ds_aug_trajs = aug_trajs
+        if len(active_lr) == 1:
+            dof_cost = lambda aug_traj1, aug_traj2, t1, t2: dof_val_cost(aug_traj1, aug_traj2, t1, t2, active_lr[0], coefs)
+        elif len(active_lr) == 2:
+            dof_cost = lambda aug_traj1, aug_traj2, t1, t2: dof_val_cost(aug_traj1, aug_traj2, t1, t2, active_lr[0], coefs) + dof_val_cost(aug_traj1, aug_traj2, t1, t2, active_lr[1], coefs)
+        else:
+            raise RuntimeError
+        ds_trajs_timesteps_rs = align_trajs(ds_aug_trajs, dof_cost)
+        print "done"
+        
+        aligned_aug_trajs = []
+        trajs_timesteps_rs = []
+        for aug_traj, ds_traj_timesteps_rs in zip(aug_trajs, ds_trajs_timesteps_rs):
+            traj_timesteps_rs0 = np.arange(self.downsample_traj*(len(ds_traj_timesteps_rs)-1)+1)
+            ds_traj_timesteps_rs, ds_traj_timesteps_rs0 = np.unique(ds_traj_timesteps_rs, return_index=True)
+            ds_traj_timesteps_rs0 = ds_traj_timesteps_rs0.astype(float)
+            ds_traj_timesteps_rs0[:-1] += (np.diff(ds_traj_timesteps_rs0)-1)/2
+            traj_timesteps_rs = np.interp(traj_timesteps_rs0, ds_traj_timesteps_rs0*self.downsample_traj, ds_traj_timesteps_rs*self.downsample_traj)
+            aligned_aug_trajs.append(aug_traj.get_resampled_traj(traj_timesteps_rs))
+            trajs_timesteps_rs.append(traj_timesteps_rs)
+        trajs_timesteps_rs = np.asarray(trajs_timesteps_rs)
+        
+        aligned_lr2trajs = {}
+        for aug_traj in aligned_aug_trajs:
+            lr2traj = stack_traj(aug_traj)
+            flip_angle_axis_in_place([traj[::-1,3:6] for traj in lr2traj.values()]) # pass in reverse trajectory in order to align with respact to last time step
+            for lr in active_lr:
+                if lr not in aligned_lr2trajs:
+                    aligned_lr2trajs[lr] = []
+                aligned_lr2trajs[lr].append(lr2traj[lr])
+        for lr in active_lr:
+            aligned_lr2trajs[lr] = np.asarray(aligned_lr2trajs[lr])
+            t_steps = aligned_lr2trajs[lr].shape[1]
+        
+        if plotting:
+            fig = plt.figure()
+            for i_lr, lr in enumerate(active_lr):
+                for i_dof in range(n_dof):
+                    plt.subplot(n_dof, len(active_lr), i_dof*len(active_lr)+i_lr+1)
+                    for traj in aligned_lr2trajs[lr]:
+                        plt.plot(traj[:,i_dof])
+            plt.draw()
+
+        lr2dof_mu_traj = {}
+        lr2dof_sigma_traj = {}
+        for lr in active_lr:
+            n_dof = aligned_lr2trajs[lr].shape[2]
+            dof_mu_traj = np.empty((t_steps, n_dof))
+            dof_sigma_traj = np.empty((t_steps, n_dof, n_dof))
+            for t in range(t_steps):
+                dof_val = aligned_lr2trajs[lr][:,t,:]
+                dof_mu_traj[t,:] = dof_val.mean(axis=0)
+                dof_sigma_traj[t,:,:] = (dof_val-dof_mu_traj[t,:]).T.dot(dof_val-dof_mu_traj[t,:])/dof_val.shape[0]
+                
+                # recompute rotation means
+                rot0 = openravepy.rotationMatrixFromAxisAngle(dof_val[0,3:6])
+                aa_devs = [np.zeros(3)] # deviation from the rotation of demo 0
+                for i_demo in range(1, dof_val.shape[0]):
+                    rot = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
+                    rot_dev = rot0.T.dot(rot)
+                    aa_devs.append(openravepy.axisAngleFromRotationMatrix(rot_dev))
+                aa_devs = np.asarray(aa_devs)
+                rot_mu_dev = openravepy.rotationMatrixFromAxisAngle(aa_devs.mean(axis=0))
+                rot_mu = rot0.dot(rot_mu_dev)
+                dof_mu_traj[t,3:6] = openravepy.axisAngleFromRotationMatrix(rot_mu)
+                # recompute rotation covariances
+                aa_mu_devs = [] # deviation from the mean rotation
+                for i_demo in range(dof_val.shape[0]):
+                    rot = openravepy.rotationMatrixFromAxisAngle(dof_val[i_demo,3:6])
+                    rot_mu_dev = rot_mu.T.dot(rot)
+                    aa_mu_devs.append(openravepy.axisAngleFromRotationMatrix(rot_mu_dev))
+                aa_mu_devs = np.asarray(aa_mu_devs)
+                dof_sigma_traj[t,3:6,3:6] = aa_mu_devs.T.dot(aa_mu_devs)/dof_val.shape[0]
+                
+            lr2dof_mu_traj[lr] = dof_mu_traj
+            lr2dof_sigma_traj[lr] = dof_sigma_traj
+        
+        if plotting:
+            for lr in active_lr:
+                for t in range(t_steps)[::self.downsample_traj]:
+                    pos_mu = lr2dof_mu_traj[lr][t,:3]
+                    pos_sigma = lr2dof_sigma_traj[lr][t,:3,:3]
+                    U, s, V = np.linalg.svd(pos_sigma)
+                    T = np.eye(4)
+                    T[:3,:3] = plotting_std_dev * U * np.sqrt(s)
+                    T[:3,3] = pos_mu
+                    handles.append(self.sim.viewer.PlotEllipsoid(T, (0,1,0,1), True))
+                    
+                    rot_mu = lr2dof_mu_traj[lr][t,3:6]
+                    rot_sigma = lr2dof_sigma_traj[lr][t,3:6,3:6]
+                    U, s, V = np.linalg.svd(rot_sigma)
+                    rt_sigma_rot = (U * np.sqrt(s)).dot(U.T)
+                    rot_sigma_pts = [rot_mu]
+                    for i in range(3):
+                        rot_sigma_pts.append(rot_mu + plotting_std_dev * rt_sigma_rot[:,i])
+                        rot_sigma_pts.append(rot_mu - plotting_std_dev * rt_sigma_rot[:,i])
+                    for sigma_pt in rot_sigma_pts:
+                        hmat = np.eye(4)
+                        hmat[:3,:3] = openravepy.rotationMatrixFromAxisAngle(sigma_pt)
+                        hmat[:3,3] = pos_mu
+                        handles.extend(sim_util.draw_axis(self.sim, hmat, arrow_length=.01, arrow_width=.001))
+            self.sim.viewer.Step()
+        
+        manip_name = ""
+        ee_link_names = []
+        transformed_ee_trajs_rs = []
+        init_traj = np.zeros((ds_aug_trajs[0].n_steps,0))
+        for lr in active_lr:
+            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
+            ee_link_name = "%s_gripper_tool_frame"%lr
+            
+            if manip_name:
+                manip_name += "+"
+            manip_name += arm_name
+            ee_link_names.append(ee_link_name)
+            
+            init_traj = np.c_[init_traj, ds_aug_trajs[0].lr2arm_traj[lr]] # initialize trajectory with that of the best demo
+        
+        new_ee_trajs = []
+        for lr in active_lr:
+            new_ee_traj = np.empty((t_steps,4,4))
+            new_ee_traj[:] = np.eye(4)
+            new_ee_traj[:,:3,3] = lr2dof_mu_traj[lr][:,:3]
+            for t in range(t_steps):
+                new_ee_traj[t,:3,:3] = openravepy.rotationMatrixFromAxisAngle(lr2dof_mu_traj[lr][t,3:6])
+            new_ee_traj = np.asarray(resampling.interp_hmats(np.arange(ds_aug_trajs[0].n_steps)*self.downsample_traj, np.arange(len(new_ee_traj)), new_ee_traj))
+            new_ee_trajs.append(new_ee_traj)
+        
+        print "planning pose trajectory following"
+        test_traj, obj_value, pose_errs = planning.plan_follow_trajs(self.sim.robot, manip_name, ee_link_names, new_ee_trajs, init_traj, 
+                                                                     start_fixed=False,
+                                                                     use_collision_cost=self.use_collision_cost,
+                                                                     beta_pos=self.beta_pos, beta_rot=self.beta_rot)
+        
+        # the finger trajectory is the same for the demo and the test trajectory
+        for lr in active_lr:
+            finger_name = "%s_gripper_l_finger_joint"%lr
+            manip_name += "+" + finger_name
+            test_traj = np.c_[test_traj, ds_aug_trajs[0].lr2finger_traj[lr]]
+
+        full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
+        test_aug_traj = ForceAugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, None, None)
+        
+        if self.downsample_traj > 1:
+            test_aug_traj = test_aug_traj.get_resampled_traj(np.arange(self.downsample_traj*(test_aug_traj.n_steps-1)+1)/self.downsample_traj)
+        
+        test_aug_traj.lr2open_finger_traj = aligned_aug_trajs[0].lr2open_finger_traj
+        test_aug_traj.lr2close_finger_traj = aligned_aug_trajs[0].lr2close_finger_traj
+        test_aug_traj.lr2force_traj = {}
+        test_aug_traj.lr2x_traj = {}
+        for lr in active_lr:
+            assert lr2dof_mu_traj[lr].shape[0] == test_aug_traj.n_steps
+            assert lr2dof_mu_traj[lr].shape[1] == 18
+            test_aug_traj.lr2force_traj[lr] = lr2dof_mu_traj[lr][:,12:18]
+        
+        test_aug_traj.lr2dof_mu_traj = lr2dof_mu_traj
+        test_aug_traj.lr2dof_sigma_traj = lr2dof_sigma_traj
+        test_aug_traj.lr2dof_trajs = aligned_lr2trajs
+        
+        if plotting:
+            for lr in active_lr:
+                handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+            self.sim.viewer.Step()
+
+        self.calculate_gains(test_aug_traj)
+        return test_aug_traj
+
+
+    def calculate_gains(self, test_aug_traj):
+               
+        covariance = {}
+        covariances = {}
+
+
+        costs = {}
+
+        #==========================Wormhole start=======================
+        import h5py
+        
+       
+        #=========================Wormhole end==========================
+        # Sergey's Costs
+        
+        #import h5py
+        # right = h5py.File("../../../Downloads/covars_left.h5")
+        # covariances['r'] = right['covars']
+        # left = h5py.File("../../../Downloads/covars.h5")
+        # covariances['l'] = left['covars']
+        
+        if args.fitgains:
+            import subprocess
+            raw_input('start writing into h5')
+            f = h5py.File("temp_trajs.h5", 'w')
+            
+            add_obj_to_group(f, 'aligned_trajs', aug_traj.lr2dof_trajs)
+            f.close()
+            subprocess.call(["rm", "finalgains.h5"])
+            raw_input('start calculating gains, set filename and trajs')
+            subprocess.call(["matlab", "-nodesktop", "-r", "finalscript"])
+            raw_input('DONE AND READ')
+
+            gains = h5py.File('finalgains.h5', 'r')
+            
+            kpr = gains['Kp_r']
+            kvr = gains['Kv_r']
+            kpl = gains['Kp_l']
+            kvl = gains['Kv_l']
+            gainslength = kpr.shape[0]
+
+        elif args.fitgainsforce:
+            import subprocess
+            raw_input('start writing into h5')
+            f = h5py.File("temp_trajs.h5", 'w')
+            
+            add_obj_to_group(f, 'aligned_trajs', aug_traj.lr2dof_trajs)
+            f.close()
+            subprocess.call(["rm", "finalgains.h5"])
+            raw_input('start calculating gains, set filename and trajs')
+            subprocess.call(["matlab", "-nodesktop", "-r", "finalscript"])
+            raw_input('DONE AND READ')
+            gains = h5py.File("finalgains.h5")
+            kpr = gains['Kp_r_fe']
+            kvr = gains['Kv_r_fe']
+            kpl = gains['Kp_l_fe']
+            kvl = gains['Kv_l_fe']
+            kfr = gains['Kf_r_fe']
+            kfl = gains['Kf_l_fe']
+            gainslength = kpr.shape[0]
+            
+
+            
+        else:
+            gainslength = 10000000000000
+
+        if args.inverse:
+            kpl = kpr
+            kvl = kvr
+
+        length_part = min(gainslength, aug_traj.lr2dof_mu_traj['r'].shape[0], aug_traj.lr2arm_traj['r'].shape[0], aug_traj.lr2close_finger_traj['l'].shape[0], aug_traj.lr2open_finger_traj['l'].shape[0], aug_traj.lr2dof_sigma_traj['l'].shape[0])
+
+
+        to_truncate = 0
+
+        gripper_part = []
+        for i in range(length_part):
+            if aug_traj.lr2close_finger_traj['r'][i]:
+                gripper_part.append(-1.0)
+            elif aug_traj.lr2open_finger_traj['r'][i]:
+                gripper_part.append(1.0)
+            elif aug_traj.lr2close_finger_traj['l'][i]:
+                gripper_part.append(-2.0)
+            elif aug_traj.lr2open_finger_traj['l'][i]:
+                gripper_part.append(2.0)
+                to_truncate = i
+            else:
+                gripper_part.append(0.0)
+
+        if args.truncate:
+            length_part = min(length_part, to_truncate-900)
+            gripper_part = gripper_part[0:length_part]
+
+        import IPython
+        IPython.embed()
+        
+        F_part = {}
+        ext_ee_part = {}
+        ext_part = {}
+        traj_part = {}
+        for lr in 'lr':
+            F_part[lr] = aug_traj.lr2force_traj[lr][0:length_part,:]
+            traj_part[lr] = aug_traj.lr2arm_traj[lr][0:length_part,:]
+            ext_ee_part[lr] = np.zeros((length_part, 6))
+
+            manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+            arm = Globals.robot.GetManipulator(manip_name)
+            ext_part[lr] = []
+            for i in range(length_part):
+                vals = traj_part[lr][i,:]
+                Globals.robot.SetDOFValues(vals, Globals.robot.GetManipulator(manip_name).GetArmIndices())
+                J = np.vstack((arm.CalculateJacobian(), arm.CalculateAngularVelocityJacobian()))
+                ee = np.matrix(ext_ee_part[lr][i,:]).T
+                result = np.transpose(J) * ee
+                ext_part[lr].append(np.array(result.T)[0])
+            ext_part[lr] = np.asarray(ext_part[lr])
+
+        redprint("Press enter to use current position as starting point")
+        raw_input()
+        arm_positions = {}
+        (arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.r_arm_joint_names)
+        arm_positions['r'] = arm_position
+        diff_r = np.array(arm_position - traj_part['r'][0,:])
+        maximum_r = max(abs(diff_r))
+        (arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.l_arm_joint_names)
+        arm_positions['l'] = arm_position
+        diff_l = np.array(arm_position - traj_part['l'][0,:])
+        maximum_l = max(abs(diff_l))
+        maximum = max(maximum_l, maximum_r)
+
+        speed = (40.0/360.0*2*(np.pi))
+
+        time_needed = maximum / speed
+        
+        F = {}
+        traj = {}
+        ext_ee = {}
+        ext = {}
+        gripper = {}
+        for lr in 'lr':
+            initial_pos_traj = mu.interp2d(np.arange(0, time_needed, 0.01), np.array([0,time_needed]), np.array([arm_positions[lr], traj_part[lr][0,:]]))
+            #initial_pos_traj = mu.interp2d(timesteps_rs, np.arange(2), np.array([arm_positions[lr], traj_part[lr][0,:]]))
+            initial_force_traj = np.array([np.zeros(6) for i in range(initial_pos_traj.shape[0])])
+            initial_jointforce_traj = np.array([np.zeros(7) for i in range(initial_pos_traj.shape[0])])
+            initial_traj_length = initial_pos_traj.shape[0]
+
+            traj[lr] = np.concatenate((initial_pos_traj, traj_part[lr]), axis=0)
+            F[lr] = np.concatenate((initial_force_traj, F_part[lr]), axis=0)
+            ext_ee[lr] = np.concatenate((initial_force_traj, ext_ee_part[lr]), axis=0)
+            ext[lr] = np.concatenate((initial_jointforce_traj, ext_part[lr]), axis=0)
+
+        initial_gripper_traj = np.array([0.0 for i in range(initial_pos_traj.shape[0])])
+        gripper = np.concatenate((initial_gripper_traj, gripper_part), axis=0)
+
+        if args.visualize:
+            demofile = h5py.File(args.h5file, 'r')
+            seg_info = demofile[demofile.keys()[0]]
+            r2r = ros2rave.RosToRave(Globals.robot, asarray(seg_info["joint_states"]["name"]))
+            r2r.set_values(Globals.robot, asarray(seg_info["joint_states"]["position"][200]))
+
+            for i in range(0, traj['l'].shape[0], 100):
+                for lr in 'lr':
+                    handles = []
+                    handles.append(Globals.env.plot3(full_cloud,5,np.array([(0,1,0,1) for x in full_cloud])))
+                    manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+                    vals = traj[lr][i,:]
+                    Globals.robot.SetDOFValues(vals, Globals.robot.GetManipulator(manip_name).GetArmIndices())
+                
+                    hmats_index = {"l":-28, "r":-3}
+                    hmats = Globals.robot.GetLinkTransformations()
+                    trans, rot = conv.hmat_to_trans_rot(hmats[hmats_index[lr]])
+                    f_start = np.array([0,0,0]) + trans
+                    f_end = F[lr][i][0:3]/100 + trans
+                    handles.append(Globals.env.drawlinestrip(np.array([f_start, f_end]), 10, (1,0,0,1)))
+                    Globals.viewer.Step()
+                
+                redprint(i)
+                Globals.viewer.Idle()
+
+        test_aug_traj.lr2arm_traj = traj
+        test_aug_traj.lr2force_traj = F
+        test_aug_traj.kpl = kpl
+        test_aug_traj.kvl = kvl
+        test_aug_traj.gripper = gripper
+        test_aug_traj.ext = ext
+        test_aug_traj.length_total = initial_traj_length+length_part
+        test_aug_traj.initial_traj_length = initial_traj_length
+        test_aug_traj.args = args #FIX
+
+
 def main():
     args = parse_input_args()
 
@@ -1127,15 +1205,6 @@ def main():
     demos = setup_demos(args, sim.robot)
     reg_factory = setup_registration(args, demos, sim)
     
-#     ipy.embed()
-#     for action, demo in demos.iteritems():
-#         handles = []
-#         handles.append(sim.env.plot3(demo.scene_state.cloud, 2, (0,0,1)))
-#         lfd_env.execute_augmented_trajectory(demo.aug_traj, step_viewer=10, interactive=args.interactive)
-    
-#     import pickle
-#     full_cloud = pickle.load(open("data/cloud9.pickle", "rb" ))['cloud']
-    # for now, use the cloud of the first demo as the current cloud
     full_cloud = demos.values()[0].scene_state.cloud
     scene_state = demonstration.SceneState(full_cloud, downsample_size=args.eval.downsample_size)
 

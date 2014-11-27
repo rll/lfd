@@ -79,6 +79,22 @@ class LfdEnvironment(object):
         full_cloud = self.world.observe_cloud()
         return demonstration.SceneState(full_cloud, downsample_size=self.downsample_size)
 
+class ForceLfdEnvironment(LfdEnvironment):
+    def __init__(self, world, sim, downsample_size=0):
+        """Inits ForceLfdEnvironment
+        
+        Args:
+            world: RobotWorld
+            sim: DynamicSimulation that should containing exactly one rope when observe_scene is called
+            downsample_size: if downsample_size is positive, the clouds are downsampled to a voxel size of downsample_size, else they are not downsampled
+        """
+        super(ForceLfdEnvironment, self).__init__(world, sim, downsample_size=downsample_size)
+
+    def execute_augmented_trajectory(self, force_aug_traj, step_viewer=1, interactive=False, sim_callback=None, check_feasible=False):
+        self.world.execute_trajectory(force_aug_traj.lr2arm_traj, force_aug_traj.lr2force_traj, force_aug_traj.kpl, force_aug_traj.kvl, force_aug_traj.gripper, force_aug_traj.ext, force_aug_traj.length_total, force_aug_traj.initial_traj_length, force_aug_traj.args, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
+        return feasible, misgrasp
+    
+
 class GroundTruthRopeLfdEnvironment(LfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):
         """Inits GroundTruthRopeLfdEnvironment
