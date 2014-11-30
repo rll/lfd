@@ -8,6 +8,7 @@ from lfd.environment import sim_util
 from lfd.util import util
 from lfd.rapprentice import math_utils as mu
 import settings
+import IPython as ipy
 
 def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
                      no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
@@ -364,7 +365,13 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
         sim_util.unwrap_in_place(init_traj, dof_inds)
         init_traj += robot.GetDOFValues(dof_inds) - init_traj[0,:]
 
+    #ipy.embed();
     request = {
+        "traj_basic_info" : {
+            "n_steps" : n_steps,
+            "manip" : manip_name,
+            "start_fixed" : start_fixed
+        },
         "basic_info" : {
             "n_steps" : n_steps,
             "m_ext" : n,
@@ -396,7 +403,11 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
         ],
         "tps_constraints" : [
         ],
-        "init_info" : {
+        "traj_init_info" : {
+            "type":"given_traj",
+            "data":[x.tolist() for x in init_traj],
+        },
+        "tps_init_info" : {
             "type":"given_traj",
             "data":[x.tolist() for x in init_traj],
             "data_ext":[row.tolist() for row in init_z]
@@ -454,6 +465,25 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
                      }
                     })
 
+
+    for (flr2finger_link_name, flr2old_finger_pts_traj) in zip(flr2finger_link_names, flr2old_finger_pts_trajs):
+        for finger_lr, finger_link_name in flr2finger_link_name.items():
+            finger_rel_pts = flr2finger_rel_pts[finger_lr]
+            old_finger_pts_traj = flr2old_finger_pts_traj[finger_lr]
+            for (i_step, old_finger_pts) in enumerate(old_finger_pts_traj):
+                if start_fixed and i_step == 0:
+                    continue
+                request["traj_costs"].append(
+                    {"type":"rel_pts",
+                     "params":{
+                        "xyzs":old_finger_pts.tolist(),
+                        "rel_xyzs":finger_rel_pts.tolist(),
+                        "link":finger_link_name,
+                        "timestep":i_step,
+                        "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
+                     }
+                    })
+
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
         #with util.suppress_stdout():
@@ -469,7 +499,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     f.lin_ag = theta[1:d+1,:]
     f.w_ng = theta[d+1:]
 
-    tps_rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "tps_rel_pts"])
+    tps_rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "rel_pts"])
     tps_rel_pts_err = []
     with openravepy.RobotStateSaver(robot):
         for (flr2finger_link_name, flr2old_finger_pts_traj) in zip(flr2finger_link_names, flr2old_finger_pts_trajs):
