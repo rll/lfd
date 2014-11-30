@@ -6,11 +6,11 @@ import openravepy
 
 import numpy as np
 
-from lfd.rapprentice import planning, resampling
+from lfd.rapprentice import resampling
 from lfd.environment.simulation import DynamicSimulationRobotWorld
 from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
 from lfd.environment import sim_util
-
+from lfd.transfer import planning
 
 table_height = 0.77
 box_length = 0.04
@@ -50,7 +50,7 @@ def get_move_traj(t_start, t_end, start_fixed):
     new_hmats = np.asarray(resampling.interp_hmats(np.arange(n_steps), np.r_[0, n_steps-1], [hmat_start, hmat_end]))
     dof_vals = sim.robot.GetManipulator(manip_name).GetArmDOFValues()
     old_traj = np.tile(dof_vals, (n_steps,1))
-    
+
     traj, _, _ = planning.plan_follow_traj(sim.robot, manip_name, ee_link, new_hmats, old_traj, start_fixed=start_fixed, beta_rot=10000.0)
     return traj
 
