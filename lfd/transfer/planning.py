@@ -458,6 +458,8 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     with openravepy.RobotStateSaver(robot):
         #with util.suppress_stdout():
         (prob1, prob2) = trajoptpy.ConstructDecompProblem(s, robot.GetEnv()) # create object that stores optimization problem
+        viewer = trajoptpy.GetViewer(robot.GetEnv())
+        trajoptpy.SetInteractive(True)
         result = trajoptpy.OptimizeDecompProblem(prob1, prob2) # do optimization
 
     traj = result.GetTraj()
