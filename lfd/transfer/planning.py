@@ -743,9 +743,14 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       f.lin_ag = theta[1:d+1,:]
       f.w_ng = theta[d+1:]
 
+
+      ######### PLOT TPS TRAJ HERE ############
+
+
       traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
       abs_traj_diff = sum(abs(traj_diff))
       print "Absolute difference between trajectories: ", abs_traj_diff
+      print "Traj diffs: ", traj_diff[-20:]
 
       flr2transformed_finger_pts_traj = {}
       for finger_lr in 'lr':
@@ -783,6 +788,10 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
           result = trajoptpy.OptimizeTrajProblem(prob, (-lambdas).tolist())
 
       traj_traj = result.GetTraj()
+
+
+      ########### PLOT TRAJ TRAJECTORY HERE ############
+
       # TODO - Double check if this should be column major ('C') or 'F'.
       traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
       abs_traj_diff = sum(abs(traj_diff))
