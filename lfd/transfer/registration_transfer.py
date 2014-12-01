@@ -129,7 +129,7 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
                                                                               reg.f, 
                                                                               use_collision_cost=self.use_collision_cost,
                                                                               start_fixed=False,
-                                                                              alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma)
+                                                                              alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma, plot=plotting)
 
         full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
         test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)

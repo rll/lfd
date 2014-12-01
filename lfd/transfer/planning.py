@@ -325,7 +325,7 @@ def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr
 def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2old_finger_pts_trajs, old_traj,
                                          f, closing_pts=None,
                                          no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                                          alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
+                                          alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA, plot=False):
     orig_dof_inds = robot.GetActiveDOFIndices()
     orig_dof_vals = robot.GetDOFValues()
 
@@ -488,8 +488,9 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     with openravepy.RobotStateSaver(robot):
         #with util.suppress_stdout():
         (prob1, prob2) = trajoptpy.ConstructDecompProblem(s, robot.GetEnv()) # create object that stores optimization problem
-        viewer = trajoptpy.GetViewer(robot.GetEnv())
-        trajoptpy.SetInteractive(True)
+        if plot:
+            viewer = trajoptpy.GetViewer(robot.GetEnv())
+            trajoptpy.SetInteractive(True)
         result = trajoptpy.OptimizeDecompProblem(prob1, prob2) # do optimization
 
     traj = result.GetTraj()
