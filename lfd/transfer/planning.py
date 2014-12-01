@@ -703,13 +703,61 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
     max_iter = 10
     tps_traj = init_traj
     traj_traj = init_traj
+
     for itr in range(max_iter):
-      #nu = 1.0/(itr+1)
-      tps_request_i = copy.deepcopy(tps_request)
+      #if itr is 3:
+      #  nu = 0.001
       traj_request_i = copy.deepcopy(traj_request)
-      tps_request_i["init_info"] = {
+      flr2transformed_finger_pts_traj = {}
+      for finger_lr in 'lr':
+        flr2transformed_finger_pts_traj[finger_lr] = f.transform_points(np.concatenate(flr2demo_finger_pts_trajs[0][finger_lr], axis=0)).reshape((-1,4,3))
+      # TODO - Probs not the right thing to do...
+      flr2transformed_finger_pts_trajs = [flr2transformed_finger_pts_traj]
+
+      traj_request_i["init_info"] = {
             "type":"given_traj",
             "data":[x.tolist() for x in tps_traj],
+        }
+
+      for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
+          for finger_lr, finger_link_name in flr2finger_link_name.items():
+              finger_rel_pts = flr2finger_rel_pts[finger_lr]
+              transformed_finger_pts_traj = flr2transformed_finger_pts_traj[finger_lr]
+              for (i_step, finger_pts) in enumerate(transformed_finger_pts_traj):
+                  if start_fixed and i_step == 0:
+                      continue
+                  traj_request_i["costs"].append(
+                      {"type":"rel_pts",
+                       "params":{
+                          "xyzs":finger_pts.tolist(),
+                          "rel_xyzs":finger_rel_pts.tolist(),
+                          "link":finger_link_name,
+                          "timestep":i_step,
+                          "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
+                        }
+                      })
+      s_traj = json.dumps(traj_request_i);
+      print 'Setting up and solving Traj SQP'
+      with openravepy.RobotStateSaver(robot):
+        with util.suppress_stdout():
+          prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
+          result = trajoptpy.OptimizeTrajProblem(prob, (-lambdas).tolist())
+
+      traj_traj = result.GetTraj()
+
+
+      ########### PLOT TRAJ TRAJECTORY HERE ############
+
+      # TODO - Double check if this should be column major ('C') or 'F'.
+      traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
+      abs_traj_diff = sum(abs(traj_diff))
+      print "Absolute difference between trajectories: ", abs_traj_diff
+      print "Traj diffs: ", traj_diff[-20:]
+
+      tps_request_i = copy.deepcopy(tps_request)
+      tps_request_i["init_info"] = {
+            "type":"given_traj",
+            "data":[x.tolist() for x in traj_traj],
             "data_ext":[row.tolist() for row in f.z]
         }
       for (flr2finger_link_name, flr2demo_finger_pts_traj) in zip(flr2finger_link_names, flr2demo_finger_pts_trajs):
@@ -746,59 +794,11 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
 
       ######### PLOT TPS TRAJ HERE ############
 
-
       traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
       abs_traj_diff = sum(abs(traj_diff))
       print "Absolute difference between trajectories: ", abs_traj_diff
       print "Traj diffs: ", traj_diff[-20:]
-
-      flr2transformed_finger_pts_traj = {}
-      for finger_lr in 'lr':
-        flr2transformed_finger_pts_traj[finger_lr] = f.transform_points(np.concatenate(flr2demo_finger_pts_trajs[0][finger_lr], axis=0)).reshape((-1,4,3))
-      # TODO - Probs not the right thing to do...
-      flr2transformed_finger_pts_trajs = [flr2transformed_finger_pts_traj]
-
-      traj_request_i["init_info"] = {
-            "type":"given_traj",
-            "data":[x.tolist() for x in traj_traj],
-        }
-
-      for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
-          for finger_lr, finger_link_name in flr2finger_link_name.items():
-              finger_rel_pts = flr2finger_rel_pts[finger_lr]
-              transformed_finger_pts_traj = flr2transformed_finger_pts_traj[finger_lr]
-              for (i_step, finger_pts) in enumerate(transformed_finger_pts_traj):
-                  if start_fixed and i_step == 0:
-                      continue
-                  traj_request_i["costs"].append(
-                      {"type":"rel_pts",
-                       "params":{
-                          "xyzs":finger_pts.tolist(),
-                          "rel_xyzs":finger_rel_pts.tolist(),
-                          "link":finger_link_name,
-                          "timestep":i_step,
-                          "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
-                        }
-                      })
-      s_traj = json.dumps(traj_request_i);
-      print 'Setting up and solving Traj SQP'
-      with openravepy.RobotStateSaver(robot):
-        with util.suppress_stdout():
-          prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
-          result = trajoptpy.OptimizeTrajProblem(prob, (-lambdas).tolist())
-
-      traj_traj = result.GetTraj()
-
-
-      ########### PLOT TRAJ TRAJECTORY HERE ############
-
-      # TODO - Double check if this should be column major ('C') or 'F'.
-      traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
-      abs_traj_diff = sum(abs(traj_diff))
-      print "Absolute difference between trajectories: ", abs_traj_diff
       lambdas = lambdas - nu * traj_diff
-      print "New value for lambdas: ", lambdas[-20:]
-      print "Traj diffs: ", traj_diff[-20:]
       if abs_traj_diff < traj_diff_thresh:
         print "TRAJECTORIES CONVERGED"
         break
