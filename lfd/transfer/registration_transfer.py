@@ -214,14 +214,32 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
 
         tau_bd = self.points_to_array(self.traj_to_points(demo.aug_traj, resampling=True))
         lambda_bd = np.zeros(tau_bd.shape)
-        lambda_bd[:,0] = .0002
+        lambda_bd[:,0] = .001
+        # lambda_bd[:,0] = -.0002
+        # lambda_bd[:,1] = -.0002
+        # lambda_bd[:,1] = .0002
+        # lambda_bd[:,2] = -.0002
+        # lambda_bd[:,2] = .0002
 
         (n,d) = reg.f.x_na.shape
         bend_coefs = np.ones(d) * reg.f.bend_coef if np.isscalar(reg.f.bend_coef) else reg.f.bend_coef
         rot_coefs = np.ones(d) * reg.f.rot_coef if np.isscalar(reg.f.rot_coef) else reg.f.rot_coef
         theta, (N, z) = tps.tps_fit_decomp(reg.f.x_na, reg.f.y_ng, bend_coefs, rot_coefs, reg.f.wt_n, tau_bd, lambda_bd, ret_factorization=True)
         reg.f.update(reg.f.x_na, reg.f.y_ng, bend_coefs, rot_coefs, reg.f.wt_n, theta, N=N, z=z)
-        test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
+
+        warped_points = reg.f.transform_points(tau_bd)
+        target_traj = []
+        i = 0
+        finger_points = []
+        import ipdb; ipdb.set_trace()
+        for point in warped_points:
+            finger_points.append(point)
+            if i % 4 == 3:
+                target_traj.append(np.array(finger_points))
+                finger_points = []
+            i = i+1
+
+        # test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
 
         handles = []
         lr = 'r'
@@ -232,7 +250,9 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             test_color = reg.test_scene_state.color
             handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, demo_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
-            handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+            # handles.append(self.sim.env.drawlinestrip(warped_points, 2, (0,0,1)))
+            handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':target_traj}, (0,0,1)))
+            # handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
             # handles.append(self.sim.env.drawlinestrip(test_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
             # transformed_ee_traj_rs = reg.f.transform_hmats(test_aug_traj.lr2ee_traj[lr])
             # handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
