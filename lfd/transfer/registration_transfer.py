@@ -220,7 +220,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         wt_n = reg.f.wt_n
 
 
-        lambda_bd[:,0] = .001
+        # lambda_bd[:,0] = .001
         # lambda_bd[:,0] = -.0002
         # lambda_bd[:,1] = -.0002
         # lambda_bd[:,1] = .0002
@@ -404,17 +404,22 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         # Now that we've made the initial request that is the same every iteration,
         # we make the loop and add on the things that change.
 
-        nu = 0.001
-        traj_diff_thresh = 1e-2*lambda_bd.size
+        nu = 0.0005
+        # nu = 0
+        traj_diff_thresh = 3e-3*lambda_bd.size
         max_iter = 20
         cur_traj = init_traj
         import datetime; print datetime.datetime.now().time()
+        del handles
         for itr in range(max_iter):
-          #if itr == 8:
-          #  nu = nu/10;
+          handles = []
+          nu = nu/1.4
+          # if itr == 3:
+          #   nu = nu/10
           request_i = copy.deepcopy(request)
           flr2transformed_finger_pts_traj = {}
           # right arm only...
+          # import ipdb; ipdb.set_trace()
           for finger_lr in 'lr':
             flr2transformed_finger_pts_traj[finger_lr] = f.transform_points(np.concatenate(flr2demo_finger_pts_trajs[0][finger_lr], axis=0)).reshape((-1,4,3))
           flr2transformed_finger_pts_trajs = [flr2transformed_finger_pts_traj]
@@ -435,33 +440,33 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             finger_link_name = flr2finger_link_name[finger_lr]
             finger_rel_pts = flr2finger_rel_pts[finger_lr]
             if start_fixed and traj_step==0: continue
-            request_i["costs"].append(
-                {"type":"rel_pts_lambdas",
-                  "params":{
-                    "lambdas":(-lambda_bd[traj_step:traj_step+4,:]).tolist(),
-                    "rel_xyzs":finger_rel_pts.tolist(),
-                    "link":finger_link_name,
-                    "timestep":traj_step/4,
-                    "pos_coeffs":[self.beta_pos/n_steps]*4,
-                    }
-                  })
-          #for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
-              #for finger_lr, finger_link_name in flr2finger_link_name.items():
-                  #finger_rel_pts = flr2finger_rel_pts[finger_lr]
-                  #transformed_finger_pts_traj = flr2transformed_finger_pts_traj[finger_lr]
-                  #for (i_step, finger_pts) in enumerate(transformed_finger_pts_traj):
-                      #if start_fixed and i_step == 0:
-                          #continue
-                      #request_i["costs"].append(
-                          #{"type":"rel_pts",
-                          #"params":{
-                              #"xyzs":finger_pts.tolist(),
-                              #"rel_xyzs":finger_rel_pts.tolist(),
-                              #"link":finger_link_name,
-                              #"timestep":i_step,
-                              #"pos_coeffs":[np.sqrt(self.beta_pos/n_steps)]*4,
-                            #}
-                          #})
+            # request_i["costs"].append(
+            #     {"type":"rel_pts_lambdas",
+            #       "params":{
+            #         "lambdas":(-lambda_bd[traj_step:traj_step+4,:]).tolist(),
+            #         "rel_xyzs":finger_rel_pts.tolist(),
+            #         "link":finger_link_name,
+            #         "timestep":traj_step/4,
+            #         "pos_coeffs":[self.beta_pos/n_steps]*4,
+            #         }
+            #       })
+          for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
+              for finger_lr, finger_link_name in flr2finger_link_name.items():
+                  finger_rel_pts = flr2finger_rel_pts[finger_lr]
+                  transformed_finger_pts_traj = flr2transformed_finger_pts_traj[finger_lr]
+                  for (i_step, finger_pts) in enumerate(transformed_finger_pts_traj):
+                      if start_fixed and i_step == 0:
+                          continue
+                      request_i["costs"].append(
+                          {"type":"rel_pts",
+                          "params":{
+                              "xyzs":finger_pts.tolist(),
+                              "rel_xyzs":finger_rel_pts.tolist(),
+                              "link":finger_link_name,
+                              "timestep":i_step,
+                              "pos_coeffs":[np.sqrt(self.beta_pos/n_steps/10)]*4,
+                            }
+                          })
           s_traj = json.dumps(request_i);
           sys.stdout.write('Solving Traj SQP. ')
           sys.stdout.flush()
@@ -470,7 +475,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
               prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
               if plotting:
                 viewer = trajoptpy.GetViewer(robot.GetEnv())
-                trajoptpy.SetInteractive(True)
+                # trajoptpy.SetInteractive(True)
               result = trajoptpy.OptimizeProblem(prob)
           cur_traj = result.GetTraj()
 
@@ -483,8 +488,9 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
 
           ########## PLOT TPS TRAJECTORY HERE ###############
 
+
           # Compute difference between trajectory points.
-          trajpts_tps = reg.f.transform_points(tau_bd)
+          trajpts_tps = f.transform_points(tau_bd)
           # Below is probably the same as doing:
           full_traj = (cur_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
           trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(self.sim.robot, 'r', full_traj))
@@ -494,6 +500,21 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
 
           print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
           lambda_bd = lambda_bd - nu * traj_diff
+
+          lr = 'r'
+
+          if plotting:
+              # handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':target_traj}, (0,0,1)))
+              handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_tps.reshape((-1,4,3))}, (0,1,0)))
+              handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+              # handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+              # handles.append(self.sim.env.drawlinestrip(test_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
+              # transformed_ee_traj_rs = reg.f.transform_hmats(test_aug_traj.lr2ee_traj[lr])
+              # handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
+              if self.sim.viewer:
+                self.sim.viewer.Step()
+                raw_input("look at trajs")
+
 
           if abs_traj_diff < traj_diff_thresh:
             print "TRAJECTORIES CONVERGED"
