@@ -46,7 +46,7 @@ def get_move_traj(env, robot, t_start, t_end, start_fixed):
     old_traj = np.tile(dof_vals, (n_steps,1))
 
     traj, _, _ = planning.plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, start_fixed=start_fixed, beta_rot=10000.0)
-    aug_traj = AugmentedTrajectory(lr2arm_traj={lr: traj}) 
+    aug_traj = AugmentedTrajectory(lr2arm_traj={lr: traj})
     # import ipdb; ipdb.set_trace()
     return aug_traj
 
@@ -118,7 +118,7 @@ def main():
     pick_R = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
     drop_R = np.array([[0, 1, 0], [0, 0, -1], [-1, 0, 0]])
     aug_traj = create_augmented_traj(sim.robot, pick_pos, drop_pos, pick_R, drop_R, move_height=0.01)
-    
+
     demo = Demonstration(demo_name, demo_scene_state, aug_traj)
     demos[demo_name] = demo
 
@@ -137,7 +137,7 @@ def main():
 
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
     reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-    test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
+    test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=False)
 
     env.execute_augmented_trajectory(test_aug_traj)
 
