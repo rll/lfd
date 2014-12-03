@@ -739,7 +739,7 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       s_traj = json.dumps(traj_request_i);
       print 'Setting up and solving Traj SQP'
       with openravepy.RobotStateSaver(robot):
-        with util.suppress_stdout():
+        # with util.suppress_stdout():
           prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
           result = trajoptpy.OptimizeTrajProblem(prob, (-lambdas).tolist())
 
