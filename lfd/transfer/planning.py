@@ -192,6 +192,7 @@ def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2f
         sim_util.unwrap_in_place(init_traj, dof_inds)
         init_traj += robot.GetDOFValues(dof_inds) - init_traj[0,:]
 
+
     request = {
         "basic_info" : {
             "n_steps" : n_steps,
@@ -233,24 +234,39 @@ def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2f
                            }
               })
 
-    for (flr2finger_link_name, flr2finger_pts_traj) in zip(flr2finger_link_names, flr2finger_pts_trajs):
-        for finger_lr, finger_link_name in flr2finger_link_name.items():
-            finger_rel_pts = flr2finger_rel_pts[finger_lr]
-            finger_pts_traj = flr2finger_pts_traj[finger_lr]
-            for (i_step, finger_pts) in enumerate(finger_pts_traj):
-                if start_fixed and i_step == 0:
-                    continue
-                request["costs"].append(
-                    {"type":"rel_pts",
-                     "params":{
-                        "xyzs":finger_pts.tolist(),
-                        "rel_xyzs":finger_rel_pts.tolist(),
-                        "link":finger_link_name,
-                        "timestep":i_step,
-                        "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4, # there is a coefficient for each of the 4 points
-                     }
-                    })
+    # This is the finger following constraint
+    #for (flr2finger_link_name, flr2finger_pts_traj) in zip(flr2finger_link_names, flr2finger_pts_trajs):
+        #for finger_lr, finger_link_name in flr2finger_link_name.items():
+            #finger_rel_pts = flr2finger_rel_pts[finger_lr]
+            #finger_pts_traj = flr2finger_pts_traj[finger_lr]
+            #for (i_step, finger_pts) in enumerate(finger_pts_traj):
+                #if start_fixed and i_step == 0:
+                    #continue
+                #request["costs"].append(
+                    #{"type":"rel_pts",
+                     #"params":{
+                        #"xyzs":finger_pts.tolist(),
+                        #"rel_xyzs":finger_rel_pts.tolist(),
+                        #"link":finger_link_name,
+                        #"timestep":i_step,
+                        #"pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4, # there is a coefficient for each of the 4 points
+                     #}
+                    #})
 
+    # Penalize the x direction on right gripper for 36 timesteps
+    penalty = np.zeros([4,3])
+    penalty[:,1] = -100000
+    for i in range(36):
+      request["costs"].append(
+         {"type":"rel_pts_lambdas",
+           "params":{
+             "lambdas":penalty.tolist(),
+             "rel_xyzs":flr2finger_rel_pts['r'].tolist(),
+             "link":flr2finger_link_names[0]['r'],
+             "timestep":i,
+            }
+         })
+    #import IPython as ipy; ipy.embed()
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
         with util.suppress_stdout():
@@ -258,7 +274,7 @@ def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2f
             result = trajoptpy.OptimizeProblem(prob) # do optimization
 
     traj = result.GetTraj()
-
+    #ipy.embed()
 
     rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "rel_pts"])
     rel_pts_err = []
@@ -574,7 +590,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
 def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2demo_finger_pts_trajs, old_traj,
                                          f, closing_pts=None,
                                          no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
-                                          alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
+                                          alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA, plotting=False):
     orig_dof_inds = robot.GetActiveDOFIndices()
     orig_dof_vals = robot.GetDOFValues()
 
@@ -696,11 +712,11 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
     # we make the loop and add on the things that change.
 
     # TODO - Set this traj_dim automatically.
-    traj_dim = 432
+    traj_dim = old_traj.size
     lambdas = np.zeros((traj_dim,))
-    nu = 0.01
+    nu = 100.0
     traj_diff_thresh = 1e-3*traj_dim
-    max_iter = 10
+    max_iter = 15
     tps_traj = init_traj
     traj_traj = init_traj
 
@@ -716,7 +732,7 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
 
       traj_request_i["init_info"] = {
             "type":"given_traj",
-            "data":[x.tolist() for x in tps_traj],
+            "data":[x.tolist() for x in traj_traj],
         }
 
       for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
@@ -739,11 +755,17 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       s_traj = json.dumps(traj_request_i);
       print 'Setting up and solving Traj SQP'
       with openravepy.RobotStateSaver(robot):
-        with util.suppress_stdout():
+        #with util.suppress_stdout():
           prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
+          if plotting:
+            viewer = trajoptpy.GetViewer(robot.GetEnv())
+            trajoptpy.SetInteractive(True)
           result = trajoptpy.OptimizeTrajProblem(prob, (-lambdas).tolist())
 
       traj_traj = result.GetTraj()
+      print traj_traj.shape
+      tps_rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "rel_pts"])
+      collision_costs = [cost_val for (cost_type, cost_val) in result.GetCosts() if "collision" in cost_type]
 
 
       ########### PLOT TRAJ TRAJECTORY HERE ############
@@ -752,13 +774,14 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
       abs_traj_diff = sum(abs(traj_diff))
       print "Absolute difference between trajectories: ", abs_traj_diff
-      print "Traj diffs: ", traj_diff[-20:]
+      #print "Traj diffs: ", traj_diff[-20:]
+      print "Lambdas: ", lambdas[-20:]
 
       tps_request_i = copy.deepcopy(tps_request)
       tps_request_i["init_info"] = {
             "type":"given_traj",
-            "data":[x.tolist() for x in traj_traj],
-            "data_ext":[row.tolist() for row in f.z]
+            "data":[(x).tolist() for x in tps_traj],
+            "data_ext":[(row).tolist() for row in f.z]
         }
       for (flr2finger_link_name, flr2demo_finger_pts_traj) in zip(flr2finger_link_names, flr2demo_finger_pts_trajs):
           for finger_lr, finger_link_name in flr2finger_link_name.items():
@@ -781,36 +804,33 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       s_tps = json.dumps(tps_request_i)
       print 'Setting up and solving TPS Problem'
       with openravepy.RobotStateSaver(robot):
-        with util.suppress_stdout():
+        #with util.suppress_stdout():
           prob = trajoptpy.ConstructProblem(s_tps, robot.GetEnv())
-          result = trajoptpy.OptimizeTPSProblem(prob, lambdas.tolist())
+          if plotting:
+            viewer = trajoptpy.GetViewer(robot.GetEnv())
+            trajoptpy.SetInteractive(True)
+          result = trajoptpy.OptimizeTrajProblem(prob, lambdas.tolist())
       tps_traj = result.GetTraj()
       f.z = result.GetExt()
       theta = N.dot(f.z)
       f.trans_g = theta[0,:]
       f.lin_ag = theta[1:d+1,:]
       f.w_ng = theta[d+1:]
-
-
       ######### PLOT TPS TRAJ HERE ############
 
       traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
       abs_traj_diff = sum(abs(traj_diff))
       print "Absolute difference between trajectories: ", abs_traj_diff
-      print "Traj diffs: ", traj_diff[-20:]
+      #print "Traj diffs: ", traj_diff[-20:]
+      print "Lambdas: ", lambdas[-20:]
       lambdas = lambdas - nu * traj_diff
       if abs_traj_diff < traj_diff_thresh:
         print "TRAJECTORIES CONVERGED"
         break
 
-    traj = result.GetTraj()
-    f.z = result.GetExt()
-    theta = N.dot(f.z)
-    f.trans_g = theta[0,:]
-    f.lin_ag = theta[1:d+1,:]
-    f.w_ng = theta[d+1:]
+    print 'Done optimizing'
+    traj = traj_traj
 
-    tps_rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "rel_pts"])
     tps_rel_pts_err = []
     with openravepy.RobotStateSaver(robot):
         for (flr2finger_link_name, flr2demo_finger_pts_traj) in zip(flr2finger_link_names, flr2demo_finger_pts_trajs):
@@ -827,17 +847,18 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
     tps_rel_pts_err = np.concatenate(tps_rel_pts_err, axis=0)
     tps_rel_pts_costs2 = (beta_pos/n_steps) * np.square(tps_rel_pts_err).sum() # TODO don't square n_steps
 
+    print 'Getting TPS Cost'
     tps_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "tps"])
     tps_cost2 = alpha * f.get_objective().sum()
     matching_err = f.transform_points(f.x_na) - f.y_ng
 
+    print 'Getting Joint Vel Cost'
     joint_vel_cost = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "joint_vel"])
     joint_vel_err = np.diff(traj, axis=0)
     joint_vel_cost2 = (gamma/(n_steps-1)) * np.square(joint_vel_err).sum()
     sim_util.unwrap_in_place(traj, dof_inds)
     joint_vel_err = np.diff(traj, axis=0)
 
-    collision_costs = [cost_val for (cost_type, cost_val) in result.GetCosts() if "collision" in cost_type]
     if len(collision_costs) > 0:
         collision_err = np.asarray(collision_costs)
         collision_costs = np.sum(collision_costs)
@@ -882,3 +903,161 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
     assert not np.any(orig_dof_vals - robot.GetDOFValues())
 
     return traj, obj_value, tps_rel_pts_costs, tps_cost
+
+
+
+
+def decomp_fit_tps_trajopt(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2demo_finger_pts_trajs, old_traj,
+                           f, closing_pts=None,
+                           no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
+                           alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA, plotting=False):
+    orig_dof_inds = robot.GetActiveDOFIndices()
+    orig_dof_vals = robot.GetDOFValues()
+
+    n_steps = old_traj.shape[0]
+    dof_inds = sim_util.dof_inds_from_name(robot, manip_name)
+    assert old_traj.shape[1] == len(dof_inds)
+    for flr2demo_finger_pts_traj in flr2demo_finger_pts_trajs:
+        for demo_finger_pts_traj in flr2demo_finger_pts_traj.values():
+            assert len(demo_finger_pts_traj)== n_steps
+    assert len(flr2finger_link_names) == len(flr2demo_finger_pts_trajs)
+
+    # expand these
+    (n,d) = f.x_na.shape
+    bend_coefs = np.ones(d) * f.bend_coef if np.isscalar(f.bend_coef) else f.bend_coef
+    rot_coefs = np.ones(d) * f.rot_coef if np.isscalar(f.rot_coef) else f.rot_coef
+    if f.wt_n is None:
+        wt_n = np.ones(n)
+    else:
+        wt_n = f.wt_n
+    if wt_n.ndim == 1:
+        wt_n = wt_n[:,None]
+    if wt_n.shape[1] == 1:
+        wt_n = np.tile(wt_n, (1,d))
+
+    init_traj = old_traj.copy()
+    N = f.N
+    init_z = f.z
+
+    if start_fixed:
+        init_traj = np.r_[robot.GetDOFValues(dof_inds)[None,:], init_traj[1:]]
+        sim_util.unwrap_in_place(init_traj, dof_inds)
+        init_traj += robot.GetDOFValues(dof_inds) - init_traj[0,:]
+    request = {
+        "basic_info" : {
+            "n_steps" : n_steps,
+            "manip" : manip_name,
+            "start_fixed" : start_fixed
+        },
+        "costs" : [
+        {
+            "type" : "joint_vel",
+            "params": {"coeffs" : [gamma/(n_steps-1)]}
+        },
+        ],
+        "constraints" : [
+        ],
+    }
+    if use_collision_cost:
+        request["costs"].append(
+            {
+                "type" : "collision",
+                "params" : {
+                  "continuous" : True,
+                  "coeffs" : [1000],  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
+                  "dist_pen" : [0.025]  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
+                }
+            })
+    if joint_vel_limits is not None:
+        request["constraints"].append(
+             {
+                "type" : "joint_vel_limits",
+                "params": {"vals" : joint_vel_limits,
+                           "first_step" : 0,
+                           "last_step" : n_steps-1
+                           }
+              })
+
+    # Now that we've made the initial request that is the same every iteration,
+    # we make the loop and add on the things that change.
+
+    traj_dim = old_traj.size
+    lambdas = np.zeros((traj_dim,))
+    nu = 100.0
+    traj_diff_thresh = 1e-3*traj_dim
+    max_iter = 15
+    tps_traj = init_traj
+    traj_traj = init_traj
+
+    for itr in range(max_iter):
+      request_i = copy.deepcopy(request)
+      flr2transformed_finger_pts_traj = {}
+      for finger_lr in 'lr':
+        flr2transformed_finger_pts_traj[finger_lr] = f.transform_points(np.concatenate(flr2demo_finger_pts_trajs[0][finger_lr], axis=0)).reshape((-1,4,3))
+      # TODO - Probs not the right thing to do...
+      flr2transformed_finger_pts_trajs = [flr2transformed_finger_pts_traj]
+
+      request_i["init_info"] = {
+            "type":"given_traj",
+            "data":[x.tolist() for x in traj_traj],
+        }
+
+      for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
+          for finger_lr, finger_link_name in flr2finger_link_name.items():
+              finger_rel_pts = flr2finger_rel_pts[finger_lr]
+              transformed_finger_pts_traj = flr2transformed_finger_pts_traj[finger_lr]
+              for (i_step, finger_pts) in enumerate(transformed_finger_pts_traj):
+                  if start_fixed and i_step == 0:
+                      continue
+                  request_i["costs"].append(
+                      {"type":"rel_pts",
+                       "params":{
+                          "xyzs":finger_pts.tolist(),
+                          "rel_xyzs":finger_rel_pts.tolist(),
+                          "link":finger_link_name,
+                          "timestep":i_step,
+                          "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
+                        }
+                      })
+      s_traj = json.dumps(request_i);
+      print 'Setting up and solving Traj SQP'
+      with openravepy.RobotStateSaver(robot):
+        #with util.suppress_stdout():
+          prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
+          if plotting:
+            viewer = trajoptpy.GetViewer(robot.GetEnv())
+            trajoptpy.SetInteractive(True)
+          result = trajoptpy.OptimizeTrajProblem(prob, (-lambdas).tolist())
+
+      traj_traj = result.GetTraj()
+      print traj_traj.shape
+
+      ########### PLOT TRAJ TRAJECTORY HERE ############
+
+      # TODO - Double check if this should be column major ('C') or 'F'.
+      traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
+      abs_traj_diff = sum(abs(traj_diff))
+      print "Absolute difference between trajectories: ", abs_traj_diff
+      #print "Traj diffs: ", traj_diff[-20:]
+      print "Lambdas: ", lambdas[-20:]
+
+      tps_traj = result.GetTraj()
+      f.z = result.GetExt()
+      theta = N.dot(f.z)
+      f.trans_g = theta[0,:]
+      f.lin_ag = theta[1:d+1,:]
+      f.w_ng = theta[d+1:]
+      ######### PLOT TPS TRAJ HERE ############
+
+      traj_diff = tps_traj.flatten('C') - traj_traj.flatten('C')
+      abs_traj_diff = sum(abs(traj_diff))
+      print "Absolute difference between trajectories: ", abs_traj_diff
+      #print "Traj diffs: ", traj_diff[-20:]
+      print "Lambdas: ", lambdas[-20:]
+      lambdas = lambdas - nu * traj_diff
+      if abs_traj_diff < traj_diff_thresh:
+        print "TRAJECTORIES CONVERGED"
+        break
+
+    print 'Done optimizing'
+
