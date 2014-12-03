@@ -71,12 +71,14 @@ def main():
     # import ipdb; ipdb.set_trace()
     cyl_radius = 0.1
     cyl_height = 0.2
-    cyl_pos = np.r_[.7,0, table_height+cyl_height/2]
+    cyl_pos = np.r_[.65,0, table_height+cyl_height/2+.1]
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85, .1], dynamic=False))
-    cyl_sim_objs = create_cylinder(cyl_pos, cyl_radius, cyl_height)
-    sim_objs.extend(cyl_sim_objs)
+    box = BoxSimulationObject("box", cyl_pos, [.1, .1, .2], dynamic=True)
+    sim_objs.append(box)
+    # cyl_sim_objs = create_cylinder(cyl_pos, cyl_radius, cyl_height)
+    # sim_objs.extend(cyl_sim_objs)
 
     # initialize simulation world and environment
     sim = DynamicSimulationRobotWorld()
@@ -86,7 +88,7 @@ def main():
     sim.robot.SetDOFValues([0.25], [sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
     sim.robot.SetDOFValues([1.25], [sim.robot.GetJoint('head_tilt_joint').GetJointIndex()]) # move head down so it can see the rope
     sim_util.reset_arms_to_side(sim)
-    color_cylinders(cyl_sim_objs)
+    color_cylinders([box])
 
     env = environment.LfdEnvironment(sim, sim, downsample_size=0.025)
 
@@ -127,7 +129,7 @@ def main():
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
 
     reg_factory = TpsRpmRegistrationFactory(demos, f_solver_factory=None)
-    regs = reg_factory.batch_register(test_scene_state, callback=plot_cb)
+    # regs = reg_factory.batch_register(test_scene_state, callback=plot_cb)
     # regs = reg_factory.register(demo, test_scene_state, callback=plot_cb)
 
     # test_scene_state = env.observe_scene()
@@ -137,7 +139,7 @@ def main():
 
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
     reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-    test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=False)
+    test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
 
     env.execute_augmented_trajectory(test_aug_traj)
 
