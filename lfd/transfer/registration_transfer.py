@@ -177,9 +177,10 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         self.use_collision_cost = use_collision_cost
         self.init_trajectory_transferer = init_trajectory_transferer
 
-    def opttraj_to_augtraj(self, test_traj, manip, lr2open_finger_traj, lr2close_finger_traj):
+    def opttraj_to_augtraj(self, test_traj, manip_name, lr2open_finger_traj, lr2close_finger_traj):
         full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
         test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
+        return test_aug_traj
 
     def traj_to_points(self, aug_traj, resampling=False):
         active_lr = "r"
@@ -488,7 +489,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
           # Below is probably the same as doing:
           full_traj = (cur_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
           trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(self.sim.robot, 'r', full_traj))
-          #trajpts_traj = self.points_to_array(self.traj_to_points(self.opttraj_to_augtraj(cur_traj, manip, demo_aug_traj_rs.lr2open_finger_traj, demo_aug_traj_rs.lr2close_finger_traj)))
+          #trajpts_traj = self.points_to_array(self.traj_to_points(self.opttraj_to_augtraj(cur_traj, manip_name, demo_aug_traj_rs.lr2open_finger_traj, demo_aug_traj_rs.lr2close_finger_traj),resampling=True))
           traj_diff = trajpts_traj - trajpts_tps;
           abs_traj_diff = sum(sum(abs(traj_diff)))
 
