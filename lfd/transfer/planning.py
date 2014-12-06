@@ -103,9 +103,9 @@ def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj,
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
         orig_dof_vals
-        #with util.suppress_stdout():
-        prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
-        result = trajoptpy.OptimizeProblem(prob) # do optimization
+        with util.suppress_stdout():
+          prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
+          result = trajoptpy.OptimizeProblem(prob) # do optimization
     traj = result.GetTraj()
 
     pose_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "pose"])
@@ -219,8 +219,8 @@ def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2f
                 "type" : "collision",
                 "params" : {
                   "continuous" : True,
-                  "coeffs" : [1000],  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
-                  "dist_pen" : [0.025]  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
+                  "coeffs" : [5000],  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
+                  "dist_pen" : [0.1]  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
                 }
             })
 
@@ -235,37 +235,37 @@ def plan_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2f
               })
 
     # This is the finger following constraint
-    #for (flr2finger_link_name, flr2finger_pts_traj) in zip(flr2finger_link_names, flr2finger_pts_trajs):
-        #for finger_lr, finger_link_name in flr2finger_link_name.items():
-            #finger_rel_pts = flr2finger_rel_pts[finger_lr]
-            #finger_pts_traj = flr2finger_pts_traj[finger_lr]
-            #for (i_step, finger_pts) in enumerate(finger_pts_traj):
-                #if start_fixed and i_step == 0:
-                    #continue
-                #request["costs"].append(
-                    #{"type":"rel_pts",
-                     #"params":{
-                        #"xyzs":finger_pts.tolist(),
-                        #"rel_xyzs":finger_rel_pts.tolist(),
-                        #"link":finger_link_name,
-                        #"timestep":i_step,
-                        #"pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4, # there is a coefficient for each of the 4 points
-                     #}
-                    #})
+    for (flr2finger_link_name, flr2finger_pts_traj) in zip(flr2finger_link_names, flr2finger_pts_trajs):
+        for finger_lr, finger_link_name in flr2finger_link_name.items():
+            finger_rel_pts = flr2finger_rel_pts[finger_lr]
+            finger_pts_traj = flr2finger_pts_traj[finger_lr]
+            for (i_step, finger_pts) in enumerate(finger_pts_traj):
+                if start_fixed and i_step == 0:
+                    continue
+                request["costs"].append(
+                    {"type":"rel_pts",
+                     "params":{
+                        "xyzs":finger_pts.tolist(),
+                        "rel_xyzs":finger_rel_pts.tolist(),
+                        "link":finger_link_name,
+                        "timestep":i_step,
+                        "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4, # there is a coefficient for each of the 4 points
+                     }
+                    })
 
     # Penalize the x direction on right gripper for 36 timesteps
-    penalty = np.zeros([4,3])
-    penalty[:,1] = -100000
-    for i in range(36):
-      request["costs"].append(
-         {"type":"rel_pts_lambdas",
-           "params":{
-             "lambdas":penalty.tolist(),
-             "rel_xyzs":flr2finger_rel_pts['r'].tolist(),
-             "link":flr2finger_link_names[0]['r'],
-             "timestep":i,
-            }
-         })
+    #penalty = np.zeros([4,3])
+    #penalty[:,1] = -100000
+    #for i in range(36):
+      #request["costs"].append(
+         #{"type":"rel_pts_lambdas",
+           #"params":{
+             #"lambdas":penalty.tolist(),
+             #"rel_xyzs":flr2finger_rel_pts['r'].tolist(),
+             #"link":flr2finger_link_names[0]['r'],
+             #"timestep":i,
+            #}
+         #})
     #import IPython as ipy; ipy.embed()
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
@@ -396,13 +396,11 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
             "manip" : manip_name,
             "start_fixed" : start_fixed
         },
-        "traj_costs" : [
+        "costs" : [
         {
             "type" : "joint_vel",
             "params": {"coeffs" : [gamma/(n_steps-1)]}
         },
-        ],
-        "tps_costs" : [
         {
             "type" : "tps",
             "name" : "tps",
@@ -416,15 +414,9 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
             }
         }
         ],
-        "traj_constraints" : [
+        "constraints" : [
         ],
-        "tps_constraints" : [
-        ],
-        "traj_init_info" : {
-            "type":"given_traj",
-            "data":[x.tolist() for x in init_traj],
-        },
-        "tps_init_info" : {
+        "init_info" : {
             "type":"given_traj",
             "data":[x.tolist() for x in init_traj],
             "data_ext":[row.tolist() for row in init_z]
@@ -432,7 +424,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
     }
 
     if use_collision_cost:
-        request["traj_costs"].append(
+        request["costs"].append(
             {
                 "type" : "collision",
                 "params" : {
@@ -443,7 +435,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
             })
 
     if joint_vel_limits is not None:
-        request["traj_constraints"].append(
+        request["constraints"].append(
              {
                 "type" : "joint_vel_limits",
                 "params": {"vals" : joint_vel_limits,
@@ -453,7 +445,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
               })
 
     if closing_pts is not None:
-        request["tps_costs"].append(
+        request["costs"].append(
             {
                 "type":"tps_jac_orth",
                 "params":  {
@@ -470,7 +462,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
             for (i_step, old_finger_pts) in enumerate(old_finger_pts_traj):
                 if start_fixed and i_step == 0:
                     continue
-                request["tps_costs"].append(
+                request["costs"].append(
                     {"type":"tps_rel_pts",
                      "params":{
                         "tps_cost_name":"tps",
@@ -482,30 +474,11 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
                      }
                     })
 
-    '''
-    for (flr2finger_link_name, flr2old_finger_pts_traj) in zip(flr2finger_link_names, flr2old_finger_pts_trajs):
-        for finger_lr, finger_link_name in flr2finger_link_name.items():
-            finger_rel_pts = flr2finger_rel_pts[finger_lr]
-            old_finger_pts_traj = flr2old_finger_pts_traj[finger_lr]
-            for (i_step, old_finger_pts) in enumerate(old_finger_pts_traj):
-                if start_fixed and i_step == 0:
-                    continue
-                request["traj_costs"].append(
-                    {"type":"rel_pts",
-                     "params":{
-                        "xyzs":old_finger_pts.tolist(),
-                        "rel_xyzs":finger_rel_pts.tolist(),
-                        "link":finger_link_name,
-                        "timestep":i_step,
-                        "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
-                     }
-                    })
-    '''
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
-        #with util.suppress_stdout():
-        (prob1, prob2) = trajoptpy.ConstructDecompProblem(s, robot.GetEnv()) # create object that stores optimization problem
-        result = trajoptpy.OptimizeDecompProblem(prob1, prob2) # do optimization
+        with util.suppress_stdout():
+          prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
+          result = trajoptpy.OptimizeProblem(prob) # do optimization
 
     traj = result.GetTraj()
     f.z = result.GetExt()
@@ -755,7 +728,7 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       s_traj = json.dumps(traj_request_i);
       print 'Setting up and solving Traj SQP'
       with openravepy.RobotStateSaver(robot):
-        # with util.suppress_stdout():
+         with util.suppress_stdout():
           prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
           if plotting:
             viewer = trajoptpy.GetViewer(robot.GetEnv())
@@ -804,7 +777,7 @@ def decomp_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_na
       s_tps = json.dumps(tps_request_i)
       print 'Setting up and solving TPS Problem'
       with openravepy.RobotStateSaver(robot):
-        #with util.suppress_stdout():
+        with util.suppress_stdout():
           prob = trajoptpy.ConstructProblem(s_tps, robot.GetEnv())
           if plotting:
             viewer = trajoptpy.GetViewer(robot.GetEnv())
@@ -1022,7 +995,7 @@ def decomp_fit_tps_trajopt(robot, manip_name, flr2finger_link_names, flr2finger_
       s_traj = json.dumps(request_i);
       print 'Setting up and solving Traj SQP'
       with openravepy.RobotStateSaver(robot):
-        #with util.suppress_stdout():
+        with util.suppress_stdout():
           prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
           if plotting:
             viewer = trajoptpy.GetViewer(robot.GetEnv())

@@ -1,6 +1,7 @@
 from __future__ import division
 
 import copy
+import datetime
 import settings
 import json
 import trajoptpy
@@ -32,9 +33,27 @@ class RegistrationAndTrajectoryTransferer(object):
         raise NotImplementedError
 
 class TwoStepRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
-    def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+
+   def points_to_array(self, flr2demo_finger_pts_traj):
+        temp =  np.r_[flr2demo_finger_pts_traj['l'], flr2demo_finger_pts_traj['r']]
+        return temp.reshape(temp.shape[0] * temp.shape[1], temp.shape[2])
+
+   def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+        a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
         test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
+        b = datetime.datetime.now()
+        print 'Runtime: ', b-a
+
+        robot = self.trajectory_transferer.sim.robot
+        full_traj = test_aug_traj.get_full_traj(robot)
+        handles = []
+        trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(robot, 'r', full_traj))
+        if plotting:
+            handles.extend(sim_util.draw_finger_pts_traj(self.trajectory_transferer.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+            if self.trajectory_transferer.sim.viewer:
+              self.trajectory_transferer.sim.viewer.Step()
+              self.trajectory_transferer.sim.viewer.Idle()
         return test_aug_traj
 
 class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
@@ -56,7 +75,30 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
         self.use_collision_cost = use_collision_cost
         self.init_trajectory_transferer = init_trajectory_transferer
 
+    def traj_to_points(self, aug_traj, resampling=False):
+        active_lr = "r"
+        if resampling:
+            _, timesteps_rs = sim_util.unif_resample(np.c_[(1./settings.JOINT_LENGTH_PER_STEP) * np.concatenate([aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1),
+                                                           (1./settings.FINGER_CLOSE_RATE) * np.concatenate([aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)],
+                                                     1.)
+            demo_aug_traj_rs = aug_traj.get_resampled_traj(timesteps_rs)
+        else:
+            demo_aug_traj_rs = aug_traj
+
+        lr = 'r'
+        arm_name = {"rl":"leftarm", "r":"rightarm"}[lr]
+        finger_name = "%s_gripper_l_finger_joint"%lr
+
+        flr2demo_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.sim.robot, lr, (demo_aug_traj_rs.lr2ee_traj[lr], demo_aug_traj_rs.lr2finger_traj[lr]))
+        return flr2demo_finger_pts_traj_rs
+
+    def points_to_array(self, flr2demo_finger_pts_traj):
+        temp =  np.r_[flr2demo_finger_pts_traj['l'], flr2demo_finger_pts_traj['r']]
+        return temp.reshape(temp.shape[0] * temp.shape[1], temp.shape[2])
+
+
     def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+        a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
 
         handles = []
@@ -132,17 +174,36 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
             init_traj[:,dof_inds.index(joint_ind)] = self.sim.robot.GetDOFLimits([joint_ind])[0][0]
 
         print "planning joint TPS and finger points trajectory following"
-        test_traj, obj_value, tps_rel_pts_costs, tps_cost = planning.decomp_fit_tps_follow_finger_pts_trajs(self.sim.robot, manip_name,
+        test_traj, obj_value, tps_rel_pts_costs, tps_cost = planning.joint_fit_tps_follow_finger_pts_trajs(self.sim.robot, manip_name,
                                                                               flr2finger_link_names, flr2finger_rel_pts,
                                                                               flr2demo_finger_pts_trajs_rs, init_traj,
                                                                               reg.f,
                                                                               use_collision_cost=self.use_collision_cost,
                                                                               start_fixed=False,
-                                                                              alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma, plotting=plotting)
+                                                                              alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma)
 
+        b = datetime.datetime.now()
+        print 'Runtime: ', b-a
         full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
         test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
 
+        handles = []
+        trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(self.sim.robot, 'r', full_traj))
+        if plotting:
+            handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+                #for finger_lr in 'lr':
+                #    flr2new_transformed_finger_pts_traj_rs[finger_lr] = reg.f.transform_points(np.concatenate(flr2demo_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
+                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
+                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+                #handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+                #flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
+                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
+            if self.sim.viewer:
+              self.sim.viewer.Step()
+              self.sim.viewer.Idle()
+
+
+        handles = []
         if plotting:
             for lr in active_lr:
                 flr2new_transformed_finger_pts_traj_rs = {}
@@ -204,6 +265,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         return temp.reshape(temp.shape[0] * temp.shape[1], temp.shape[2])
 
     def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+        a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
 
         ######## INITIALIZATION ##########
@@ -219,20 +281,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         x_na = reg.f.x_na
         y_ng = reg.f.y_ng
         wt_n = reg.f.wt_n
-
-
-        # lambda_bd[:,0] = .001
-        # lambda_bd[:,0] = -.0002
-        # lambda_bd[:,1] = -.0002
-        # lambda_bd[:,1] = .0002
-        # lambda_bd[:,2] = -.0002
-        # lambda_bd[:,2] = .0002
-
-        (n,d) = reg.f.x_na.shape
-        bend_coefs = np.ones(d) * reg.f.bend_coef if np.isscalar(reg.f.bend_coef) else reg.f.bend_coef
-        rot_coefs = np.ones(d) * reg.f.rot_coef if np.isscalar(reg.f.rot_coef) else reg.f.rot_coef
-        theta, (N, z) = tps.tps_fit_decomp(reg.f.x_na, reg.f.y_ng, bend_coefs, rot_coefs, reg.f.wt_n, tau_bd, lambda_bd, ret_factorization=True)
-        reg.f.update(reg.f.x_na, reg.f.y_ng, bend_coefs, rot_coefs, reg.f.wt_n, theta, N=N, z=z)
 
         warped_points = reg.f.transform_points(tau_bd)
         target_traj = []
@@ -329,17 +377,9 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             init_traj[:,dof_inds.index(joint_ind)] = self.sim.robot.GetDOFLimits([joint_ind])[0][0]
 
         print "planning joint TPS and finger points trajectory following"
-        #test_traj, obj_value, tps_rel_pts_costs, tps_cost = planning.decomp_fit_tps_follow_finger_pts_trajs(self.sim.robot, manip_name,
-        #                                                                      flr2finger_link_names, flr2finger_rel_pts,
-        #                                                                      flr2demo_finger_pts_trajs_rs, init_traj,
-        #                                                                      reg.f,
-        #                                                                      use_collision_cost=self.use_collision_cost,
-        #                                                                      start_fixed=False,
-        #                                                                      alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma)
         robot = self.sim.robot
         flr2demo_finger_pts_trajs = flr2demo_finger_pts_trajs_rs
         f = reg.f
-        start_fixed = False
 
         n_steps = init_traj.shape[0]
         dof_inds = sim_util.dof_inds_from_name(robot, manip_name)
@@ -363,6 +403,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         N = f.N
         init_z = f.z
 
+        start_fixed = False
         if start_fixed:
             init_traj = np.r_[robot.GetDOFValues(dof_inds)[None,:], init_traj[1:]]
             sim_util.unwrap_in_place(init_traj, dof_inds)
@@ -382,14 +423,17 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             "constraints" : [
             ],
         }
+        penalty_coeffs = [2000]
+        dist_pen = [0.025]
+        #dist_pen = [0.025]
         if self.use_collision_cost:
             request["costs"].append(
                 {
                     "type" : "collision",
                     "params" : {
                       "continuous" : True,
-                      "coeffs" : [1000],  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
-                      "dist_pen" : [0.025]  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
+                      "coeffs" : penalty_coeffs,  # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
+                      "dist_pen" : dist_pen  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
                     }
                 })
         #if joint_vel_limits is not None:
@@ -407,10 +451,10 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
 
         nu = 0.0005
         # nu = 0
-        traj_diff_thresh = 3e-3*lambda_bd.size
+        traj_diff_thresh = 1e-3*lambda_bd.size
+        #print traj_diff_thresh
         max_iter = 20
         cur_traj = init_traj
-        import datetime; print datetime.datetime.now().time()
         del handles
         for itr in range(max_iter):
           handles = []
@@ -431,16 +475,16 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             }
           # Add lambdas to the trajectory optimization problem
           traj_dim = int(lambda_bd.shape[0]/2)
-          for i_step in range(0,traj_dim*2, 4):
-            if i_step < traj_dim:
-              finger_lr = 'l'
-              traj_step = i_step
-            else:
-              finger_lr = 'r'
-              traj_step = i_step - traj_dim
-            finger_link_name = flr2finger_link_name[finger_lr]
-            finger_rel_pts = flr2finger_rel_pts[finger_lr]
-            if start_fixed and traj_step==0: continue
+          #for i_step in range(0,traj_dim*2, 4):
+            # if i_step < traj_dim:
+             #  finger_lr = 'l'
+              # traj_step = i_step
+            #else:
+              #finger_lr = 'r'
+              #traj_step = i_step - traj_dim
+            #finger_link_name = flr2finger_link_name[finger_lr]
+            #finger_rel_pts = flr2finger_rel_pts[finger_lr]
+            #if start_fixed and traj_step==0: continue
             # request_i["costs"].append(
             #     {"type":"rel_pts_lambdas",
             #       "params":{
@@ -451,6 +495,12 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             #         "pos_coeffs":[self.beta_pos/n_steps]*4,
             #         }
             #       })
+          if itr == 1:
+            beta_pos = self.beta_pos / 100
+          elif itr < 4:
+            beta_pos = self.beta_pos / 10
+          else:
+            beta_pos = self.beta_pos
           for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
               for finger_lr, finger_link_name in flr2finger_link_name.items():
                   finger_rel_pts = flr2finger_rel_pts[finger_lr]
@@ -465,12 +515,12 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                               "rel_xyzs":finger_rel_pts.tolist(),
                               "link":finger_link_name,
                               "timestep":i_step,
-                              "pos_coeffs":[np.sqrt(self.beta_pos/n_steps/10)]*4,
+                              "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
                             }
                           })
           s_traj = json.dumps(request_i);
-          sys.stdout.write('Solving Traj SQP. ')
-          sys.stdout.flush()
+          #sys.stdout.write('Solving Traj SQP. ')
+          #sys.stdout.flush()
           with openravepy.RobotStateSaver(robot):
             with util.suppress_stdout():
               prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
@@ -482,14 +532,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
 
           ########### PLOT TRAJ TRAJECTORY HERE ############
 
-          print('Solving TPS')
-          # Optimize TPS.
-          theta, (N, z) = tps.tps_fit_decomp(x_na, y_ng, bend_coefs, rot_coefs, wt_n, tau_bd, -lambda_bd, ret_factorization=True)
-          f.update(x_na, y_ng, bend_coefs, rot_coefs, wt_n, theta, N=N, z=z)
-
-          ########## PLOT TPS TRAJECTORY HERE ###############
-
-
           # Compute difference between trajectory points.
           trajpts_tps = f.transform_points(tau_bd)
           # Below is probably the same as doing:
@@ -499,44 +541,66 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
           traj_diff = trajpts_traj - trajpts_tps;
           abs_traj_diff = sum(sum(abs(traj_diff)))
 
-          print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
+          #print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
           lambda_bd = lambda_bd - nu * traj_diff
+
+
+          #print('Solving TPS')
+          # Optimize TPS.
+          theta, (N, z) = tps.tps_fit_decomp(x_na, y_ng, bend_coefs, rot_coefs, wt_n, tau_bd, -lambda_bd, ret_factorization=True)
+          f.update(x_na, y_ng, bend_coefs, rot_coefs, wt_n, theta, N=N, z=z)
+
+          ########## PLOT TPS TRAJECTORY HERE ###############
+
+
+          # Compute difference between trajectory points.
+          # trajpts_tps = f.transform_points(tau_bd)
+          # Below is probably the same as doing:
+          # full_traj = (cur_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
+          # trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(self.sim.robot, 'r', full_traj))
+          #trajpts_traj = self.points_to_array(self.traj_to_points(self.opttraj_to_augtraj(cur_traj, manip_name, demo_aug_traj_rs.lr2open_finger_traj, demo_aug_traj_rs.lr2close_finger_traj),resampling=True))
+          # traj_diff = trajpts_traj - trajpts_tps;
+          # abs_traj_diff = sum(sum(abs(traj_diff)))
+
+          #print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
+          # lambda_bd = lambda_bd - nu * traj_diff
 
           lr = 'r'
 
-          if plotting:
-              # handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':target_traj}, (0,0,1)))
-              handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_tps.reshape((-1,4,3))}, (0,1,0)))
-              handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
-              # handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-              # handles.append(self.sim.env.drawlinestrip(test_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
-              # transformed_ee_traj_rs = reg.f.transform_hmats(test_aug_traj.lr2ee_traj[lr])
-              # handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
-              if self.sim.viewer:
-                self.sim.viewer.Step()
-                raw_input("look at trajs")
+          #if plotting:
+              #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_tps.reshape((-1,4,3))}, (0,1,0)))
+              #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+              #if self.sim.viewer:
+                #self.sim.viewer.Step()
+                #self.sim.viewer.Idle()
 
 
           if abs_traj_diff < traj_diff_thresh:
-            print "TRAJECTORIES CONVERGED"
+            #print "TRAJECTORIES CONVERGED"
             break
 
-        print 'Done optimizing'
+        #print 'Done optimizing'
 
-        import datetime; print datetime.datetime.now().time()
+        b = datetime.datetime.now()
+        print 'runtime: ', b-a
         full_traj = (cur_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
         test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
 
+        handles = []
+        trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(self.sim.robot, 'r', full_traj))
         if plotting:
+            handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
             for lr in active_lr:
                 flr2new_transformed_finger_pts_traj_rs = {}
-                for finger_lr in 'lr':
-                    flr2new_transformed_finger_pts_traj_rs[finger_lr] = reg.f.transform_points(np.concatenate(flr2demo_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
-                handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
-                handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-                flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
-                handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
+                #for finger_lr in 'lr':
+                #    flr2new_transformed_finger_pts_traj_rs[finger_lr] = reg.f.transform_points(np.concatenate(flr2demo_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
+                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
+                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+                #handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
+                #flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
+                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
             if self.sim.viewer:
               self.sim.viewer.Step()
+              self.sim.viewer.Idle()
 
         return test_aug_traj
