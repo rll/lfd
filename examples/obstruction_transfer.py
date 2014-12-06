@@ -29,6 +29,7 @@ def generate_cloud(x_center_pert=0, max_noise=0.02):
     grid = np.array(np.meshgrid(np.linspace(-.2,.2,5), np.linspace(-.3,.3,8))).T.reshape((-1,2))
     grid = np.c_[grid, np.zeros(len(grid))] + np.array([.6, 0, table_height+max_noise])
     cloud = grid + x_center_pert * np.c_[(0.3 - np.abs(grid[:,1]-0))/0.3, np.zeros((len(grid),2))] + (np.random.random((len(grid), 3)) - 0.5) * 2 * max_noise
+    print cloud.shape
     return cloud
 
 def get_move_traj(env, robot, t_start, t_end, start_fixed):
@@ -75,7 +76,7 @@ def main():
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85, .1], dynamic=False))
-    box = BoxSimulationObject("box", cyl_pos, [.1, .1, .2], dynamic=True)
+    box = BoxSimulationObject("obstacle", cyl_pos, [.1, .1, .2], dynamic=True)
     sim_objs.append(box)
     # cyl_sim_objs = create_cylinder(cyl_pos, cyl_radius, cyl_height)
     # sim_objs.extend(cyl_sim_objs)

@@ -12,13 +12,13 @@ from lfd.demonstration.demonstration import Demonstration
 from lfd.registration.registration import TpsRpmRegistrationFactory
 from lfd.registration.plotting_openrave import registration_plot_cb
 from lfd.transfer.transfer import FingerTrajectoryTransferer
-from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer
+from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer, UnifiedRegistrationAndTrajectoryTransferer, DecompRegistrationAndTrajectoryTransferer
 from move_rope import create_augmented_traj, create_rope
 
 def create_cylinder(cyl_pos1, cyl_radius, cyl_height):
     sample_grid = np.array(np.meshgrid(np.linspace(0,1,5), np.linspace(0,1,5))).T.reshape((-1,2))
     cyl_sim_objs = []
-    cyl_sim_objs.append(CylinderSimulationObject("cyl0", cyl_pos1, cyl_radius, cyl_height, dynamic=True))
+    cyl_sim_objs.append(CylinderSimulationObject("obstacle0", cyl_pos1, cyl_radius, cyl_height, dynamic=True))
     return cyl_sim_objs
 
 def color_cylinders(cyl_sim_objs):
@@ -54,7 +54,7 @@ def main():
     table_height = 0.77
     cyl_radius = 0.03
     cyl_height = 0.2
-    cyl_pos = np.r_[.25, .15, table_height+cyl_height/2]
+    cyl_pos = np.r_[.25, 0, table_height+cyl_height/2]
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85, .1], dynamic=False))
@@ -95,7 +95,7 @@ def main():
     traj_transferer = FingerTrajectoryTransferer(sim)
 
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
-    reg_and_traj_transferer = UnifiedRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
     test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
 
     env.execute_augmented_trajectory(test_aug_traj)
