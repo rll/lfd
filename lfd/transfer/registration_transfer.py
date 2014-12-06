@@ -423,7 +423,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             "constraints" : [
             ],
         }
-        penalty_coeffs = [2000]
+        penalty_coeffs = [3000]
         dist_pen = [0.025]
         #dist_pen = [0.025]
         if self.use_collision_cost:
@@ -475,26 +475,26 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             }
           # Add lambdas to the trajectory optimization problem
           traj_dim = int(lambda_bd.shape[0]/2)
-          #for i_step in range(0,traj_dim*2, 4):
-            # if i_step < traj_dim:
-             #  finger_lr = 'l'
-              # traj_step = i_step
-            #else:
-              #finger_lr = 'r'
-              #traj_step = i_step - traj_dim
-            #finger_link_name = flr2finger_link_name[finger_lr]
-            #finger_rel_pts = flr2finger_rel_pts[finger_lr]
-            #if start_fixed and traj_step==0: continue
-            # request_i["costs"].append(
-            #     {"type":"rel_pts_lambdas",
-            #       "params":{
-            #         "lambdas":(-lambda_bd[traj_step:traj_step+4,:]).tolist(),
-            #         "rel_xyzs":finger_rel_pts.tolist(),
-            #         "link":finger_link_name,
-            #         "timestep":traj_step/4,
-            #         "pos_coeffs":[self.beta_pos/n_steps]*4,
-            #         }
-            #       })
+          for i_step in range(0,traj_dim*2, 4):
+            if i_step < traj_dim:
+               finger_lr = 'l'
+               traj_step = i_step
+            else:
+              finger_lr = 'r'
+              traj_step = i_step - traj_dim
+            finger_link_name = flr2finger_link_name[finger_lr]
+            finger_rel_pts = flr2finger_rel_pts[finger_lr]
+            if start_fixed and traj_step==0: continue
+            request_i["costs"].append(
+                 {"type":"rel_pts_lambdas",
+                   "params":{
+                     "lambdas":(-lambda_bd[traj_step:traj_step+4,:]).tolist(),
+                     "rel_xyzs":finger_rel_pts.tolist(),
+                     "link":finger_link_name,
+                     "timestep":traj_step/4,
+                     "pos_coeffs":[self.beta_pos/n_steps]*4,
+                     }
+                   })
           if itr == 1:
             beta_pos = self.beta_pos / 100
           elif itr < 4:
@@ -567,12 +567,12 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
 
           lr = 'r'
 
-          #if plotting:
-              #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_tps.reshape((-1,4,3))}, (0,1,0)))
-              #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
-              #if self.sim.viewer:
-                #self.sim.viewer.Step()
-                #self.sim.viewer.Idle()
+          if plotting:
+              handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_tps.reshape((-1,4,3))}, (0,1,0)))
+              handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
+              if self.sim.viewer:
+                self.sim.viewer.Step()
+                self.sim.viewer.Idle()
 
 
           if abs_traj_diff < traj_diff_thresh:
