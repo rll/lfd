@@ -431,6 +431,30 @@ def loglinspace(start, stop, num):
         return np.exp(np.linspace(np.log(start), np.log(stop), num))
 
 def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
+    """Example:
+        >>> from lfd.registration.tps import balance_matrix3_cpu
+        >>> import numpy as np
+        >>> n, m = (100, 150)
+        >>> prob_nm = np.random.random((n,m))
+        >>> p_n = 0.1 * np.random.random(n)
+        >>> p_m = 0.1 * np.random.random(m)
+        >>> outlierfrac = 1e-2
+        >>> prob_nm0 = balance_matrix3_cpu(prob_nm, 10, p_n, p_m, outlierfrac)[0]
+        >>> prob_NM = np.empty((n+1, m+1))
+        >>> prob_NM[:n, :m] = prob_nm.copy()
+        >>> prob_NM[:n, m] = p_n.copy()
+        >>> prob_NM[n, :m] = p_m.copy()
+        >>> prob_NM[n, m] = np.sqrt(np.sum(p_n)*np.sum(p_m))
+        >>> a_N = np.r_[np.ones(n), m*outlierfrac]
+        >>> b_M = np.r_[np.ones(m), n*outlierfrac]
+        >>> for _ in xrange(10):
+        ...     prob_NM = prob_NM / (prob_NM.sum(axis=0) / b_M)[None, :]
+        ...     prob_NM = prob_NM / (prob_NM.sum(axis=1) / a_N)[:, None]
+        ... 
+        >>> prob_nm1 = prob_NM[:n,:m]
+        >>> np.allclose(prob_nm0, prob_nm1)
+        True
+    """
     n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1), 'f4')
     prob_NM[:n, :m] = prob_nm
