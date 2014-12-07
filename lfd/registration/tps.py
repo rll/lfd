@@ -431,7 +431,10 @@ def loglinspace(start, stop, num):
         return np.exp(np.linspace(np.log(start), np.log(stop), num))
 
 def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
-    """Example:
+    """Balances matrix, including the prior row and column.
+    
+    Example:
+    
         >>> from lfd.registration.tps import balance_matrix3_cpu
         >>> import numpy as np
         >>> n, m = (100, 150)
