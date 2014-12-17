@@ -98,6 +98,8 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
 
 
     def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+        print 'alpha', self.alpha
+        print 'beta_pos', self.beta_pos
         a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
 
@@ -264,7 +266,10 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         temp =  np.r_[flr2demo_finger_pts_traj['l'], flr2demo_finger_pts_traj['r']]
         return temp.reshape(temp.shape[0] * temp.shape[1], temp.shape[2])
 
+    # @profile
     def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+        print 'alpha = ', self.alpha
+        print 'beta = ', self.beta_pos
         a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
 
@@ -449,16 +454,29 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         # Now that we've made the initial request that is the same every iteration,
         # we make the loop and add on the things that change.
 
-        nu = 0.0005
+        # nu = 0.0005
+        # nu = 0.00017
+        nu = 0.0001
+        # nu = 0.0003
+        # nu = 0.00003
+        # nu = 0.001
+        # nu = 0.001
+        # nu = 0.00005
         # nu = 0
         traj_diff_thresh = 1e-3*lambda_bd.size
         #print traj_diff_thresh
-        max_iter = 20
+        # max_iter = 20
+        # max_iter = 100
+        max_iter = 10
         cur_traj = init_traj
         del handles
+        start_time = datetime.datetime.now()
         for itr in range(max_iter):
           handles = []
-          nu = nu/1.4
+          # nu = nu * 1.4
+          # nu = nu/1.1
+          # nu = nu/1.1
+          # nu = nu/1.4
           # if itr == 3:
           #   nu = nu/10
           request_i = copy.deepcopy(request)
@@ -496,11 +514,12 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                      }
                    })
           if itr == 1:
-            beta_pos = self.beta_pos / 100
-          elif itr < 4:
-            beta_pos = self.beta_pos / 10
+            beta_pos = self.beta_pos / 30
+          elif itr < 3:
+            beta_pos = self.beta_pos / 3
           else:
             beta_pos = self.beta_pos
+          # beta_pos = self.beta_pos
           for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
               for finger_lr, finger_link_name in flr2finger_link_name.items():
                   finger_rel_pts = flr2finger_rel_pts[finger_lr]
@@ -523,11 +542,16 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
           #sys.stdout.flush()
           with openravepy.RobotStateSaver(robot):
             with util.suppress_stdout():
-              prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
-              if plotting:
-                viewer = trajoptpy.GetViewer(robot.GetEnv())
-                # trajoptpy.SetInteractive(True)
-              result = trajoptpy.OptimizeProblem(prob)
+                prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
+                if plotting:
+                  viewer = trajoptpy.GetViewer(robot.GetEnv())
+                  trajoptpy.SetInteractive(True)
+            if itr == 0:
+              result = trajoptpy.OptimizePartialProblem(prob, 5)
+            else:
+              result = trajoptpy.OptimizePartialProblem(prob, 2)
+            # result = trajoptpy.OptimizeProblem(prob)
+            # result = trajoptpy.OptimizePartialProblem(prob, 2)
           cur_traj = result.GetTraj()
 
           ########### PLOT TRAJ TRAJECTORY HERE ############
@@ -541,13 +565,17 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
           traj_diff = trajpts_traj - trajpts_tps;
           abs_traj_diff = sum(sum(abs(traj_diff)))
 
-          #print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
+          obj_value = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts()])
+          print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
+          print "obj_value ", obj_value
           lambda_bd = lambda_bd - nu * traj_diff
 
 
           #print('Solving TPS')
           # Optimize TPS.
+          # tps_time = datetime.datetime.now()
           theta, (N, z) = tps.tps_fit_decomp(x_na, y_ng, bend_coefs, rot_coefs, wt_n, tau_bd, -lambda_bd, ret_factorization=True)
+          # print "tps time",  datetime.datetime.now() - tps_time
           f.update(x_na, y_ng, bend_coefs, rot_coefs, wt_n, theta, N=N, z=z)
 
           ########## PLOT TPS TRAJECTORY HERE ###############
@@ -573,6 +601,10 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
               if self.sim.viewer:
                 self.sim.viewer.Step()
                 self.sim.viewer.Idle()
+
+          end_time = datetime.datetime.now()
+          print 'loop took ', end_time - start_time
+          start_time = end_time
 
 
           if abs_traj_diff < traj_diff_thresh:
