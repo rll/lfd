@@ -100,7 +100,6 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
     def transfer(self, demo, test_scene_state, callback=None, plotting=False):
         print 'alpha', self.alpha
         print 'beta_pos', self.beta_pos
-        a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
 
         handles = []
@@ -184,8 +183,6 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
                                                                               start_fixed=False,
                                                                               alpha=self.alpha, beta_pos=self.beta_pos, gamma=self.gamma)
 
-        b = datetime.datetime.now()
-        print 'Runtime: ', b-a
         full_traj = (test_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
         test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
 
@@ -224,7 +221,7 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
 class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
     def __init__(self, registration_factory, trajectory_transferer,
                  alpha=settings.ALPHA, # alpha not used.
-                 beta_pos=settings.BETA_POS, # beta not used, might be used later or to scale lambda
+                 beta_pos=settings.BETA_POS,
                  gamma=settings.GAMMA,
                  use_collision_cost=settings.USE_COLLISION_COST,
                  init_trajectory_transferer=None):
@@ -270,7 +267,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
     def transfer(self, demo, test_scene_state, callback=None, plotting=False):
         print 'alpha = ', self.alpha
         print 'beta = ', self.beta_pos
-        a = datetime.datetime.now()
         reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
 
         ######## INITIALIZATION ##########
@@ -278,7 +274,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         # Demonstration Trajectory Points
         tau_bd = self.points_to_array(self.traj_to_points(demo.aug_traj, resampling=True))
         # Dual variables
-        lambda_bd = np.zeros(tau_bd.shape)
+        nu_bd = np.zeros(tau_bd.shape)
         # TPS Parameters, point clouds, etc.
         (n,d) = reg.f.x_na.shape
         bend_coefs = np.ones(d) * reg.f.bend_coef if np.isscalar(reg.f.bend_coef) else reg.f.bend_coef
@@ -291,7 +287,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         target_traj = []
         i = 0
         finger_points = []
-        #import ipdb; ipdb.set_trace()
         for point in warped_points:
             finger_points.append(point)
             if i % 4 == 3:
@@ -299,7 +294,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                 finger_points = []
             i = i+1
 
-        # test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
 
         handles = []
         lr = 'r'
@@ -310,20 +304,9 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             test_color = reg.test_scene_state.color
             handles.append(self.sim.env.plot3(demo_cloud[:,:3], 2, demo_color if demo_color is not None else (1,0,0)))
             handles.append(self.sim.env.drawlinestrip(demo.aug_traj.lr2ee_traj[lr][:,:3,3], 2, (1,0,0)))
-            # handles.append(self.sim.env.drawlinestrip(warped_points, 2, (0,0,1)))
             handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':target_traj}, (0,0,1)))
-            # handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-            # handles.append(self.sim.env.drawlinestrip(test_aug_traj_rs.lr2ee_traj[lr][:,:3,3], 2, (1,1,0)))
-            # transformed_ee_traj_rs = reg.f.transform_hmats(test_aug_traj.lr2ee_traj[lr])
-            # handles.append(self.sim.env.drawlinestrip(transformed_ee_traj_rs[:,:3,3], 2, (0,1,0)))
             if self.sim.viewer:
               self.sim.viewer.Step()
-
-            # handles.append(self.sim.env.plot3(test_cloud[:,:3], 2, test_color if test_color is not None else (0,0,1)))
-            # if self.sim.viewer:
-            #   self.sim.viewer.Step()
-
-        #import ipdb; ipdb.set_trace()
 
         active_lr = ""
         for lr in 'lr':
@@ -430,7 +413,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         }
         penalty_coeffs = [3000]
         dist_pen = [0.025]
-        #dist_pen = [0.025]
         if self.use_collision_cost:
             request["costs"].append(
                 {
@@ -441,48 +423,20 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                       "dist_pen" : dist_pen  # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
                     }
                 })
-        #if joint_vel_limits is not None:
-        #    request["constraints"].append(
-        #        {
-        #            "type" : "joint_vel_limits",
-        #            "params": {"vals" : joint_vel_limits,
-        #                      "first_step" : 0,
-        #                      "last_step" : n_steps-1
-        #                      }
-        #          })
-
         # Now that we've made the initial request that is the same every iteration,
         # we make the loop and add on the things that change.
-
-        # nu = 0.0005
-        # nu = 0.00017
-        nu = 0.0001
-        # nu = 0.0003
-        # nu = 0.00003
-        # nu = 0.001
-        # nu = 0.001
-        # nu = 0.00005
-        # nu = 0
-        traj_diff_thresh = 1e-3*lambda_bd.size
-        #print traj_diff_thresh
-        # max_iter = 20
-        # max_iter = 100
+        eta = 0.0001
+        traj_diff_thresh = 1e-3*nu_bd.size
         max_iter = 10
         cur_traj = init_traj
         del handles
-        start_time = datetime.datetime.now()
+
+        ########### MAIN LOOP ###############
         for itr in range(max_iter):
           handles = []
-          # nu = nu * 1.4
-          # nu = nu/1.1
-          # nu = nu/1.1
-          # nu = nu/1.4
-          # if itr == 3:
-          #   nu = nu/10
           request_i = copy.deepcopy(request)
           flr2transformed_finger_pts_traj = {}
-          # right arm only...
-          # import ipdb; ipdb.set_trace()
+          # right arm only.
           for finger_lr in 'lr':
             flr2transformed_finger_pts_traj[finger_lr] = f.transform_points(np.concatenate(flr2demo_finger_pts_trajs[0][finger_lr], axis=0)).reshape((-1,4,3))
           flr2transformed_finger_pts_trajs = [flr2transformed_finger_pts_traj]
@@ -491,8 +445,8 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                 "type":"given_traj",
                 "data":[x.tolist() for x in cur_traj],
             }
-          # Add lambdas to the trajectory optimization problem
-          traj_dim = int(lambda_bd.shape[0]/2)
+          # Add nus to the trajectory optimization problem
+          traj_dim = int(nu_bd.shape[0]/2)
           for i_step in range(0,traj_dim*2, 4):
             if i_step < traj_dim:
                finger_lr = 'l'
@@ -506,7 +460,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             request_i["costs"].append(
                  {"type":"rel_pts_lambdas",
                    "params":{
-                     "lambdas":(-lambda_bd[traj_step:traj_step+4,:]).tolist(),
+                     "lambdas":(-nu_bd[traj_step:traj_step+4,:]).tolist(),
                      "rel_xyzs":finger_rel_pts.tolist(),
                      "link":finger_link_name,
                      "timestep":traj_step/4,
@@ -519,7 +473,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             beta_pos = self.beta_pos / 3
           else:
             beta_pos = self.beta_pos
-          # beta_pos = self.beta_pos
           for (flr2finger_link_name, flr2transformed_finger_pts_traj) in zip(flr2finger_link_names, flr2transformed_finger_pts_trajs):
               for finger_lr, finger_link_name in flr2finger_link_name.items():
                   finger_rel_pts = flr2finger_rel_pts[finger_lr]
@@ -538,8 +491,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                             }
                           })
           s_traj = json.dumps(request_i);
-          #sys.stdout.write('Solving Traj SQP. ')
-          #sys.stdout.flush()
           with openravepy.RobotStateSaver(robot):
             with util.suppress_stdout():
                 prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
@@ -550,11 +501,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
               result = trajoptpy.OptimizePartialProblem(prob, 5)
             else:
               result = trajoptpy.OptimizePartialProblem(prob, 2)
-            # result = trajoptpy.OptimizeProblem(prob)
-            # result = trajoptpy.OptimizePartialProblem(prob, 2)
           cur_traj = result.GetTraj()
-
-          ########### PLOT TRAJ TRAJECTORY HERE ############
 
           # Compute difference between trajectory points.
           trajpts_tps = f.transform_points(tau_bd)
@@ -568,30 +515,11 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
           obj_value = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts()])
           print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
           print "obj_value ", obj_value
-          lambda_bd = lambda_bd - nu * traj_diff
+          nu_bd = nu_bd - eta * traj_diff
 
 
-          #print('Solving TPS')
-          # Optimize TPS.
-          # tps_time = datetime.datetime.now()
-          theta, (N, z) = tps.tps_fit_decomp(x_na, y_ng, bend_coefs, rot_coefs, wt_n, tau_bd, -lambda_bd, ret_factorization=True)
-          # print "tps time",  datetime.datetime.now() - tps_time
+          theta, (N, z) = tps.tps_fit_decomp(x_na, y_ng, bend_coefs, rot_coefs, wt_n, tau_bd, -nu_bd, ret_factorization=True)
           f.update(x_na, y_ng, bend_coefs, rot_coefs, wt_n, theta, N=N, z=z)
-
-          ########## PLOT TPS TRAJECTORY HERE ###############
-
-
-          # Compute difference between trajectory points.
-          # trajpts_tps = f.transform_points(tau_bd)
-          # Below is probably the same as doing:
-          # full_traj = (cur_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
-          # trajpts_traj = self.points_to_array(sim_util.get_finger_pts_traj(self.sim.robot, 'r', full_traj))
-          #trajpts_traj = self.points_to_array(self.traj_to_points(self.opttraj_to_augtraj(cur_traj, manip_name, demo_aug_traj_rs.lr2open_finger_traj, demo_aug_traj_rs.lr2close_finger_traj),resampling=True))
-          # traj_diff = trajpts_traj - trajpts_tps;
-          # abs_traj_diff = sum(sum(abs(traj_diff)))
-
-          #print "Absolute diff between traj pts: ", abs_traj_diff, ". Warp cost: ", f.get_objective()
-          # lambda_bd = lambda_bd - nu * traj_diff
 
           lr = 'r'
 
@@ -602,19 +530,12 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                 self.sim.viewer.Step()
                 self.sim.viewer.Idle()
 
-          end_time = datetime.datetime.now()
-          print 'loop took ', end_time - start_time
-          start_time = end_time
 
 
+          # Trajectories converged.
           if abs_traj_diff < traj_diff_thresh:
-            #print "TRAJECTORIES CONVERGED"
             break
 
-        #print 'Done optimizing'
-
-        b = datetime.datetime.now()
-        print 'runtime: ', b-a
         full_traj = (cur_traj, sim_util.dof_inds_from_name(self.sim.robot, manip_name))
         test_aug_traj = demonstration.AugmentedTrajectory.create_from_full_traj(self.sim.robot, full_traj, lr2open_finger_traj=demo_aug_traj_rs.lr2open_finger_traj, lr2close_finger_traj=demo_aug_traj_rs.lr2close_finger_traj)
 
@@ -624,13 +545,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
             for lr in active_lr:
                 flr2new_transformed_finger_pts_traj_rs = {}
-                #for finger_lr in 'lr':
-                #    flr2new_transformed_finger_pts_traj_rs[finger_lr] = reg.f.transform_points(np.concatenate(flr2demo_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
-                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
-                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, {'r':trajpts_traj.reshape((-1, 4,3))}, (1,0,0)))
-                #handles.append(self.sim.env.drawlinestrip(test_aug_traj.lr2ee_traj[lr][:,:3,3], 2, (0,0,1)))
-                #flr2test_finger_pts_traj = sim_util.get_finger_pts_traj(self.sim.robot, lr, full_traj)
-                #handles.extend(sim_util.draw_finger_pts_traj(self.sim, flr2test_finger_pts_traj, (0,0,1)))
             if self.sim.viewer:
               self.sim.viewer.Step()
               self.sim.viewer.Idle()
