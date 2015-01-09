@@ -417,7 +417,7 @@ def gauss_transform(A, B, scale):
     g = -2. * (cost[:,:,None] * dist).sum(1) / (m * n * (scale**2))
     return f, g
 
-def L2_distance(x_nd, y_md, rad):
+def l2_distance(x_nd, y_md, rad):
     """
     Compute the L2 distance between the two Gaussian mixture densities constructed from a moving 'model' point set and a fixed 'scene' point set at a given 'scale'. The term that only involves the fixed 'scene' is excluded from the returned distance.  The gradient with respect to the 'model' is calculated and returned as well.
     """
@@ -427,51 +427,26 @@ def L2_distance(x_nd, y_md, rad):
     g = 2*g1 - 2*g2
     return f,g
 
-def prepare_TPS_basis(x_nd):
-    """
-    Return the basis for performing TPS transforms and the kernel matrix for computing the bending energy.
-    """
-    n,d = x_nd.shape
-    K_nn = tps_kernel_matrix(x_nd)
-    Pn = np.c_[np.ones((n,1)), x_nd]
-    u, s, vh = np.linalg.svd(Pn)
-    PP = u[:,d+1:]
-    KPP = K_nn.dot(PP)
-    TPS_basis = np.c_[Pn, KPP]
-    TPS_kernel = PP.T.dot(KPP)
-    return TPS_basis,TPS_kernel
-
-def obj_L2_TPS(z, basis, kernel, y_md, rad, reg):
-    #return obj_TPS(L2_distance, param, basis, kernel, scene, scale, alpha, beta)
-    nL,n = basis.shape     # (control-pts, landmarks)
+def l2_tps_obj(z, QN, NKN, NRN, NR, y_md, rad, reg, rot_reg):
+    n = QN.shape[1]
     d = y_md.shape[1]
-    affine_param = z[0:d*(d+1)].reshape(d+1,d)
-    tps_param = z[d*(d+1):d*n].reshape(n-d-1,d)
-    after_tps = np.dot(basis,np.r_[affine_param,tps_param])
-    bending = np.trace(np.dot(tps_param.T,np.dot(kernel,tps_param)))
-    distance, grad = L2_distance(after_tps, y_md, rad)
-    energy = distance + reg * bending
-    grad = np.dot(basis.T, grad)
-    grad[d+1:n] += 2*reg*np.dot(kernel,tps_param)
+    z = z.reshape((n, d))
+    xwarped_nd = QN.dot(z)
+    distance, grad = l2_distance(xwarped_nd, y_md, rad)
+    bending = np.trace(z.T.dot(NKN.dot(z)))
+    rotation = np.trace(z.T.dot(NRN.dot(z))) - 2 * np.trace(z.T.dot(NR))
+    energy = distance + reg * bending + rotation
+    grad = QN.T.dot(grad)
+    grad += 2 * reg * NKN.dot(z)
+    grad += 2 * NRN.dot(z) - 2 * NR
     grad = grad.reshape(d*n)
     return energy, grad
 
-def create_ThinPlateSpline_l2(x_nd, z_nd):
-    n, d = x_nd.shape
-    f = ThinPlateSpline(d)
-    f.x_na = x_nd
-    f.trans_g = z_nd[0,:]
-    f.lin_ag = z_nd[1:1+d,:]
-    Pn = np.c_[np.ones((n,1)), x_nd]
-    u, s, vh = np.linalg.svd(Pn)
-    PP = u[:,d+1:]
-    f.w_ng = PP.dot(z_nd[1+d:,:])
-    return f
-
-def tps_l2(x_nd, y_md, 
+def l2_tps(x_nd, y_md, 
             n_iter=settings.N_ITER, opt_iter=400, 
             reg_init=settings.REG[0], reg_final=settings.REG[1], 
-            rad_init=settings.RAD[0], rad_final=settings.RAD[1]):
+            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+            rot_reg=settings.ROT_REG):
     n, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -482,14 +457,23 @@ def tps_l2(x_nd, y_md,
     
     z_nd = np.r_[trans_g[None,:], lin_ag, np.zeros((n-d-1,d))]
     z_nd = z_nd.reshape(n*d)
-    [basis_nn, kernel_bb] = prepare_TPS_basis(x_nd)
+    K_nn = tps_kernel_matrix(x_nd)
+    Q = np.c_[np.ones((n,1)), x_nd, K_nn]
+    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_nd]].T
+    _u,_s,_vh = np.linalg.svd(A[:, d+1:].T)
+    N = np.eye(n+d+1, n)
+    N[d+1:, d+1:] = _u[:, d+1:]
+    QN = Q.dot(N)
+    NKN = N[d+1:,:].T.dot(K_nn).dot(N[d+1:,:])
+    NR = N[1:1+d,:].T * rot_reg[:d]
+    NRN = NR.dot(N[1:1+d,:])
     for reg, rad in zip(regs, rads):
-        res = so.fmin_l_bfgs_b(obj_L2_TPS, z_nd, None, args=(basis_nn, kernel_bb, y_md, rad, reg), maxfun=opt_iter)
+        res = so.fmin_l_bfgs_b(l2_tps_obj, z_nd, None, args=(QN, NKN, NRN, NR, y_md, rad, reg, rot_reg), maxfun=opt_iter)
         z_nd = res[0]
-    
     z_nd = z_nd.reshape((n, d))
-
-    f = create_ThinPlateSpline_l2(x_nd, z_nd)
+    f = ThinPlateSpline(d)
+    theta = N.dot(z_nd)
+    f.update(x_nd, None, reg, rot_reg, None, theta, N=N, z=z_nd)
 
     return f
 
