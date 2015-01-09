@@ -442,24 +442,28 @@ def l2_tps_obj(z, QN, NKN, NRN, NR, y_md, rad, reg, rot_reg):
     grad = grad.reshape(d*n)
     return energy, grad
 
-def l2_tps(x_nd, y_md, 
+def l2_tps(x_ld, y_md, ctrl_nd=None, 
             n_iter=settings.N_ITER, opt_iter=400, 
             reg_init=settings.REG[0], reg_final=settings.REG[1], 
             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
             rot_reg=settings.ROT_REG):
-    n, d = x_nd.shape
+    if ctrl_nd is None:
+        ctrl_nd = x_ld
+    l, d = x_ld.shape
+    n = ctrl_nd.shape[0]
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
     
-    scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
+    scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_ld,axis=0) - np.min(x_ld,axis=0))
     lin_ag = np.diag(scale) # align the mins and max1
-    trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
+    trans_g = np.median(y_md,axis=0) - np.median(x_ld,axis=0) * scale  # align the medians
     
     z_nd = np.r_[trans_g[None,:], lin_ag, np.zeros((n-d-1,d))]
     z_nd = z_nd.reshape(n*d)
-    K_nn = tps_kernel_matrix(x_nd)
-    Q = np.c_[np.ones((n,1)), x_nd, K_nn]
-    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_nd]].T
+    K_nn = tps_kernel_matrix(ctrl_nd)
+    K_ln = tps_kernel_matrix2(x_ld, ctrl_nd)
+    Q = np.c_[np.ones((l,1)), x_ld, K_ln]
+    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), ctrl_nd]].T
     _u,_s,_vh = np.linalg.svd(A[:, d+1:].T)
     N = np.eye(n+d+1, n)
     N[d+1:, d+1:] = _u[:, d+1:]
@@ -473,7 +477,7 @@ def l2_tps(x_nd, y_md,
     z_nd = z_nd.reshape((n, d))
     f = ThinPlateSpline(d)
     theta = N.dot(z_nd)
-    f.update(x_nd, None, reg, rot_reg, None, theta, N=N, z=z_nd)
+    f.update(ctrl_nd, None, reg, rot_reg, None, theta, N=N, z=z_nd)
 
     return f
 
