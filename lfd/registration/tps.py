@@ -6,6 +6,7 @@ from __future__ import division
 import settings
 import numpy as np
 import scipy.spatial.distance as ssd
+import scipy.optimize as so
 from transformation import Transformation
 import lfd.registration
 if lfd.registration._has_cuda:
@@ -399,6 +400,92 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f, g, corr_nm, rad)
     
     return f, g, corr_nm
+
+def gauss_transform(A, B, scale):
+    m = A.shape[0]
+    n = B.shape[0]
+    dist = (A[:,None,:] - B[None,:,:])
+    sqdist = np.square(dist).sum(2)
+    cost = np.exp(-sqdist / (scale**2))
+    f = np.sum(cost) / (m * n)
+    g = -2. * (cost[:,:,None] * dist).sum(1) / (m * n * (scale**2))
+    return f, g
+
+def L2_distance(x_nd, y_md, rad):
+    """
+    Compute the L2 distance between the two Gaussian mixture densities constructed from a moving 'model' point set and a fixed 'scene' point set at a given 'scale'. The term that only involves the fixed 'scene' is excluded from the returned distance.  The gradient with respect to the 'model' is calculated and returned as well.
+    """
+    f1, g1 = gauss_transform(x_nd, x_nd, rad)
+    f2, g2 = gauss_transform(x_nd, y_md, rad)
+    f =  f1 - 2*f2
+    g = 2*g1 - 2*g2
+    return f,g
+
+def prepare_TPS_basis(x_nd):
+    """
+    Return the basis for performing TPS transforms and the kernel matrix for computing the bending energy.
+    """
+    n,d = x_nd.shape
+    K_nn = tps_kernel_matrix(x_nd)
+    Pn = np.c_[np.ones((n,1)), x_nd]
+    u, s, vh = np.linalg.svd(Pn)
+    PP = u[:,d+1:]
+    KPP = K_nn.dot(PP)
+    TPS_basis = np.c_[Pn, KPP]
+    TPS_kernel = PP.T.dot(KPP)
+    return TPS_basis,TPS_kernel
+
+def obj_L2_TPS(z, basis, kernel, y_md, rad, reg):
+    #return obj_TPS(L2_distance, param, basis, kernel, scene, scale, alpha, beta)
+    nL,n = basis.shape     # (control-pts, landmarks)
+    d = y_md.shape[1]
+    affine_param = z[0:d*(d+1)].reshape(d+1,d)
+    tps_param = z[d*(d+1):d*n].reshape(n-d-1,d)
+    after_tps = np.dot(basis,np.r_[affine_param,tps_param])
+    bending = np.trace(np.dot(tps_param.T,np.dot(kernel,tps_param)))
+    distance, grad = L2_distance(after_tps, y_md, rad)
+    energy = distance + reg * bending
+    grad = np.dot(basis.T, grad)
+    grad[d+1:n] += 2*reg*np.dot(kernel,tps_param)
+    grad = grad.reshape(d*n)
+    return energy, grad
+
+def create_ThinPlateSpline_l2(x_nd, z_nd):
+    n, d = x_nd.shape
+    f = ThinPlateSpline(d)
+    f.x_na = x_nd
+    f.trans_g = z_nd[0,:]
+    f.lin_ag = z_nd[1:1+d,:]
+    Pn = np.c_[np.ones((n,1)), x_nd]
+    u, s, vh = np.linalg.svd(Pn)
+    PP = u[:,d+1:]
+    f.w_ng = PP.dot(z_nd[1+d:,:])
+    return f
+
+def tps_l2(x_nd, y_md, 
+            n_iter=settings.N_ITER, opt_iter=400, 
+            reg_init=settings.REG[0], reg_final=settings.REG[1], 
+            rad_init=settings.RAD[0], rad_final=settings.RAD[1]):
+    n, d = x_nd.shape
+    regs = loglinspace(reg_init, reg_final, n_iter)
+    rads = loglinspace(rad_init, rad_final, n_iter)
+    
+    scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
+    lin_ag = np.diag(scale) # align the mins and max1
+    trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
+    
+    z_nd = np.r_[trans_g[None,:], lin_ag, np.zeros((n-d-1,d))]
+    z_nd = z_nd.reshape(n*d)
+    [basis_nn, kernel_bb] = prepare_TPS_basis(x_nd)
+    for reg, rad in zip(regs, rads):
+        res = so.fmin_l_bfgs_b(obj_L2_TPS, z_nd, None, args=(basis_nn, kernel_bb, y_md, rad, reg), maxfun=opt_iter)
+        z_nd = res[0]
+    
+    z_nd = z_nd.reshape((n, d))
+
+    f = create_ThinPlateSpline_l2(x_nd, z_nd)
+
+    return f
 
 def loglinspace(start, stop, num):
     """Return numbers spaced with a constant ratio.
