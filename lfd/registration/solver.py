@@ -84,11 +84,10 @@ class CpuTpsSolverFactory(TpsSolverFactory):
     def get_solver_mats(self, x_nd, rot_coef):
         n,d = x_nd.shape
         K_nn = tps.tps_kernel_matrix(x_nd)
-        A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_nd]].T
         
-        n_cnts = A.shape[0]    
-        _u,_s,_vh = np.linalg.svd(A.T)
-        N = _u[:,n_cnts:]
+        _u,_s,_vh = np.linalg.svd(np.c_[np.ones((n,1)), x_nd])
+        N = np.eye(n+d+1, n)
+        N[d+1:, d+1:] = _u[:, d+1:]
         NR = N[1:1+d,:].T * rot_coef
         
         KN = K_nn.dot(N[1+d:,:])
@@ -158,11 +157,10 @@ class GpuTpsSolverFactory(TpsSolverFactory):
     def get_solver_mats(self, x_nd, rot_coef):
         n,d = x_nd.shape
         K_nn = tps.tps_kernel_matrix(x_nd)
-        A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_nd]].T
-        
-        n_cnts = A.shape[0]    
-        _u,_s,_vh = np.linalg.svd(A.T)
-        N = _u[:,n_cnts:].copy()
+
+        _u,_s,_vh = np.linalg.svd(np.c_[np.ones((n,1)), x_nd])
+        N = np.eye(n+d+1, n)
+        N[d+1:, d+1:] = _u[:, d+1:]
         NR = (N[1:1+d,:].T * rot_coef).copy() # so that it is c-contiguous
         
         N_gpu = gpuarray.to_gpu(N[1+d:,:])

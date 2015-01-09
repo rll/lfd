@@ -73,7 +73,7 @@ def tps_grad(x_ma, lin_ag, _trans_g, w_ng, x_na):
         grad_mga[:,:,a] = lin_ga[None,:,a] - np.dot(nan2zero(diffa_mn/dist_mn),w_ng)
     return grad_mga
 
-def solve_eqp1(H, f, A, ret_factorization=False):
+def solve_eqp1(H, f, A, N=None, ret_factorization=False):
     """solve equality-constrained qp
     min .5 tr(x'Hx) + tr(f'x)
     s.t. Ax = 0
@@ -84,9 +84,12 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     assert A.shape[1] == n_vars
     n_cnts = A.shape[0]
     
-    _u,_s,_vh = np.linalg.svd(A.T)
-    N = _u[:,n_cnts:]
     # columns of N span the null space
+    if N is None:
+        _u,_s,_vh = np.linalg.svd(A.T)
+        N = _u[:,n_cnts:]
+    else:
+        assert np.allclose(A.dot(N), np.zeros((n_cnts, N.shape[1])))
     
     # x = Nz
     # then problem becomes unconstrained minimization .5 z'N'HNz + z'N'f
@@ -108,6 +111,9 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
     Q = np.c_[np.ones((n,1)), x_na, K_nn]
     rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
     A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_na]].T
+    _u,_s,_vh = np.linalg.svd(A[:, d+1:].T)
+    N = np.eye(n+d+1, n)
+    N[d+1:, d+1:] = _u[:, d+1:]
     
     solve_dim_separately = not np.isscalar(bend_coef) or (wt_n.ndim > 1 and wt_n.shape[1] > 1)
     
@@ -122,9 +128,9 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
         f[1:d+1,0:d] -= np.diag(rot_coefs)
         
         if ret_factorization:
-            theta, (N, z) = solve_eqp1(H, f, A, ret_factorization=True)
+            theta, (_, z) = solve_eqp1(H, f, A, N=N, ret_factorization=True)
         else:
-            theta = solve_eqp1(H, f, A)
+            theta = solve_eqp1(H, f, A, N=N)
     else:
         bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
         if wt_n.ndim == 1:
@@ -144,9 +150,9 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
             f[1+i] -= rot_coefs[i]
             
             if ret_factorization:
-                theta[:,i], (N, z[:,i]) = solve_eqp1(H, f, A, ret_factorization=True)
+                theta[:,i], (_, z[:,i]) = solve_eqp1(H, f, A, N=N, ret_factorization=True)
             else:
-                theta[:,i] = solve_eqp1(H, f, A)
+                theta[:,i] = solve_eqp1(H, f, A, N=N)
     
     if ret_factorization:
         return theta, (N, z)
