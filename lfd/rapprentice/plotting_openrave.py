@@ -1,19 +1,19 @@
 import numpy as np
 
-def draw_grid(env, f, mins, maxes, xres = .1, yres = .1, zres = .04, color = (1,1,0,1)):
+def draw_grid(env, f, mins, maxes, xres=.1, yres=.1, zres=.04, color=(1,1,0,1)):
     
     xmin, ymin, zmin = mins
     xmax, ymax, zmax = maxes
 
     nfine = 30
-    xcoarse = np.arange(xmin, xmax, xres)
+    xcoarse = np.arange(xmin, xmax+xres, xres)
     xmax = xcoarse[-1];
-    ycoarse = np.arange(ymin, ymax, yres)
+    ycoarse = np.arange(ymin, ymax+yres, yres)
     ymax = ycoarse[-1];
     if zres == -1:
         zcoarse = [(zmin+zmax)/2.]
     else:
-        zcoarse = np.arange(zmin, zmax, zres)
+        zcoarse = np.arange(zmin, zmax+zres, zres)
         zmax = zcoarse[-1];
     xfine = np.linspace(xmin, xmax, nfine)
     yfine = np.linspace(ymin, ymax, nfine)
