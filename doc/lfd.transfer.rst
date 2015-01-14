@@ -9,11 +9,19 @@ lfd.transfer package
 Class inheritance diagram
 -------------------------
 
-.. inheritance-diagram:: lfd.transfer.registration_transfer lfd.transfer.settings lfd.transfer.transfer
+.. inheritance-diagram:: lfd.transfer.planning lfd.transfer.registration_transfer lfd.transfer.settings lfd.transfer.transfer
     :parts: 1
 
 Submodules
 ----------
+
+lfd.transfer.planning module
+----------------------------
+
+.. automodule:: lfd.transfer.planning
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 lfd.transfer.registration_transfer module
 -----------------------------------------
