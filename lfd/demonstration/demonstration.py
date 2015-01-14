@@ -81,6 +81,35 @@ class RecordingRopePositionsSceneState(SceneState):
         self.crossing_info = None #TODO: optionally compute/load cached crossing_info
         self.history = history #TimestepStates at every timestep of most recent trajectory execution
 
+class VisFeaturesSceneState(SceneState):
+    def __init__(self, ds_cloud_with_color, ds_cloud_with_color_corners, full_cloud_with_color, alexnet_features, alexnet_features_corners):
+        # alexnet_features is an array: [predicted_label, label_probabilities, features_dict, valid_mask]
+        # ds_cloud_with_color and full_cloud_with_color should have RGB, not BGR
+        # if ds_cloud_with_color_corners and alexnet_features_corners are both not None, then these will be used for .cloud
+        #     and .alexnet_features instead of ds_cloud_with_color and alexnet_features
+        ds_cloud_to_use = ds_cloud_with_color
+        alexnet_features_to_use = alexnet_features
+        if ds_cloud_with_color_corners is not None and alexnet_features_corners is not None:
+            ds_cloud_to_use = ds_cloud_with_color_corners
+            alexnet_features_to_use = alexnet_features_corners
+
+        ds_cloud = ds_cloud_to_use[:,:-3]
+        ds_color = ds_cloud_to_use[:,-3:]
+        super(VisFeaturesSceneState, self).__init__(ds_cloud, full_color=ds_color, downsample_size=0)
+        self.alexnet_features = alexnet_features_to_use
+        self.full_cloud = full_cloud_with_color[:,:-3]
+        self.full_color = full_cloud_with_color[:,-3:]
+
+        self.cloud_wcorners = ds_cloud_with_color_corners
+        self.cloud_wocorners = ds_cloud_with_color
+        self.alexnet_features_wcorners = alexnet_features_corners
+        self.alexnet_features_wocorners = alexnet_features
+
+    def get_valid_xyzrgb_cloud(self):
+        # Returns XYZRGB cloud with point i kept iff valid_mask[i] == True
+        valid_mask = self.alexnet_features[3]
+        valid_mask = np.array(list(valid_mask) + [True]*(len(self.cloud) - len(valid_mask)))
+        return  np.concatenate((self.cloud[valid_mask,:], self.color[valid_mask,:]), axis=1)
 
 class TimestepState(object):
     def __init__(self, rope_nodes, robot, step=None):

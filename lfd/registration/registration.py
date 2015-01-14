@@ -47,6 +47,39 @@ class TpsRpmRegistration(Registration):
         cost[4] = -rad * nz_corr_nm.sum()
         return cost
 
+    def get_objective_withviscost(self, prior_nm):
+        """
+        Returns the following 6 objectives
+        1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij ||y_md_j - f(x_nd_i)||_2^2
+        bend_coef tr(w_ng' K_nn w_ng)
+        tr((lin_ag - I) diag(rot_coef) (lin_ag - I))
+        rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij log corr_nm_ij
+        -rad \sum{i=1}^n \sum{j=1}^m corr_nm_ij
+        1/n \sum{i=1}^n \sum{j=1}^m corr_nm_ij (beta c(x_nd_i, y_md_j))
+
+        Parameter prior_nm already has coefficient beta multiplied in, but
+        is not exponentiated
+        """
+        x_nd = self.demo.scene_state.get_valid_xyzrgb_cloud()[:,:3]
+        y_md = self.test_scene_state.get_valid_xyzrgb_cloud()[:,:3]
+
+        cost = np.zeros(6)
+        f = self.f
+        corr_nm = self.corr
+        rad = self.rad
+        dist_nm = ssd.cdist(x_nd, y_md, 'sqeuclidean')
+        cost[0] = (corr_nm * dist_nm).sum() / len(x_nd)
+        cost[1:3] = f.get_objective()[1:]
+        if prior_nm != None:
+            cost[5] = (corr_nm * prior_nm).sum() / len(x_nd)
+        
+        corr_nm = np.reshape(corr_nm, (1,-1))
+        nz_corr_nm = corr_nm[corr_nm != 0]
+        cost[3] = rad * (nz_corr_nm * np.log(nz_corr_nm)).sum()
+        cost[4] = -rad * nz_corr_nm.sum()
+        print cost
+        return cost
+
 class TpsRpmBijRegistration(Registration):
     def __init__(self, demo, test_scene_state, f, g, corr, rad):
         super(TpsRpmBijRegistration, self).__init__(demo, test_scene_state, f, corr)
@@ -177,12 +210,17 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
     
     def register(self, demo, test_scene_state, plotting=False, plot_cb=None):
         if self.prior_fn is not None:
-            prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
+            (self.prior_nm, prior_prob_nm) = self.prior_fn(demo.scene_state, test_scene_state)
         else:
+            self.prior_nm = None
             prior_prob_nm = None
-        x_nd = demo.scene_state.cloud[:,:3]
-        y_md = test_scene_state.cloud[:,:3]
-        
+        x_nd = demo.scene_state.get_valid_xyzrgb_cloud()[:,:3]
+        y_md = test_scene_state.get_valid_xyzrgb_cloud()[:,:3]
+
+        print "New shape of demo:", x_nd.shape
+        print "New shape of test:", y_md.shape
+        print "Shape of vis prior:", prior_prob_nm.shape
+
         f, corr = tps.tps_rpm(x_nd, y_md, 
                               f_solver_factory=self.f_solver_factory, 
                               n_iter=self.n_iter, em_iter=self.em_iter, 
@@ -210,6 +248,11 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
         cost = reg.f.get_objective()
         return cost
+
+    def viscost(self, demo, test_scene_state):
+        reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
+        cost = reg.get_objective_withviscost(self.prior_nm)
+        return cost.sum()
 
 class TpsRpmBijRegistrationFactory(RegistrationFactory):
     """
