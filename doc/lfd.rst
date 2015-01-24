@@ -16,6 +16,7 @@ Subpackages
     lfd.registration
     lfd.tpsopt
     lfd.transfer
+    lfd.util
 
 Class inheritance diagram
 -------------------------
