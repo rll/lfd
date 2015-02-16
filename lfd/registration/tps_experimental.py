@@ -40,6 +40,7 @@ class ThinPlateSpline(Transformation):
         
         trans_g = np.zeros(g)
         lin_ag = np.eye(a, g)
+        self._z_ng = None
         self.z_ng = np.r_[trans_g[None, :], lin_ag, np.zeros((n-a-1, g))]
     
     @property
@@ -72,7 +73,13 @@ class ThinPlateSpline(Transformation):
     
     @z_ng.setter
     def z_ng(self, value):
-        self._z_ng = value
+        if self._z_ng is None or self._z_ng.shape == value.shape:
+            self._z_ng = value
+        else:
+            try:
+                self._z_ng = value.reshape(self._z_ng.shape) # should raise exception if size changes
+            except ValueError:
+                raise ValueError("total size of z_ng must be unchanged")
         self._theta_bg = None # indicates it is dirty
     
     @property
