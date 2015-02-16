@@ -155,7 +155,15 @@ def tps_hc2(x_kld, ctrl_knd=None, opt_iter=100, reg=settings.REG[1], rot_reg=set
         z_knd.append(f.z_ng.reshape(n*d))
     z_knd = np.concatenate(z_knd)
 
-    res = so.fmin_l_bfgs_b(tps_hc2_obj, z_knd, None, args=(f_k, reg, rot_reg), maxfun=opt_iter, callback=callback)
+    def opt_callback(z_knd):
+        i = 0
+        for f in f_k:
+            n, d = f.z_ng.shape
+            f.z_ng = z_knd[i*d:(i+n)*d]
+            i += n
+        callback(f_k)
+
+    res = so.fmin_l_bfgs_b(tps_hc2_obj, z_knd, None, args=(f_k, reg, rot_reg), maxfun=opt_iter, callback=opt_callback)
     z_knd = res[0]
     
     i = 0
