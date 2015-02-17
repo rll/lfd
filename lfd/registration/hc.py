@@ -141,14 +141,18 @@ def tps_hc2_obj(z_knd, f_k, reg, rot_reg):
     grad_knd = np.concatenate(grad_knd)
     return energy, grad_knd
 
-def tps_hc2(x_kld, ctrl_knd=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, callback=None):
-    if ctrl_knd is None:
-        ctrl_knd = x_kld
-
-    f_k = []
-    for x_ld, ctrl_nd in zip(x_kld, ctrl_knd):
-        f = ThinPlateSpline(x_ld, ctrl_nd)
-        f_k.append(f)
+def tps_hc2(x_kld, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, callback=None):
+    if f_init_k is None:
+        if ctrl_knd is None:
+            ctrl_knd = x_kld
+        f_k = []
+        for x_ld, ctrl_nd in zip(x_kld, ctrl_knd):
+            f = ThinPlateSpline(x_ld, ctrl_nd)
+            f_k.append(f)
+    else:  
+        if len(f_init_k) != len(x_kld):
+            raise ValueError("The number of ThinPlateSplines in f_init_k is different from the number of point sets in x_kld")
+        f_k = f_init_k
     z_knd = multi_tps_to_params(f_k)
 
     def opt_callback(z_knd):

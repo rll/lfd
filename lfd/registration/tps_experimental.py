@@ -354,7 +354,7 @@ def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None,
     res = so.fmin_l_bfgs_b(pairwise_tps_l2_cov_obj, z_knd, None, args=(f_k, y_md, p_ktd, rad_final, reg_final, rot_reg, cov_coef, L_ktkn), maxfun=opt_iter)
     z_knd = res[0]
 
-    f_k = params_to_multi_tps(z_knd, f_k)    
+    f_k = params_to_multi_tps(z_knd, f_k)
     if multi_callback is not None:
         multi_callback(f_k, y_md, p_ktd)
 
