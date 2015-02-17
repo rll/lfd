@@ -86,7 +86,7 @@ def grad_p2(x_ld, y_md=None):
         gv_ld /= l * m
     return gv_ld
 
-def hc2_obj(x_kld):
+def groupwise_hc2_obj(x_kld):
     k = len(x_kld)
     alpha = 1/k
 
@@ -123,7 +123,7 @@ def translate_to_R_plus(x_kld, region, ret_translation=False):
         ret = x_kld
     return ret
 
-def tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=None):
+def groupwise_tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=None):
     f_k = params_to_multi_tps(z_knd, f_k)
     
     xwarped_kld = []
@@ -133,23 +133,26 @@ def tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=None):
     xwarped_kld = translate_to_R_plus(xwarped_kld, np.ones(d))
 
     if y_md is None:
-        hc2_energy, hc2_grad_kld = hc2_obj(xwarped_kld)
+        gw_hc2_energy, gw_hc2_grad_kld = groupwise_hc2_obj(xwarped_kld)
     else:
-        hc2_energy, hc2_grad_kld = hc2_obj(xwarped_kld + [y_md])
-    energy = hc2_energy
+        gw_hc2_energy, gw_hc2_grad_kld = groupwise_hc2_obj(xwarped_kld + [y_md])
+    energy = gw_hc2_energy
     grad_knd = []
-    for f, hc2_grad_ld in zip(f_k, hc2_grad_kld):
+    for f, gw_hc2_grad_ld in zip(f_k, gw_hc2_grad_kld):
         n, d = f.z_ng.shape
         NR_nd = f.N_bn[1:1+d, :].T * rot_reg[:d]
         NRN_nn = NR_nd.dot(f.N_bn[1:1+d, :])
         energy += np.trace(f.z_ng.T.dot(reg * f.NKN_nn + NRN_nn).dot(f.z_ng)) - 2 * np.trace(f.z_ng.T.dot(NR_nd))
-        grad_nd = f.QN_ln.T.dot(hc2_grad_ld)
+        grad_nd = f.QN_ln.T.dot(gw_hc2_grad_ld)
         grad_nd += 2 * (reg * f.NKN_nn + NRN_nn).dot(f.z_ng) - 2 * NR_nd
         grad_knd.append(grad_nd.reshape(n*d))
     grad_knd = np.concatenate(grad_knd)
     return energy, grad_knd
 
-def tps_hc2(x_kld, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, callback=None):
+def groupwise_tps_hc2(x_kld, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, callback=None):
+    """
+    Specify y_md to perform biased groupwise registration
+    """
     if f_init_k is None:
         if ctrl_knd is None:
             ctrl_knd = x_kld
@@ -186,9 +189,9 @@ def tps_hc2(x_kld, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=se
         callback(f_k, y_md)
         for f in f_k:
             f.trans_g += trans_d
-        print tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=y_trans_md)[0]
+        # print groupwise_tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=y_trans_md)[0]
 
-    res = so.fmin_l_bfgs_b(tps_hc2_obj, z_knd, None, args=(f_k, reg, rot_reg, y_trans_md), maxfun=opt_iter, callback=opt_callback if callback is not None else None)
+    res = so.fmin_l_bfgs_b(groupwise_tps_hc2_obj, z_knd, None, args=(f_k, reg, rot_reg, y_trans_md), maxfun=opt_iter, callback=opt_callback if callback is not None else None)
     z_knd = res[0]
     
     f_k = params_to_multi_tps(z_knd, f_k)
