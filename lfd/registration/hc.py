@@ -8,7 +8,7 @@ from __future__ import division
 import settings
 import numpy as np
 import scipy.optimize as so
-from tps_experimental import ThinPlateSpline
+from tps_experimental import ThinPlateSpline, multi_tps_to_params, params_to_multi_tps
 
 def analymin(x, y, beta):
     return -np.log(np.exp(-beta * x) + np.exp(-beta * y)) / beta
@@ -119,13 +119,12 @@ def translate_to_R_plus(x_kld, region):
     return x_kld
 
 def tps_hc2_obj(z_knd, f_k, reg, rot_reg):
+    f_k = params_to_multi_tps(z_knd, f_k)
+    
     xwarped_kld = []
-    i = 0
     for f in f_k:
-        n, d = f.z_ng.shape
-        f.z_ng = z_knd[i*d:(i+n)*d]
         xwarped_kld.append(f.transform_points())
-        i += n
+    _, d = xwarped_kld[0].shape
     xwarped_kld = translate_to_R_plus(xwarped_kld, np.ones(d))
 
     hc2_energy, hc2_grad_kld = hc2_obj(xwarped_kld)
@@ -147,29 +146,18 @@ def tps_hc2(x_kld, ctrl_knd=None, opt_iter=100, reg=settings.REG[1], rot_reg=set
         ctrl_knd = x_kld
 
     f_k = []
-    z_knd = []
     for x_ld, ctrl_nd in zip(x_kld, ctrl_knd):
-        n, d = ctrl_nd.shape
         f = ThinPlateSpline(x_ld, ctrl_nd)
         f_k.append(f)
-        z_knd.append(f.z_ng.reshape(n*d))
-    z_knd = np.concatenate(z_knd)
+    z_knd = multi_tps_to_params(f_k)
 
     def opt_callback(z_knd):
-        i = 0
-        for f in f_k:
-            n, d = f.z_ng.shape
-            f.z_ng = z_knd[i*d:(i+n)*d]
-            i += n
-        callback(f_k)
+        callback(params_to_multi_tps(z_knd, f_k))
+        # print tps_hc2_obj(z_knd, f_k, reg, rot_reg)[0]
 
-    res = so.fmin_l_bfgs_b(tps_hc2_obj, z_knd, None, args=(f_k, reg, rot_reg), maxfun=opt_iter, callback=opt_callback)
+    res = so.fmin_l_bfgs_b(tps_hc2_obj, z_knd, None, args=(f_k, reg, rot_reg), maxfun=opt_iter, callback=opt_callback if callback is not None else None)
     z_knd = res[0]
     
-    i = 0
-    for f in f_k:
-        n, d = f.z_ng.shape
-        f.z_ng = z_knd[i*d:(i+n)*d]
-        i += n
+    f_k = params_to_multi_tps(z_knd, f_k)
 
     return f_k

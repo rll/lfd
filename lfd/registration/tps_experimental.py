@@ -151,6 +151,17 @@ class ThinPlateSpline(Transformation):
             Q_mb = np.c_[np.ones((m, 1)), x_ma, K_mn]
             y_mg = Q_mb.dot(self.theta_bg)
             return y_mg
+    
+    def compute_transform_grad(self, x_ma=None):
+        """Gradient of the transform of the x_ma points. If x_ma is not specified, the source points x_la are used."""
+        if x_ma is None:
+            return self.QN_ln
+        else:
+            m = x_ma.shape[0]
+            K_mn = tps_kernel_matrix2(x_ma, self.ctrl_na)
+            Q_mb = np.c_[np.ones((m, 1)), x_ma, K_mn]
+            QN_mn = Q_mb.dot(self.N_bn)
+            return QN_mn
 
     def compute_jacobian(self, x_ma):
         grad_mga = tps_grad(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.ctrl_na)
@@ -170,38 +181,30 @@ def gauss_transform(A, B, scale):
     g = -2. * (cost[:,:,None] * dist).sum(1) / (m * n * (scale**2))
     return f, g
 
-def l2_distance(x_nd, y_md, rad):
+def l2_obj(x_nd, y_md, rad):
     """
     Compute the L2 distance between the two Gaussian mixture densities constructed from a moving 'model' point set and a fixed 'scene' point set at a given 'scale'. The term that only involves the fixed 'scene' is excluded from the returned distance.  The gradient with respect to the 'model' is calculated and returned as well.
     """
     f1, g1 = gauss_transform(x_nd, x_nd, rad)
     f2, g2 = gauss_transform(x_nd, y_md, rad)
-    f =  f1 - 2*f2
+    f = f1 - 2*f2
     g = 2*g1 - 2*g2
     return f, g
 
-def tps_l2_obj(z, QN, NKN, NRN, NR, y_md, rad, reg, rot_reg):
-    n = QN.shape[1]
-    d = y_md.shape[1]
-    z = z.reshape((n, d))
-    xwarped_nd = QN.dot(z)
-    distance, distance_grad = l2_distance(xwarped_nd, y_md, rad)
-    
-#     bending = np.trace(z.T.dot(NKN.dot(z)))
-#     rotation = np.trace(z.T.dot(NRN.dot(z))) - 2 * np.trace(z.T.dot(NR))
-#     energy = distance + reg * bending + rotation
-#     grad = QN.T.dot(distance_grad)
-#     grad += 2 * reg * NKN.dot(z)
-#     grad += 2 * NRN.dot(z) - 2 * NR
-#     grad = grad.reshape(d*n)
-    
-    regNKN_NRN_z = (reg * NKN + NRN).dot(z)
-    energy = distance + np.trace(z.T.dot(regNKN_NRN_z)) - 2 * np.trace(z.T.dot(NR))
-    grad = QN.T.dot(distance_grad)
-    grad += 2 * (reg * NKN + NRN).dot(z) - 2 * NR
-    grad = grad.reshape(d*n)
+def tps_l2_obj(z_nd, f, y_md, rad, reg, rot_reg):
+    f.z_ng = z_nd
+    xwarped_nd = f.transform_points()
 
-    return energy, grad
+    l2_energy, l2_grad_ld = l2_obj(xwarped_nd, y_md, rad)
+    energy = l2_energy
+    n, d = f.z_ng.shape
+    NR_nd = f.N_bn[1:1+d, :].T * rot_reg[:d]
+    NRN_nn = NR_nd.dot(f.N_bn[1:1+d, :])
+    energy += np.trace(f.z_ng.T.dot(reg * f.NKN_nn + NRN_nn).dot(f.z_ng)) - 2 * np.trace(f.z_ng.T.dot(NR_nd))
+    grad_nd = f.QN_ln.T.dot(l2_grad_ld)
+    grad_nd += 2 * (reg * f.NKN_nn + NRN_nn).dot(f.z_ng) - 2 * NR_nd
+    grad_nd = grad_nd.reshape(d*n)
+    return energy, grad_nd
 
 def tps_l2(x_ld, y_md, ctrl_nd=None, 
             n_iter=settings.N_ITER, opt_iter=100, 
@@ -222,69 +225,61 @@ def tps_l2(x_ld, y_md, ctrl_nd=None,
     f.lin_ag = np.diag(scale) # align the mins and max1
     f.trans_g = np.median(y_md,axis=0) - np.median(x_ld,axis=0) * scale  # align the medians
     z_nd = f.z_ng.reshape(n*d)
-    NR_nd = f.N_bn[1:1+d, :].T * rot_reg[:d]
-    NRN_nn = NR_nd.dot(f.N_bn[1:1+d, :])
+
     for reg, rad in zip(regs, rads):
-        res = so.fmin_l_bfgs_b(tps_l2_obj, z_nd, None, args=(f.QN_ln, f.NKN_nn, NRN_nn, NR_nd, y_md, rad, reg, rot_reg), maxfun=opt_iter)
+        res = so.fmin_l_bfgs_b(tps_l2_obj, z_nd, None, args=(f, y_md, rad, reg, rot_reg), maxfun=opt_iter)
         z_nd = res[0]
-        f.z_ng = z_nd.reshape((n, d))
+        f.z_ng = z_nd
         if callback is not None:
-            callback(x_ld, y_md, f)
+            callback(f, y_md)
     return f
 
-def multi_tps_l2_obj(z_knd, solver_k, y_kmd, p_ktd, rad, reg, rot_reg, cov_coef, separate_cov=False):
-    n_k = np.asarray([solver[0].shape[1] for solver in solver_k])
-    k = n_k.shape[0]
-    n_start_k = np.r_[0, np.cumsum(n_k)[:-1]]
-    n_end_k = np.cumsum(n_k)
-    d = y_kmd[0].shape[1]
+def pairwise_tps_l2_obj(z_knd, f_k, y_md, rad, reg, rot_reg):
+    f_k = params_to_multi_tps(z_knd, f_k)
 
-    total_energy = 0
-    total_grad = np.zeros(n_end_k[-1]*d)
-    
-    for (n_start, n_end, (N, QN, NKN, NRN, NR, QN_tn), y_md) in zip(n_start_k, n_end_k, solver_k, y_kmd):
+    energy = 0
+    grad_knd = []
+    for f in f_k:
+        _, d = f.z_ng.shape
         assert d == y_md.shape[1]
-        z_nd = z_knd[n_start*d:n_end*d]
-        energy, grad = tps_l2_obj(z_nd, QN, NKN, NRN, NR, y_md, rad, reg, rot_reg)
-        total_energy += energy
-        total_grad[n_start*d:n_end*d] += grad
+        tps_l2_energy, tps_l2_grad_nd = tps_l2_obj(f.z_ng, f, y_md, rad, reg, rot_reg)
+        energy += tps_l2_energy
+        grad_knd.append(tps_l2_grad_nd)
+    grad_knd = np.concatenate(grad_knd)
+    return energy, grad_knd
 
-    energy_cov = 0
-    grad_cov = 0
-    for i in range(p_ktd.shape[1]):
-        QN_1kn = []
-        for n_start, n_end, (N, QN, NKN, NRN, NR, QN_tn) in zip(n_start_k, n_end_k, solver_k):
-            QN_1kn.append(QN_tn[i,:])
-        QN_1kn = np.concatenate(QN_1kn)
-        for n_start, n_end, (N, QN, NKN, NRN, NR, QN_tn) in zip(n_start_k, n_end_k, solver_k):
-            L_1kn = (-1/k) * QN_1kn
-            L_1kn[n_start:n_end] += QN_tn[i,:]
-            Lz_1d = L_1kn[None,:].dot(z_knd.reshape((-1,d)))
-            energy_cov += (1/k) * np.sum(np.square(Lz_1d))
-            grad_cov += (1/k) * 2 * L_1kn[:,None].dot(Lz_1d).reshape(-1)
+def multi_tps_l2_obj(z_knd, f_k, L_ktkn, y_md, p_ktd, rad, reg, rot_reg, cov_coef):
+    f_k = params_to_multi_tps(z_knd, f_k)
 
-#     # slow computation of energy_cov
-#     fp_ktd = []
-#     for (n, n_start, n_end, (N, QN, NKN, NRN, NR, QN_tn), y_md, p_td) in zip(n_k, n_start_k, n_end_k, solver_k, y_kmd, p_ktd):
-#         assert d == y_md.shape[1]
-#         z_nd = z_knd[n_start*d:n_end*d]
-#         z_nd = z_nd.reshape((n, d))
-#         fp_td = QN_tn.dot(z_nd)
-#         fp_ktd.append(fp_td)
-#     fp_ktd = np.array(fp_ktd)
-#     k = p_ktd.shape[0]
-#     energy_cov2 = 0
-#     for i in range(p_ktd.shape[1]):
-#         fp_kd = fp_ktd[:,i,:]
-#         energy_cov2 += (1/k) * np.trace((fp_kd - fp_kd.mean(axis=0)).T.dot(fp_kd - fp_kd.mean(axis=0)))
-#     print "energy_cov equal?", np.allclose(energy_cov, energy_cov2)
+    pw_tps_l2_energy, pw_tps_l2_grad_knd = pairwise_tps_l2_obj(z_knd, f_k, y_md, rad, reg, rot_reg)
 
-    total_energy += cov_coef * energy_cov
-    total_grad += cov_coef * grad_cov
+    _, d = y_md.shape
+    Lz_ktd = L_ktkn.dot(z_knd.reshape((-1,d)))
+    cov_energy = np.sum(np.square(Lz_ktd))
+    cov_grad_knd = 2 * L_ktkn.T.dot(Lz_ktd).reshape(-1)
+
+    energy = pw_tps_l2_energy + cov_coef * cov_energy
+    grad_knd = pw_tps_l2_grad_knd + cov_coef * cov_grad_knd
     
-    return total_energy, total_grad
+    return energy, grad_knd
 
-def multi_tps_l2(x_kld, y_kmd, p_ktd, ctrl_knd=None, 
+def multi_tps_to_params(f_k):
+    z_knd = []
+    for f in f_k:
+        n, d = f.z_ng.shape
+        z_knd.append(f.z_ng.reshape(n*d))
+    z_knd = np.concatenate(z_knd)
+    return z_knd
+
+def params_to_multi_tps(z_knd, f_k):
+    i = 0
+    for f in f_k:
+        n, d = f.z_ng.shape
+        f.z_ng = z_knd[i*d:(i+n)*d]
+        i += n
+    return f_k
+
+def multi_tps_l2(x_kld, y_md, p_ktd, ctrl_knd=None, 
             n_iter=settings.N_ITER, opt_iter=100, 
             reg_init=settings.REG[0], reg_final=settings.REG[1], 
             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
@@ -297,47 +292,41 @@ def multi_tps_l2(x_kld, y_kmd, p_ktd, ctrl_knd=None,
     
     # intitalize z from independent optimizations
     f_k = []
-    z_knd = []
-    solver_k = []
-    for (x_ld, y_md, p_td, ctrl_nd) in zip(x_kld, y_kmd, p_ktd, ctrl_knd):
+    QN_ktn = []
+    for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, ctrl_knd):
         n, d = ctrl_nd.shape
         f = tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=n_iter, opt_iter=opt_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init, rad_final=rad_final, rot_reg=rot_reg, callback=callback)
         f_k.append(f)
-        NR_nd = f.N_bn[1:1+d, :].T * rot_reg[:d]
-        NRN_nn = NR_nd.dot(f.N_bn[1:1+d, :])
-        t = p_td.shape[0]
-        K_tn = tps_kernel_matrix2(p_td, ctrl_nd)
-        Q_tb = np.c_[np.ones((t, 1)), p_td, K_tn]
-        QN_tn = Q_tb.dot(f.N_bn)
-        solver = (f.N_bn, f.QN_ln, f.NKN_nn, NRN_nn, NR_nd, QN_tn)
-        z_knd.append(f.z_ng.reshape(n*d))
-        solver_k.append(solver)
-    z_knd = np.concatenate(z_knd)
-    n_k = np.asarray([solver[0].shape[1] for solver in solver_k])
-    n_start_k = np.r_[0, np.cumsum(n_k)[:-1]]
-    n_end_k = np.cumsum(n_k)
+        QN_tn = f.compute_transform_grad(p_td)
+        QN_ktn.append(QN_tn)
+    z_knd = multi_tps_to_params(f_k)
 
-    for (n, n_start, n_end, f) in zip(n_k, n_start_k, n_end_k, f_k):
-        f.z_ng = z_knd[n_start*d:n_end*d].reshape((n, d))
+    # put together matrix for computing sum of variances
+    # the sum of variances is given by np.sum(np.square(L_ktkn.dot(z_knd.reshape((-1,d)))))
+    k, t, _ = p_ktd.shape
+    L_ktkn = []
+    for j in range(t):
+        QN_1kn = []
+        for QN_tn in QN_ktn:
+            QN_1kn.append(QN_tn[j,:])
+        QN_1kn = np.concatenate(QN_1kn)
+        i = 0
+        for QN_tn in QN_ktn:
+            _, n = QN_tn.shape
+            L_1kn = (-1/k) * QN_1kn
+            L_1kn[i:i+n] += QN_tn[j,:]
+            L_ktkn.append(L_1kn)
+            i += n
+    L_ktkn = (1/k) * np.array(L_ktkn)
+
     if multi_callback is not None:
-        multi_callback(x_kld, y_kmd, f_k)
-    
-    res = so.fmin_l_bfgs_b(multi_tps_l2_obj, z_knd, None, args=(solver_k, y_kmd, p_ktd, rad_final, reg_final, rot_reg, cov_coef), maxfun=opt_iter)
+        multi_callback(f_k, y_md, p_ktd)
+
+    res = so.fmin_l_bfgs_b(multi_tps_l2_obj, z_knd, None, args=(f_k, L_ktkn, y_md, p_ktd, rad_final, reg_final, rot_reg, cov_coef), maxfun=opt_iter)
     z_knd = res[0]
-    
-    for (n, n_start, n_end, f) in zip(n_k, n_start_k, n_end_k, f_k):
-        f.z_ng = z_knd[n_start*d:n_end*d].reshape((n, d))
+
+    f_k = params_to_multi_tps(z_knd, f_k)    
     if multi_callback is not None:
-        multi_callback(x_kld, y_kmd, f_k)
-    
-#     # check gradients
-#     energy, grad = l2_tps_multi_obj(z_knd, solver_k, y_kmd, p_ktd, rads[-1], regs[-1], rot_reg, cov_coef)
-#     energy_fun = lambda z_knd: l2_tps_multi_obj(z_knd, solver_k, y_kmd, p_ktd, rads[-1], regs[-1], rot_reg, cov_coef)[0]
-#     import numdifftools
-#     energy_dfun = numdifftools.Gradient(energy_fun)
-#     num_grad = energy_dfun(z_knd)
-#     print "grad equal?", np.allclose(grad, num_grad)
-#     import IPython as ipy
-#     ipy.embed()
+        multi_callback(f_k, y_md, p_ktd)
 
     return f_k
