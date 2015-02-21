@@ -61,13 +61,15 @@ class Transformation(object):
         
     def compute_numerical_jacobian(self, x_d, epsilon=0.0001):
         "numerical jacobian"
+        if x_d.ndim > 1:
+            raise ValueError("x_d needs to be one-dimensional")
         x0 = np.asfarray(x_d)
-        f0 = self.transform_points(x0)
-        jac = np.zeros(len(x0), len(f0))
+        f0 = self.transform_points(x0[None,:])[0]
+        jac = np.zeros((len(x0), len(f0)))
         dx = np.zeros(len(x0))
         for i in range(len(x0)):
             dx[i] = epsilon
-            jac[i] = (self.transform_points(x0+dx) - f0) / epsilon
+            jac[i] = (self.transform_points((x0+dx)[None,:])[0] - f0) / epsilon
             dx[i] = 0.
         return jac.transpose()
 
