@@ -2,9 +2,10 @@ from __future__ import division
 
 import settings
 import numpy as np
+import scipy.spatial.distance as ssd
 import scipy.optimize as so
 from transformation import Transformation
-from tps import tps_kernel_matrix, tps_kernel_matrix2, tps_grad, loglinspace
+from tps import tps_kernel_matrix, tps_kernel_matrix2, tps_grad, loglinspace, nan2zero
 
 class ThinPlateSpline(Transformation):
     """
@@ -85,9 +86,12 @@ class ThinPlateSpline(Transformation):
     @property
     def theta_bg(self):
         """Can get theta_bg but not set it due to change of variables"""
-        if self._theta_bg is None:
-            self._theta_bg = self.N_bn.dot(self.z_ng)
-        return self._theta_bg
+        # TODO: this is incorrect when z_ng is changed in-place
+        # if self._theta_bg is None:
+        #     self._theta_bg = self.N_bn.dot(self.z_ng)
+        # return self._theta_bg
+        # return self.N_bn.dot(self.z_ng)
+        return self.N_bn.dot(self.z_ng)
     
     @staticmethod
     def compute_N(ctrl_na):
@@ -171,6 +175,315 @@ class ThinPlateSpline(Transformation):
         return np.trace(self.z_ng.T.dot(self.NKN_nn.dot(self.z_ng)))
 
 
+def solve_qp(H, f):
+    """solve unconstrained qp
+    min .5 tr(x'Hx) + tr(f'x)
+    """
+    n_vars = H.shape[0]
+    assert H.shape[1] == n_vars
+    assert f.shape[0] == n_vars
+
+    x = np.linalg.solve(H, -f)
+    return x
+
+def tpsn_fit(f, y_lg, v_rg, bend_coef, rot_coef, wt_l, wt_r):
+    l, r, a = f.l, f.r, f.a
+    g = y_lg.shape[1]
+    assert y_lg.shape == (l, g)
+    assert v_rg.shape == (r, g)
+    if wt_l is None: wt_l = np.ones(l)
+    if wt_r is None: wt_r = np.ones(r)
+    rot_coef = np.ones(a) * rot_coef if np.isscalar(rot_coef) else rot_coef
+    assert len(rot_coef) == a
+    assert a == g
+
+    WQ0N_le = wt_l[:,None] * f.Q0N_le
+    WQ1N_re = wt_r[:,None] * f.Q1N_re
+    NR_ea = f.N_be[1:1+a,:].T * rot_coef
+
+    H_ee = f.Q0N_le.T.dot(WQ0N_le) + f.Q1N_re.T.dot(WQ1N_re)
+    H_ee += bend_coef * f.NKN_ee
+    H_ee += NR_ea.dot(f.N_be[1:1+a,:])
+
+    f_eg = -WQ0N_le.T.dot(y_lg) - WQ1N_re.T.dot(v_rg)
+    f_eg -= NR_ea
+
+    f.z_eg = solve_qp(H_ee, f_eg)
+
+def tpsn_kernel_matrix2_00(x_la, y_ma):
+    distmat_lm = ssd.cdist(x_la, y_ma)
+    S00_lm = distmat_lm ** 3
+    return S00_lm
+
+def tpsn_kernel_matrix2_01(x_la, u_ra, z_ra):
+    distmat_lr = ssd.cdist(x_la, z_ra)
+    S01_lr = 3 * distmat_lr
+    l, r = S01_lr.shape
+    for j in range(r):
+        S01_lr[:,j] *= (z_ra[j] - x_la).dot(u_ra[j])
+    return S01_lr
+
+def tpsn_kernel_matrix2_11(u_ra, z_ra, v_sa, z_sa):
+    distmat_rs = ssd.cdist(z_ra, z_sa)
+    S11_rs = -3 / (distmat_rs + 1e-20)
+    r, s = S11_rs.shape
+    for i in range(r):
+        S11_rs[i,:] *= (z_ra[i] - z_sa).dot(u_ra[i])
+    for j in range(s):
+        S11_rs[:,j] *= (z_ra - z_sa[j]).dot(v_sa[j])
+    S11_rs += -3 * distmat_rs * (u_ra.dot(v_sa.T))
+    return S11_rs
+
+def tpsn_kernel_matrix2_0(x_la, x_ctrl_na, u_ctrl_ta, z_ctrl_ta):
+    S00_ln = tpsn_kernel_matrix2_00(x_la, x_ctrl_na)
+    S01_lt = tpsn_kernel_matrix2_01(x_la, u_ctrl_ta, z_ctrl_ta)
+    S0_le = np.c_[S00_ln, S01_lt]
+    return S0_le
+
+def tpsn_kernel_matrix2_1(u_ra, z_ra, x_ctrl_na, u_ctrl_ta, z_ctrl_ta):
+    S10_rn = tpsn_kernel_matrix2_01(x_ctrl_na, u_ra, z_ra).T
+    S11_rt = tpsn_kernel_matrix2_11(u_ra, z_ra, u_ctrl_ta, z_ctrl_ta)
+    S1_re = np.c_[S10_rn, S11_rt]
+    return S1_re
+
+def tpsn_kernel_matrix(x_la, u_ra, z_ra):
+    # TODO: specialize this function
+    return tpsn_kernel_matrix2(x_la, u_ra, z_ra, x_la, u_ra, z_ra)
+
+def tpsn_kernel_matrix2(x_la, u_ra, z_ra, x_ctrl_na, u_ctrl_ta, z_ctrl_ta):
+    S0_le = tpsn_kernel_matrix2_0(x_la, x_ctrl_na, u_ctrl_ta, z_ctrl_ta)
+    S1_re = tpsn_kernel_matrix2_1(u_ra, z_ra, x_ctrl_na, u_ctrl_ta, z_ctrl_ta)
+    S_ce = np.r_[S0_le, S1_re]
+    return S_ce
+
+class ThinPlateSplineNormal(Transformation):
+    """
+    Attributes:
+        x_na: centers of basis functions
+        w_ng: weights of basis functions
+        lin_ag: transpose of linear part, so you take x_na.dot(lin_ag)
+        trans_g: translation part
+    """
+
+    def __init__(self, x_la, u_ra, z_ra, x_ctrl_na, u_ctrl_ta, z_ctrl_ta, g=None):
+        """Inits ThinPlateSplineNormal with identity transformation
+
+        Args:
+            x_la: source points
+            u_ra: source normals
+            z_ra: source normal locations
+            x_ctrl_na: control points (i.e. center of basis functions)
+            u_ctrl_ta: control normals
+            z_ctrl_ra: control normal locations
+            g: dimension of a target point and normals. Default is the same as the dimension of a source point and normals
+
+        Dimension conventions:
+            l: number of source points
+            r: number of source normals
+            n: number of control points
+            t: number of control normals
+            a: dimension of source points and normals
+            g: dimension of target point and normals
+            c: l+r
+            e: n+t
+            b: e+a+1
+        """
+        l, a = x_la.shape
+        r = u_ra.shape[0]
+        assert u_ra.shape[1] == a
+        assert z_ra.shape == (r, a)
+        n = x_ctrl_na.shape[0]
+        assert x_ctrl_na.shape[1] == a
+        t = u_ctrl_ta.shape[0]
+        assert u_ctrl_ta.shape[1] == a
+        assert z_ctrl_ta.shape == (t, a)
+        if g is None:
+            g = a
+        c = l+r
+        e = n+t
+        b = e+a+1
+        self.l = l
+        self.r = r
+        self.n = n
+        self.t = t
+        self.a = a
+        self.g = g
+        self.c = c
+        self.e = e
+        self.b = b
+
+        self.x_la = x_la
+        self.u_ra = u_ra
+        self.z_ra = z_ra
+        S_ce = tpsn_kernel_matrix2(x_la, u_ra, z_ra, x_ctrl_na, u_ctrl_ta, z_ctrl_ta)
+        self.Q0_lb = np.c_[np.ones((l, 1)), x_la, S_ce[:l,:]]
+        self.Q1_rb = np.c_[np.zeros((r,1)), u_ra, S_ce[l:,:]]
+        self.N_be = self.compute_N(x_ctrl_na, u_ctrl_ta)
+        self.Q0N_le = self.Q0_lb.dot(self.N_be)
+        self.Q1N_re = self.Q1_rb.dot(self.N_be)
+
+        self.x_ctrl_na = x_ctrl_na
+        self.u_ctrl_ta = u_ctrl_ta
+        self.z_ctrl_ta = z_ctrl_ta
+        self.S_ee = tpsn_kernel_matrix(x_ctrl_na, u_ctrl_ta, z_ctrl_ta)
+        D = np.r_[np.c_[np.ones((n, 1)), x_ctrl_na],
+                  np.c_[np.zeros((t, 1)), u_ctrl_ta]]
+        P_ee = D.dot(np.linalg.inv(D.T.dot(D))).dot(D.T)
+        K_ee = np.linalg.inv((np.eye(e) - P_ee).dot(self.S_ee).dot(np.eye(e) - P_ee))
+        self.NKN_ee = self.N_be[a+1:, :].T.dot(self.S_ee.dot(self.N_be[a+1:, :]))
+
+        trans_g = np.zeros(g)
+        lin_ag = np.eye(a, g)
+        self._z_eg = None
+        self.z_eg = np.r_[trans_g[None, :], lin_ag, np.zeros((e-a-1, g))]
+    
+    @property
+    def trans_g(self):
+        return self.z_eg[0]
+    
+    @trans_g.setter
+    def trans_g(self, value):
+        self.z_eg[0] = value
+    
+    @property
+    def lin_ag(self):
+        return self.z_eg[1:1+self.a]
+    
+    @lin_ag.setter
+    def lin_ag(self, value):
+        self.z_eg[1:1+self.a] = value
+    
+    @property
+    def w_eg(self):
+        """Can get w_ng but not set it due to change of variables"""
+        return self.theta_bg[1+self.a:]
+
+    @property
+    def z_eg(self):
+        return self._z_eg
+    
+    @z_eg.setter
+    def z_eg(self, value):
+        if self._z_eg is None or self._z_eg.shape == value.shape:
+            self._z_eg = value
+        else:
+            try:
+                self._z_eg = value.reshape(self._z_eg.shape) # should raise exception if size changes
+            except ValueError:
+                raise ValueError("total size of z_eg must be unchanged")
+        self._theta_bg = None # indicates it is dirty
+    
+    @property
+    def theta_bg(self):
+        """Can get theta_bg but not set it due to change of variables"""
+        # TODO: this is incorrect when z_ng is changed in-place
+        # if self._theta_bg is None:
+        #     self._theta_bg = self.N_be.dot(self.z_eg)
+        # return self._theta_bg
+        return self.N_be.dot(self.z_eg)
+    
+    @staticmethod
+    def compute_N(x_ctrl_na, u_ctrl_ta):
+        r"""Computes change of variable matrix
+        
+        The matrix :math:`N` changes from :math:`z` to :math:`\theta`,
+        
+        .. math:: \theta = N z
+       
+        such that the affine part of :math:`\theta` remains unchanged and the 
+        non-affine part :math:`A` satisfies the TPSN constraint,
+        
+        
+        .. math::
+            [X^\top U^\top] A &= 0 \\
+            [1^\top 0^\top] A &= 0
+        
+        Args:
+            x_ctrl_na: control points, :math:`X`
+            u_ctrl_ta: control normals, :math:`U`
+        
+        Returns:
+            N_bn: change of variable matrix, :math:`N`
+        """
+        n, a = x_ctrl_na.shape
+        t, a = u_ctrl_ta.shape
+        D = np.r_[np.c_[np.ones((n, 1)), x_ctrl_na],
+                  np.c_[np.zeros((t, 1)), u_ctrl_ta]]
+        _u,_s,_vh = np.linalg.svd(D)
+        N_be = np.eye(n+t+a+1, n+t)
+        N_be[a+1:, a+1:] = _u[:, a+1:]
+        return N_be
+    
+    def transform_points(self, x_ma=None):
+        """Transforms the x_ma points. If x_ma is not specified, the source points x_la are used."""
+        if x_ma is None:
+            y_lg = self.Q0N_le.dot(self.z_eg)
+            return y_lg
+        else:
+            m = x_ma.shape[0]
+            K0_me = tpsn_kernel_matrix2_0(x_ma, self.x_ctrl_na, self.u_ctrl_ta, self.z_ctrl_ta)
+            Q0_mb = np.c_[np.ones((m, 1)), x_ma, K0_me]
+            y_mg = Q0_mb.dot(self.theta_bg)
+            return y_mg
+
+    def transform_vectors(self, u_sa=None, z_sa=None):
+        if (u_sa is None and z_sa is not None) or (u_sa is not None and z_sa is None):
+            raise RuntimeError("u_sa and z_sa should both be None or should both be specified")
+        if u_sa is None or z_sa is None:
+            v_rg = self.Q1N_re.dot(self.z_eg)
+            return v_rg
+        else:
+            s = u_sa.shape[0]
+            K1_se = tpsn_kernel_matrix2_1(u_sa, z_sa, self.x_ctrl_na, self.u_ctrl_ta, self.z_ctrl_ta)
+            Q1_sb = np.c_[np.zeros((s,1)), u_sa, K1_se]
+            v_sg = Q1_sb.dot(self.theta_bg)
+            return v_sg
+
+    def compute_transform_grad(self, x_ma=None):
+        """Gradient of the transform of the x_ma points. If x_ma is not specified, the source points x_la are used."""
+        raise NotImplementedError
+        if x_ma is None:
+            return self.QN_ln
+        else:
+            m = x_ma.shape[0]
+            S_mn = tps_kernel_matrix2(x_ma, self.ctrl_na)
+            Q_mb = np.c_[np.ones((m, 1)), x_ma, S_mn]
+            QN_mn = Q_mb.dot(self.N_bn)
+            return QN_mn
+
+    def compute_jacobian(self, x_ma):
+        # TODO: analytical jacobian is wrong. Use numerical for now
+        return np.asarray([self.compute_numerical_jacobian(x_a) for x_a in x_ma])
+
+        n, t, a, g = self.n, self.t, self.a, self.g
+        m = x_ma.shape[0]
+        assert x_ma.shape[1] == a
+
+        dist_mn = ssd.cdist(x_ma, self.x_ctrl_na, 'euclidean')
+        dist_mt = ssd.cdist(x_ma, self.z_ctrl_ta, 'euclidean')
+        dot_mt = np.empty((m,t))
+        for j in range(t):
+            dot_mt[:,j] = (self.z_ctrl_ta[j] - x_ma).dot(self.u_ctrl_ta[j])
+
+        grad_mga = np.empty((m, g, a))
+
+        lin_ga = self.lin_ag.T
+        for i in range(a):
+            diffi_mn = x_ma[:,i][:,None] - self.x_ctrl_na[:,i][None,:]
+            diffi_mt = self.z_ctrl_ta[:,i][None,:] - x_ma[:,i][:,None]
+            dS00dx_mn = 3 * (dist_mn ** 2) * diffi_mn
+            dS01dx_mt = 3 * (nan2zero(diffi_mt * dot_mt / dist_mt) - (dist_mt * self.u_ctrl_ta[:,i][None,:]))
+            grad_mga[:,:,i] = lin_ga[None,:,i] + np.c_[dS00dx_mn, dS01dx_mt].dot(self.w_eg)
+        return grad_mga
+
+    def compute_bending_energy(self, bend_coef=1):
+        return bend_coef * np.trace(self.z_eg.T.dot(self.NKN_ee.dot(self.z_eg)))
+
+    def compute_rotation_reg(self, rot_coef=1):
+        rot_coef = np.ones(a) * rot_coef if np.isscalar(rot_coef) else rot_coef
+        assert len(rot_coef) == self.a
+        return np.trace((self.lin_ag - np.eye(self.a)).T.dot(np.diag(rot_coef)).dot(self.lin_ag - np.eye(self.a)))
+    
 def gauss_transform(A, B, scale):
     m = A.shape[0]
     n = B.shape[0]
