@@ -4,8 +4,9 @@ import settings
 import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.optimize as so
+import transformation
 from transformation import Transformation
-from tps import tps_kernel_matrix, tps_kernel_matrix2, tps_grad, loglinspace, nan2zero
+from tps import tps_kernel_matrix, tps_kernel_matrix2, tps_grad, loglinspace, nan2zero, prepare_fit_ThinPlateSpline, balance_matrix3
 
 class ThinPlateSpline(Transformation):
     """
@@ -209,6 +210,67 @@ def tpsn_fit(f, y_lg, v_rg, bend_coef, rot_coef, wt_l, wt_r):
     f_eg -= NR_ea
 
     f.z_eg = solve_qp(H_ee, f_eg)
+
+def tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, 
+             n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+             reg_init=settings.REG[0], reg_final=settings.REG[1], 
+             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+             radn_init=1.41, radn_final=0.39, 
+             nu_init=0.001, nu_final=1, 
+             rot_reg=settings.ROT_REG, 
+             outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
+             callback=None):
+    """
+    TODO: hyperparameters
+    """
+    _, d = x_ld.shape
+    regs = loglinspace(reg_init, reg_final, n_iter)
+    rads = loglinspace(rad_init, rad_final, n_iter)
+    radns = loglinspace(radn_init, radn_final, n_iter)
+    nus = loglinspace(nu_init, nu_final, n_iter)
+    
+    f = ThinPlateSplineNormal(x_ld, u_rd, z_rd, x_ld, u_rd, z_rd)
+    scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_ld,axis=0) - np.min(x_ld,axis=0))
+    f.lin_ag = np.diag(scale) # align the mins and max
+    f.trans_g = np.median(y_md,axis=0) - np.median(x_ld,axis=0) * scale  # align the medians
+    
+    # set up outlier priors for source and target scenes
+    l, _ = x_ld.shape
+    m, _ = y_md.shape
+    r, _ = u_rd.shape
+    s, _ = v_sd.shape
+    x_priors = np.ones(l)*outlierprior
+    y_priors = np.ones(m)*outlierprior
+    u_priors = np.ones(r)*outlierprior
+    v_priors = np.ones(s)*outlierprior
+    
+    for i, (reg, rad, radn, nu) in enumerate(zip(regs, rads, radns, nus)):
+        for i_em in range(em_iter):
+            xwarped_ld = f.transform_points()
+            uwarped_rd = f.transform_vectors()
+            zwarped_rd = f.transform_points(z_rd)
+            
+            beta_r = np.linalg.norm(uwarped_rd, axis=1)
+
+            dist_lm = ssd.cdist(xwarped_ld, y_md, 'sqeuclidean')
+            prob_lm = np.exp( -dist_lm / (2*rad) )
+            corr_lm, _, _ =  balance_matrix3(prob_lm, 10, x_priors, y_priors, outlierfrac)
+
+            dist_rs = ssd.cdist(uwarped_rd / beta_r[:,None], v_sd, 'sqeuclidean')
+            site_dist_rs = ssd.cdist(zwarped_rd, z_sd, 'sqeuclidean')
+            prior_prob_rs = np.exp( -site_dist_rs / (2*rad) )
+            prob_rs = prior_prob_rs * np.exp( -dist_rs / (2*radn) )
+            corr_rs, _, _ =  balance_matrix3(prob_rs, 10, u_priors, v_priors, outlierfrac)
+
+            xtarg_ld, wt_l = prepare_fit_ThinPlateSpline(x_ld, y_md, corr_lm)
+            utarg_rd, wt_r = prepare_fit_ThinPlateSpline(u_rd, v_sd, corr_rs)
+            wt_r *= nu / beta_r
+            tpsn_fit(f, xtarg_ld, utarg_rd, reg, rot_reg, wt_l, wt_r)
+
+            if callback:
+                callback(i, i_em, x_ld, y_md, xtarg_ld, utarg_rd, wt_l, f, corr_lm, rad)
+        
+    return f, corr_lm, corr_rs
 
 def tpsn_kernel_matrix2_00(x_la, y_ma):
     distmat_lm = ssd.cdist(x_la, y_ma)
