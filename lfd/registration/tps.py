@@ -296,7 +296,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             reg_init=settings.REG[0], reg_final=settings.REG[1], 
             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
             rot_reg=settings.ROT_REG, 
-            outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
+            outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
             prior_prob_nm=None, callback=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
@@ -346,7 +346,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 reg_init=settings.REG[0], reg_final=settings.REG[1], 
                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
                 rot_reg=settings.ROT_REG, 
-                outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
+                outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
                 prior_prob_nm=None, callback=None):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)

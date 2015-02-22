@@ -185,7 +185,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
                  rot_reg=settings.ROT_REG, 
-                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory()):
         """Inits TpsRpmRegistrationFactory with demonstrations and parameters
@@ -286,7 +286,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
                  rot_reg=settings.ROT_REG, 
-                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory(), 
                  g_solver_factory=solver.AutoTpsSolverFactory(use_cache=False)):
@@ -389,7 +389,7 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
                  rot_reg=settings.ROT_REG, 
-                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OURLIER_FRAC, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
                  prior_fn=None, 
                  f_solver_factory=solver.AutoTpsSolverFactory(), 
                  g_solver_factory=solver.AutoTpsSolverFactory(use_cache=False)):
