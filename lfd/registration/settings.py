@@ -24,6 +24,8 @@ BEND_COEF_DIGITS   = 6
 #:
 OUTLIER_CUTOFF  = 1e-2
 
+COV_COEF = 1
+
 try:
 	from lfd_settings.registration.settings import *
 except ImportError:
