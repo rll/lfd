@@ -538,6 +538,27 @@ class ThinPlateSplineNormal(Transformation):
             grad_mga[:,:,i] = lin_ga[None,:,i] + np.c_[dS00dx_mn, dS01dx_mt].dot(self.w_eg)
         return grad_mga
 
+    def transform_bases(self, x_ma, rot_mad, orthogonalize=True, orth_method = "cross"):
+        """
+        orthogonalize: none, svd, qr
+        """
+        a, g = self.a, self.g
+        m, _, d = rot_mad.shape
+        newrot_mgd = np.empty((m, g, d))
+        for i, (x_a, rot_ad) in enumerate(zip(x_ma, rot_mad)):
+            newrot_dg = self.transform_vectors(rot_ad.T, np.tile(x_a, (d, 1)))
+            newrot_mgd[i, :, :] = newrot_dg.T
+
+        if orthogonalize:
+            if orth_method == "qr":
+                newrot_mgd = transformation.orthogonalize3_qr(newrot_mgd)
+            elif orth_method == "svd":
+                newrot_mgd = transformation.orthogonalize3_svd(newrot_mgd)
+            elif orth_method == "cross":
+                newrot_mgd = transformation.orthogonalize3_cross(newrot_mgd)
+            else: raise Exception("unknown orthogonalization method %s"%orthogonalize)
+        return newrot_mgd
+
     def compute_bending_energy(self, bend_coef=1):
         return bend_coef * np.trace(self.z_eg.T.dot(self.NKN_ee.dot(self.z_eg)))
 
