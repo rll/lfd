@@ -65,6 +65,11 @@ class SceneState(object):
         SceneState.ids.add(id)
         return id
 
+class ClutteredSceneState(SceneState):
+
+    def __init__(self, cloud, rope_state, box_states, id=None, color=None):
+        pass  
+
 class SimulationEnv:
     def __init__(self, table_height, init_joint_names, init_joint_values, obstacles, dof_limits_factor):
         self.table_height = table_height
@@ -819,4 +824,23 @@ def draw_finger_pts_traj(sim_env, flr2finger_pts_traj, color):
         for pts in pts_traj:
             handles.append(sim_env.env.drawlinestrip(np.r_[pts, pts[0][None,:]], 1, color))
     return handles
+
+def gen_helix(h0, h1, r, n_coils):
+    ang0 = 0
+    ang1 = n_coils * 2 * np.pi
+    l = (2 * np.pi * r * n_coils)
+    N = np.round(l / .02)
+    
+    
+    pts = np.zeros((N, 3))
+    angs = np.linspace(ang0, ang1, N)
+    
+    pts[:, 0] = r * np.cos(angs)
+    pts[:, 1] = r * np.sin(angs)
+    pts[:, 2] = np.linspace(h0, h1, N)
+
+    return pts
+
+
+
 

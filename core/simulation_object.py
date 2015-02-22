@@ -1,6 +1,7 @@
 from __future__ import division
 
-import trajoptpy, bulletsimpy
+import trajoptpy, bulletsimpy, openravepy
+from sim_util import gen_helix
 import numpy as np
 
 import IPython as ipy
@@ -78,6 +79,7 @@ class BoxSimulationObject(XmlSimulationObject):
               <Geom type="box">
                 <extents>%f %f %f</extents>
               </Geom>
+              <Mass type='box'><total>100</total></Mass>
             </Body>
           </KinBody>
         </Environment>
@@ -88,7 +90,7 @@ class BoxSimulationObject(XmlSimulationObject):
         self.extents = extents
     
     def _get_constructor_info(self):
-        args = [self.name, self.translation, self.extents]
+        args = (self.name, self.translation, self.extents)
         kwargs = {"dynamic":self.dynamic}
         return (type(self).__name__, type(self).__module__), args, kwargs
     
@@ -184,3 +186,122 @@ class RopeSimulationObject(SimulationObject):
     
     def __repr__(self):
         return "RopeSimulationObject(%s, numpy.array([[...]]), RopeParams(...), dynamic=%r, upsample=%i, upsample_rad=%i)" % (self.name, self.dynamic, self.upsample, self.upsample_rad)
+
+class CoilSimulationObject(RopeSimulationObject):
+
+    LOOP_ANG = np.pi / 4
+    SPACING = .01
+    LOOP_COILS = 1
+    
+    def __init__(self, name, center_pose, radius, rope_params, n_coils=1, loop_coils = None, **kwargs):
+        if loop_coils is not None:
+            self.LOOP_COILS = loop_coils
+        h_vert = (rope_params.radius + self.SPACING) * 2 * n_coils
+        loop_rad = h_vert / 2 + self.SPACING
+        loop_trans = np.array([radius, 0, h_vert / 2])
+        # create vertical helix
+        vert_ctrl_pts = gen_helix(0, h_vert, radius, n_coils).T
+
+        fwd_loop_pts = gen_helix(0, -self.LOOP_ANG * radius, loop_rad, self.LOOP_COILS).T
+        fwd_loop_pts = openravepy.rotationMatrixFromAxisAngle(
+            [1, 0, 0], 
+            -np.pi / 2 ).dot(fwd_loop_pts) + loop_trans[:, None]
+
+        # from pdb import set_trace; set_trace()
+        
+        
+
+        bwd_loop_pts = gen_helix(0, -self.LOOP_ANG * radius, loop_rad, self.LOOP_COILS).T
+        bwd_loop_pts = openravepy.rotationMatrixFromAxisAngle(
+            [1, 0, 0], 
+            np.pi / 2 ).dot(bwd_loop_pts) + loop_trans[:, None]
+
+        ctrl_pts = np.c_[fwd_loop_pts[:, ::-1], vert_ctrl_pts, bwd_loop_pts]
+        
+        ctrl_pts = np.r_[ctrl_pts, np.ones((1, ctrl_pts.shape[1]))] 
+        ctrl_pts = np.dot(center_pose, ctrl_pts)[:3, :].T
+
+        super(CoilSimulationObject, self).__init__(name, ctrl_pts, rope_params, **kwargs)
+        if type(center_pose) != tuple:
+            center_pose = tuple(center_pose.tolist())
+        self.init_args = (name, center_pose, radius, rope_params, n_coils, loop_coils)
+        self.kwargs    = kwargs
+
+    def __repr__(self):
+        return "CoilSimulationObject(%s, numpy.array([[...]]), RopeParams(...), dynamic=%r, upsample=%i, upsample_rad=%i)" % (self.name, self.dynamic, self.upsample, self.upsample_rad)
+
+    def _get_constructor_info(self):
+        args = self.init_args
+        kwargs = self.kwargs
+        return (type(self).__name__, type(self).__module__), args, kwargs
+
+
+scale = .7
+
+class ContainerSimulationObject(XmlSimulationObject):
+
+    def __init__(self, extents=(scale*.125, scale*.27, scale*.12), thickness=.003):
+        
+        self.name = 'Container'
+        
+        offsets = []
+        dims = []
+
+        #base
+        offsets.append([0, 0, 0])
+        dims.append([extents[1], extents[0], thickness])
+
+        #l_wall
+        offsets.append(offsets[-1] +  np.array([0, extents[0], extents[2]]))
+        dims.append([extents[1], thickness, extents[2]])
+
+        # b_wall
+        offsets.append(offsets[-1] + np.array([extents[1], -extents[0], 0]))
+        dims.append([thickness, extents[0], extents[2]])
+
+        # r_wall 
+        offsets.append(offsets[-1] + np.array([-extents[1], -extents[0], 0]))
+        dims.append([extents[1], thickness, extents[2]])
+
+        # f_wall
+        offsets.append(offsets[-1] + np.array([-extents[1], extents[0], -extents[2] / 2.2]))
+        dims.append([thickness, extents[0], extents[2] / 2])
+
+        xml = """<Environment>
+              <KinBody name="container_kinbody">            
+                <Body name="container">"""
+        for off, dim in zip(offsets, dims):
+            geom_xml = """
+              <Geom type="box">
+                <translation>{} {} {}</translation>
+                <extents>{} {} {}</extents>
+              </Geom><Mass type="box"><total>1000</total></Mass>
+                   """.format(off[0], off[1], off[2], dim[0], dim[1], dim[2])
+            xml += geom_xml
+        xml += """
+           </Body></KinBody></Environment>
+           """
+        # print xml
+        super(ContainerSimulationObject, self).__init__(xml, dynamic=True)
+
+        self.extents = extents
+        self.thickness = thickness
+
+    def _get_constructor_info(self):
+        args = [self.extents, self.thickness]
+        return (type(self).__name__, type(self).__module__), args, {}
+
+
+    def get_footprint(self):
+        return self.extents[1], self.extents[2]
+
+    def get_height(self):
+        return self.extents[0] + .2
+
+    def get_pose(self):
+        kinbdy = self.sim.env.GetKinBody('container_kinbody')
+        return kinbdy.GetTransform()
+
+    def __repr__(self):
+        return "ContainerSimulationObject({}, {}, {})".format(self.init_trans, self.extents, self.thickness)
+

@@ -8,6 +8,10 @@ from robot_world import RobotWorld
 import sim_util
 import importlib
 
+from core.simulation_object import XmlSimulationObject, BoxSimulationObject, RopeSimulationObject, \
+    CylinderSimulationObject, CoilSimulationObject, ContainerSimulationObject
+
+
 import ipdb
 
 class StaticSimulation(object):
@@ -266,38 +270,52 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         self.T_w_k = T_w_k
         self.range_k = range_k
     
-    def observe_cloud(self):
+    def observe_cloud(self, observe_objs=None):
         if self.T_w_k is None:
             if self.robot is None:
                 raise RuntimeError("Can't observe cloud when there is no robot")
             else:
                 from rapprentice import berkeley_pr2
-                self.T_w_k = berkeley_pr2.get_kinect_transform(self.robot)
+                self.T_w_k = berkeley_pr2.get_kinect_transform(self.robot)    
+
         
         # camera's parameters
         cx = 320.-.5
         cy = 240.-.5
         f = 525. # focal length
-        w = 640.
-        h = 480.
+        w = 640. 
+        h = 480. 
         
-        pixel_ij = np.array(np.meshgrid(np.arange(w), np.arange(h))).T.reshape((-1,2)) # all pixel positions
+        pixel_ij = np.array(np.meshgrid(np.arange(w, step=4), np.arange(h, step=4))).T.reshape((-1,2)) # all pixel positions
         rayTos = self.range_k * np.c_[(pixel_ij - np.array([cx, cy])) / f, np.ones(pixel_ij.shape[0])]
         rayFroms = np.zeros_like(rayTos)
         # transform the rays from the camera frame to the world frame
         rayTos = rayTos.dot(self.T_w_k[:3,:3].T) + self.T_w_k[:3,3]
         rayFroms = rayFroms.dot(self.T_w_k[:3,:3].T) + self.T_w_k[:3,3]
 
+        measurements = {}
+
         cloud = []
-        for sim_obj in self.dyn_sim_objs:
+        if observe_objs is None:
+            observe_objs = self.dyn_sim_objs
+        for sim_obj in observe_objs:
             for bt_obj in sim_obj.get_bullet_objects():
                 ray_collisions = self.bt_env.RayTest(rayFroms, rayTos, bt_obj)
                 
-                pts = np.empty((len(ray_collisions), 3))
+
                 for i, ray_collision in enumerate(ray_collisions):
-                    pts[i,:] = ray_collision.pt
-                cloud.append(pts)
-        cloud = np.concatenate(cloud)
+                    key = (ray_collision.rayFrom[0], ray_collision.rayFrom[1], ray_collision.rayFrom[2],
+                           ray_collision.rayTo[0], ray_collision.rayTo[1], ray_collision.rayTo[2])
+                    d = np.linalg.norm(ray_collision.rayFrom - ray_collision.pt)
+                    if key in measurements and d > measurements[key][0]:
+                            continue
+                    measurements[key] = (d, ray_collision.pt)
+        cloud = np.zeros((len(measurements), 3))        
+        if not measurements:
+            return np.array([0, 0, 0])
+        for i, (_, pt) in enumerate(measurements.itervalues()):
+            cloud[i, :] = pt
+        # cloud = np.concatenate(cloud)
 
         # hack to filter out point below the top of the table. TODO: fix this hack
         table_sim_objs = [sim_obj for sim_obj in self.sim_objs if "table" in sim_obj.names]
@@ -332,7 +350,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         start_val = self.robot.GetDOFValues([joint_ind])[0]
         print 'start_val: ', start_val
         # execute gripper finger trajectory
-        dyn_bt_objs = [bt_obj for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects()]
+        dyn_bt_objs = [x for sim_obj in self.dyn_sim_objs for x in sim_obj.get_bullet_objects()]
         next_val = start_val
         while next_val:
             flr2finger_pts_grid = self._get_finger_pts_grid(lr)
@@ -367,27 +385,38 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                 self.viewer.Step()
         handles = []
         # add constraints at the points where a ray hits a dynamic link within a distance of grab_dist_thresh
-        for bt_obj in dyn_bt_objs:
-            from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
-            to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
-            
-            for i in range(ray_froms.shape[0]):
-                #handles.append(self.env.drawarrow(ray_froms[i,:], ray_tos[i,:]))
-                self.viewer.Step()
-            ray_collisions = [rc for rcs in [from_to_ray_collisions, to_from_ray_collisions] for rc in rcs]
-            #handles.append(self.env.plot3(np.asarray([x.pt for x in ray_collisions]), 2, (1,0,0)))
+        for sim_obj in self.dyn_sim_objs:
+            for bt_obj in sim_obj.get_bullet_objects():
+                from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
+                to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
+                
+                for i in range(ray_froms.shape[0]):
+                    #handles.append(self.env.drawarrow(ray_froms[i,:], ray_tos[i,:]))
+                    if step_viewer:
+                        self.viewer.Step()
+                ray_collisions = [rc for rcs in [from_to_ray_collisions, to_from_ray_collisions] for rc in rcs]
+                #handles.append(self.env.plot3(np.asarray([x.pt for x in ray_collisions]), 2, (1,0,0)))
+                n_hits = {}
 
-            #self.viewer.Idle()
-            #ipdb.set_trace()
-            for rc in ray_collisions:
-                if rc.link == bt_obj.GetKinBody().GetLink('rope_59'):
-                    #handles.append(self.env.drawarrow(rc.rayFrom, rc.rayTo))
-                    self.viewer.Step()
-                    #ipdb.set_trace()
-                if np.linalg.norm(rc.pt - rc.rayFrom) < grab_dist_thresh:
-                    link_tf = rc.link.GetTransform()
-                    link_tf[:3,3] = rc.pt
-                    self._add_constraints(lr, rc.link, link_tf)
+                #self.viewer.Idle()
+                #ipdb.set_trace()
+
+                for rc in ray_collisions:
+                    # if rc.link == bt_obj.GetKinBody().GetLink('rope_59'):
+                    #     #handles.append(self.env.drawarrow(rc.rayFrom, rc.rayTo))
+                    #     self.viewer.Step()
+                    #     #ipdb.set_trace()                
+                    if np.linalg.norm(rc.pt - rc.rayFrom) < grab_dist_thresh:
+                        if rc.link not in n_hits:
+                            n_hits[rc.link] = 0
+                        n_hits[rc.link] += 1
+                        ## HACK so that we don't try to pick up bad objects
+                        print rc.link
+                        if (n_hits[rc.link] > 5 or 
+                            type(sim_obj) == CoilSimulationObject or type(sim_obj) == RopeSimulationObject):
+                            link_tf = rc.link.GetTransform()
+                            link_tf[:3,3] = rc.pt
+                            self._add_constraints(lr, rc.link, link_tf)
         #ipdb.set_trace() 
         if self.viewer and step_viewer:
             self.viewer.Step()
@@ -420,7 +449,9 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         
         traj[0] = transition_traj[-1]
         sim_util.unwrap_in_place(traj, dof_inds=dof_inds)
-        traj = ropesim.retime_traj(self.robot, dof_inds, traj) # make the trajectory slow enough for the simulation
+        traj = ropesim.retime_traj(self.robot, dof_inds, traj, max_cart_vel=.005) # make the trajectory slow enough for the simulation
+
+        step_viewer*=5
     
         animate_traj.animate_traj(traj, self.robot, restore=False, pause=interactive,
             callback=sim_callback, step_viewer=step_viewer if self.viewer else 0)
@@ -509,6 +540,184 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             })
             self.constraints[lr].append(cnt)
             self.constraints_links[lr].append(grab_link)
+
+class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
+
+    scale = 0.7
+    
+    TABLE_HEIGHT = .77
+    BIG_DIM = scale * 0.05
+    SMALL_DIM = scale * 0.03
+
+    MAX_STEPS=3000
+
+    def __init__(self, n_big, n_small, **kwargs):
+        super(ClutterSimulationRobotWorld, self).__init__(**kwargs)
+        self.coil = CoilSimulationObject("coil", np.eye(4), .05, sim_util.RopeParams())
+        self.table = BoxSimulationObject("table", 
+                                         [1, 0, self.TABLE_HEIGHT-.1], 
+                                         [.85, 1, .1], dynamic=False)
+        big_dims = (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM)
+        self.container = ContainerSimulationObject()
+        self.small_boxes = [BoxSimulationObject(
+                "small_box_{}".format(i), 
+                (0, 0, 0),
+                (self.SMALL_DIM, self.SMALL_DIM, self.SMALL_DIM), 
+                dynamic=True) for i in xrange(n_small)]
+        self.big_boxes = [BoxSimulationObject(
+                "big_box_{}".format(i), 
+                (0, 0, 0),
+                (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM), 
+                dynamic=True) for i in xrange(n_big)]
+        robot = XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False)
+        objs = [robot, self.table, self.container, self.coil] + self.small_boxes + self.big_boxes
+        self.add_objects(objs)
+        self.color_container()
+        self.reset_robot()
+        self.reset_container()
+
+    def color_container(self):
+        for l in self.container.get_bullet_objects()[0].GetKinBody().GetLinks():
+            for geom in l.GetGeometries():
+                geom.SetDiffuseColor([1.,0.,0.])
+
+    def set_state(self, *args):
+        super(ClutterSimulationRobotWorld, self).set_state(*args)
+        self.color_container()
+
+
+    def reset_container(self):
+        blt_obj = self.container.get_bullet_objects()[0]
+        kinbdy = self.env.GetKinBody('container_kinbody')
+        ## MAGIC
+        T = openravepy.matrixFromAxisAngle(np.array([0, 0, -np.pi/6])).dot(kinbdy.GetTransform())
+        T[0, 3] = .5
+        T[1, 3] = -.3
+        T[2, 3] = self.TABLE_HEIGHT + .01
+        kinbdy.SetTransform(T)
+        blt_obj.SetTransform(T)        
+        self.color_container()
+        self.update()
+
+
+    def init_coil(self, P):
+        coil_args = self.coil.init_args
+        new_args = (coil_args[0], P) + coil_args[2:]
+        self.coil = CoilSimulationObject(*new_args, **self.coil.kwargs)
+        self.add_objects([self.coil])
+
+    def add_box(self, P, size='small'):
+        P = (P[0, 3], P[1, 3], P[2, 3])
+
+        if size == 'small':
+            dim = self.SMALL_DIM
+            other_boxes = self.small_boxes
+        else:
+            dim = self.BIG_DIM
+            other_boxes = self.big_boxes
+
+        name = size + '_box_{}'.format(len(other_boxes))
+        new_box = BoxSimulationObject(
+            name, P,
+            (dim, dim, dim),
+            dynamic=True)
+
+        other_boxes.append(new_box)
+        self.add_objects([new_box])
+
+    def reset_robot(self):
+        torso_idx, head_tilt_idx = (self.robot.GetJoint('torso_lift_joint').GetDOFIndex(),
+                                    self.robot.GetJoint('head_tilt_joint').GetDOFIndex())
+        _, torso_max = self.robot.GetJoint('torso_lift_joint').GetLimits()
+        _, tilt_max = self.robot.GetJoint('head_tilt_joint').GetLimits()
+
+        self.robot.SetDOFValues([torso_max, 0.8*tilt_max], [torso_idx, head_tilt_idx])
+        sim_util.reset_arms_to_side(self)
+        self.update()
+
+    def initialize(self, state, step_viewer=False):
+        self.reset_robot()
+
+        dyn_objs = [self.coil] + self.small_boxes + self.big_boxes
+        self.remove_objects(dyn_objs)
+        self.small_boxes = []
+        self.big_boxes = []
+
+        for n in state:
+            P = state[n]
+            if n == 'coil':
+                self.init_coil(P)
+            else:
+                size = 'small' if n.startswith('small') else 'big'
+                self.add_box(P, size=size)
+        self.reset_container()
+        # self.viewer.Idle()
+
+        self.settle(max_steps=self.MAX_STEPS, step_viewer=step_viewer)
+        self.remove_cleared_objs()
+
+    def observe_cloud(self, observe_objs=None):
+        if observe_objs is None:
+            observe_objs = self.observe_objs
+        cld = super(ClutterSimulationRobotWorld, self).observe_cloud(observe_objs)
+        assert cld.shape[1] == 3
+        cld[:, 2] = cld[:, 2] - .02
+        return cld
+
+    def remove_cleared_objs(self, debug=False):
+        self.observe_objs = [self.container]
+        c_x, c_y = self.container.get_footprint()
+        c_x += .05
+        c_y += .05
+        wf_to_cf = np.linalg.inv(self.container.get_pose())
+
+        handles = []        
+        if debug:
+            from rapprentice import plotting_openrave
+
+            remove_region = np.zeros((20*20, 4))
+            remove_region[:, 3] = 1
+            grid_n = 20
+            x_vals, y_vals = np.linspace(-c_x, c_x, grid_n), np.linspace(-c_y, c_y, grid_n)
+            for i, x in enumerate(x_vals):
+                for j, y in enumerate(y_vals):
+                    remove_region[i + j * grid_n, :2] = [x, y]
+ 
+            remove_region = self.container.get_pose().dot(remove_region.T)
+            remove_region[2, :] = 1
+            handles.append(self.env.plot3(remove_region[:3, :].T, 3, (1, 1, 0, 1)))
+
+        rp_wf = self.coil.rope.GetControlPoints()
+        rp_cf = wf_to_cf[:3, :3].dot(rp_wf.T) + wf_to_cf[:3, 3][:, None]
+        coil_out = (np.abs(rp_cf[0]) > c_x) | (np.abs(rp_cf[1]) > c_y)
+        if debug and np.any(coil_out):
+            from rapprentice import plotting_openrave
+            print_pts = rp_wf[coil_out]
+            print_pts[:, 2] = print_pts[:, 2] + .3
+            handles.append(self.env.plot3(print_pts, 3, (1, 1, 0, 1)))
+            self.viewer.Idle()
+
+        if not np.all(coil_out):
+            self.observe_objs.append(self.coil)
+
+        for box in self.small_boxes + self.big_boxes:
+            bt_cf = wf_to_cf.dot(box.get_bullet_objects()[0].GetTransform())
+            box_x, box_y = np.abs(bt_cf[0, 3]), np.abs(bt_cf[1, 3])
+            if box_x < c_x and box_y < c_y:
+                self.observe_objs.append(box)
+            elif debug:
+                from rapprentice import plotting_openrave                    
+                print box_x, box_y
+                print self.container.extents
+                
+                print_pts = box.get_bullet_objects()[0].GetTransform()[:3, 3]
+                print_pts[2] = 1
+                print print_pts
+                handles.append(self.env.plot3(print_pts[None, :], 10, (1, 0, 0, 1)))
+                self.viewer.Idle()
+
+                print "{} removed".format(box.name)
+
 
 class DynamicRopeSimulationRobotWorld(DynamicSimulationRobotWorld):
 
@@ -625,6 +834,6 @@ class DynamicRopeSimulationRobotWorld(DynamicSimulationRobotWorld):
                 geom.SetDiffuseColor([1.,1.,1.])
         self.constraints[lr] = []
         self.constraints_links[lr] = []
-    
+   
 
 

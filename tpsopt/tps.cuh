@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
-#define MAX_DIM 150
+#define MAX_DIM 275
 #define DATA_DIM 3
 
 #define MIN(a, b) ((a < b) ? a : b)
