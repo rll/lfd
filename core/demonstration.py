@@ -11,7 +11,7 @@ import IPython as ipy
 class Demonstration(object):
     def __init__(self, name, scene_state, aug_traj):
         """Inits Demonstration
-        
+
         Args:
             name: demonstration name, which is the same as the ones used for indexing the demonstrations
             scene_state: demonstration SceneState
@@ -22,7 +22,7 @@ class Demonstration(object):
         assert aug_traj.lr2ee_traj is not None
         assert aug_traj.lr2finger_traj is not None
         self.aug_traj = aug_traj
-    
+
     def __repr__(self):
         return "%s(%s, %s, %s)" % (self.__class__.__name__, self.name, self.scene_state.__repr__(), self.aug_traj.__repr__())
 
@@ -31,7 +31,7 @@ class SceneState(object):
     ids = set()
     def __init__(self, full_cloud, id=None, full_color=None, downsample_size=0):
         """Inits SceneState
-        
+
         Args:
             full_cloud: full (i.e. not downsampled) cloud
             id: unique id for this SceneState
@@ -64,7 +64,7 @@ class SceneState(object):
         assert id not in SceneState.ids
         SceneState.ids.add(id)
         return id
-    
+
     def __repr__(self):
         return "%s(..., id=%i)" % (self.__class__.__name__, self.id)
 
@@ -102,7 +102,7 @@ class TimestepState(object):
 class AugmentedTrajectory(object):
     def __init__(self, lr2arm_traj=None, lr2finger_traj=None, lr2ee_traj=None, lr2open_finger_traj=None, lr2close_finger_traj=None):
         """Inits AugmentedTrajectory
-        
+
         Args:
             lr2arm_traj: dict that maps from 'l' and/or 'r' to the left arm's and/or right arm's joint angle trajectory
             lr2finger_traj: dict that maps to the left gripper's and/or right gripper's finger joint angle trajectory
@@ -123,9 +123,9 @@ class AugmentedTrajectory(object):
 
         self.lr2arm_traj = lr2arm_traj
         self.lr2finger_traj = lr2finger_traj
-        
+
         self.lr2ee_traj = lr2ee_traj
-        
+
         if lr2close_finger_traj is None:
             self.lr2close_finger_traj = np.zeros(self.n_steps, dtype=bool)
         else:
@@ -136,7 +136,7 @@ class AugmentedTrajectory(object):
         else:
             self.lr2open_finger_traj = lr2open_finger_traj
 
-    
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             for (lr2traj, other_lr2traj) in [(self.lr2arm_traj, other.lr2arm_traj), (self.lr2finger_traj, other.lr2finger_traj),
@@ -155,10 +155,10 @@ class AugmentedTrajectory(object):
             return True
         else:
             return False
-    
+
     def __ne__(self, other):
         return not self.__eq__(other)
-    
+
     @staticmethod
     def create_from_full_traj(robot, full_traj, lr2open_finger_traj=None, lr2close_finger_traj=None):
         traj, dof_inds = full_traj
@@ -178,11 +178,11 @@ class AugmentedTrajectory(object):
             finger_ind = robot.GetJointIndex("%s_gripper_l_finger_joint"%lr)
             if finger_ind in dof_inds:
                 lr2finger_traj[lr] = traj[:,dof_inds.index(finger_ind)][:,None]
-        lr2ee_traj = {}    
+        lr2ee_traj = {}
         for lr in lr2arm_traj.keys():
             lr2ee_traj[lr] = sim_util.get_ee_traj(robot, lr, lr2arm_traj[lr])
         return AugmentedTrajectory(lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, lr2close_finger_traj=lr2close_finger_traj)
-    
+
     def get_full_traj(self, robot):
         """
         TODO: remove sim_util.get_full_traj
@@ -205,7 +205,7 @@ class AugmentedTrajectory(object):
         else:
             full_traj = (np.zeros((0,0)), [])
         return full_traj
-    
+
     def get_resampled_traj(self, timesteps_rs):
         lr2arm_traj_rs = None if self.lr2arm_traj is None else {}
         lr2finger_traj_rs = None if self.lr2finger_traj is None else {}
@@ -221,7 +221,7 @@ class AugmentedTrajectory(object):
             lr2ee_traj_rs = {}
             for lr in self.lr2ee_traj.keys():
                 lr2ee_traj_rs[lr] = np.asarray(resampling.interp_hmats(timesteps_rs, np.arange(len(self.lr2ee_traj[lr])), self.lr2ee_traj[lr]))
-        
+
         lr2open_finger_traj_rs = None if self.lr2open_finger_traj is None else {}
         lr2close_finger_traj_rs = None if self.lr2close_finger_traj is None else {}
         for (lr2oc_finger_traj_rs, self_lr2oc_finger_traj) in [(lr2open_finger_traj_rs, self.lr2open_finger_traj), (lr2close_finger_traj_rs, self.lr2close_finger_traj)]:
@@ -234,8 +234,8 @@ class AugmentedTrajectory(object):
                 oc_finger_traj_rs = np.zeros(len(timesteps_rs), dtype=bool)
                 oc_finger_traj_rs[oc_inds_rs] = True
                 lr2oc_finger_traj_rs[lr] = oc_finger_traj_rs
-        
+
         return AugmentedTrajectory(lr2arm_traj=lr2arm_traj_rs, lr2finger_traj=lr2finger_traj_rs, lr2ee_traj=lr2ee_traj_rs, lr2open_finger_traj=lr2open_finger_traj_rs, lr2close_finger_traj=lr2close_finger_traj_rs)
-    
+
     def __repr__(self):
         return "%s(...)" % (self.__class__.__name__)
