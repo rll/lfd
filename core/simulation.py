@@ -24,7 +24,7 @@ class StaticSimulation(object):
         self.sim_objs = []
         self.robot = None
         self.__viewer = None # don't use this. use viewer instead, which is automatically set the viewer if the it already exists
-    
+
     def add_objects(self, sim_objs, consider_finger_collisions=True):
         if consider_finger_collisions:
             self._include_gripper_finger_collisions()
@@ -41,7 +41,7 @@ class StaticSimulation(object):
             self.robot = self.env.GetRobots()[-1]
         if consider_finger_collisions:
             self._exclude_gripper_finger_collisions()
-    
+
     def remove_objects(self, sim_objs, consider_finger_collisions=True):
         if consider_finger_collisions:
             self._include_gripper_finger_collisions()
@@ -55,10 +55,10 @@ class StaticSimulation(object):
             raise NotImplementedError("Behavior for removing robots has not been defined")
         if consider_finger_collisions:
             self._exclude_gripper_finger_collisions()
-    
+
     def get_state(self):
         constr_infos = [sim_obj._get_constructor_info() for sim_obj in self.sim_objs]
-        
+
         states = {}
         for sim_obj in self.sim_objs:
             state_key = "".join(sim_obj.names)
@@ -66,15 +66,15 @@ class StaticSimulation(object):
             states[state_key] = sim_obj.get_state()
         states["dof_limits"] = np.asarray(self.robot.GetDOFLimits())
         states["dof_values"] = self.robot.GetDOFValues()
-        
+
         sim_state = (constr_infos, states)
         return sim_state
-    
+
     def set_state(self, sim_state):
         constr_infos, states = sim_state
-        
+
         cur_constr_infos = [sim_obj._get_constructor_info() for sim_obj in self.sim_objs]
-        
+
         constr_infos_to_remove = [constr_info for constr_info in cur_constr_infos if constr_info not in constr_infos]
         constr_infos_to_add = [constr_info for constr_info in constr_infos if constr_info not in cur_constr_infos]
         sim_objs_to_add = []
@@ -89,7 +89,7 @@ class StaticSimulation(object):
             sim_objs_to_add.append(c(*args, **kwargs))
         self.remove_objects(sim_objs_to_remove)
         self.add_objects(sim_objs_to_add)
-        
+
         # the states should have one and only one state for every sim_obj and dof info
         states_keys = ["".join(sim_obj.names) for sim_obj in self.sim_objs] + ["dof_limits", "dof_values"]
         assert set(states_keys) == set(states.keys())
@@ -98,7 +98,7 @@ class StaticSimulation(object):
             sim_obj.set_state(states[state_key])
         self.robot.SetDOFLimits(*states["dof_limits"])
         self.robot.SetDOFValues(states["dof_values"])
-    
+
     @property
     def viewer(self):
         if not self.__viewer and trajoptpy.ViewerExists(self.env):
@@ -117,7 +117,7 @@ class StaticSimulation(object):
                     for bt_obj in sim_obj.get_bullet_objects():
                         for link in bt_obj.GetKinBody().GetLinks():
                             cc.ExcludeCollisionPair(finger_link, link)
-    
+
     def _include_gripper_finger_collisions(self):
         if not self.robot:
             return
@@ -150,9 +150,9 @@ class DynamicSimulation(StaticSimulation):
         super(DynamicSimulation, self).__init__(env=env)
         self.dyn_sim_objs = []
         self.bt_env = None
-        self.bt_robot = None   
+        self.bt_robot = None
         self.dyn_bt_objs = []
-    
+
     def add_objects(self, sim_objs):
         static_sim_objs = [sim_obj for sim_obj in sim_objs if not sim_obj.dynamic]
         dyn_sim_objs = [sim_obj for sim_obj in sim_objs if sim_obj.dynamic]
@@ -166,7 +166,7 @@ class DynamicSimulation(StaticSimulation):
             self.dyn_sim_objs.append(sim_obj)
         self._create_bullet()
         self._exclude_gripper_finger_collisions()
-    
+
     def remove_objects(self, sim_objs):
         static_sim_objs = [sim_obj for sim_obj in sim_objs if not sim_obj.dynamic]
         dyn_sim_objs = [sim_obj for sim_obj in sim_objs if sim_obj.dynamic]
@@ -180,7 +180,7 @@ class DynamicSimulation(StaticSimulation):
             self.dyn_sim_objs.remove(sim_obj)
         self._create_bullet()
         self._exclude_gripper_finger_collisions()
-    
+
     def set_state(self, sim_state):
         """
         Defined such that execution1 and execution2 gives the same results if execution1 == execution2 in the following code execution:
@@ -199,7 +199,7 @@ class DynamicSimulation(StaticSimulation):
     def update(self):
         self.bt_robot.UpdateBullet()
         self._update_rave()
-    
+
     def step(self):
         self.bt_robot.UpdateBullet()
         self.bt_env.Step(.01, 200, .005)
@@ -223,7 +223,7 @@ class DynamicSimulation(StaticSimulation):
         self._update_rave()
         if self.viewer and step_viewer!=0:
             self.viewer.Step()
-    
+
     def _create_bullet(self):
         # create bullet environment and dynamic objects in it
         dyn_obj_names = []
@@ -239,12 +239,12 @@ class DynamicSimulation(StaticSimulation):
         for sim_obj in self.dyn_sim_objs:
             if sim_obj.add_after:
                 sim_obj.add_to_env(self)
-        
+
         for sim_obj in self.dyn_sim_objs:
             self.dyn_bt_objs.extend(sim_obj.get_bullet_objects())
-        
+
         self._update_rave()
-    
+
     def _remove_bullet(self):
         # remove bullet environment and dynamic objects in it
         for sim_obj in self.dyn_sim_objs:
@@ -252,7 +252,7 @@ class DynamicSimulation(StaticSimulation):
         self.bt_env = None
         self.bt_robot = None
         self.dyn_bt_objs = []
-    
+
     def _update_rave(self):
         for bt_obj in self.dyn_bt_objs:
             bt_obj.UpdateRave()
@@ -269,23 +269,23 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         super(DynamicSimulationRobotWorld, self).__init__(env=env)
         self.T_w_k = T_w_k
         self.range_k = range_k
-    
+
     def observe_cloud(self, observe_objs=None):
         if self.T_w_k is None:
             if self.robot is None:
                 raise RuntimeError("Can't observe cloud when there is no robot")
             else:
                 from rapprentice import berkeley_pr2
-                self.T_w_k = berkeley_pr2.get_kinect_transform(self.robot)    
+                self.T_w_k = berkeley_pr2.get_kinect_transform(self.robot)
 
-        
+
         # camera's parameters
         cx = 320.-.5
         cy = 240.-.5
         f = 525. # focal length
-        w = 640. 
-        h = 480. 
-        
+        w = 640.
+        h = 480.
+
         pixel_ij = np.array(np.meshgrid(np.arange(w, step=4), np.arange(h, step=4))).T.reshape((-1,2)) # all pixel positions
         rayTos = self.range_k * np.c_[(pixel_ij - np.array([cx, cy])) / f, np.ones(pixel_ij.shape[0])]
         rayFroms = np.zeros_like(rayTos)
@@ -301,7 +301,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         for sim_obj in observe_objs:
             for bt_obj in sim_obj.get_bullet_objects():
                 ray_collisions = self.bt_env.RayTest(rayFroms, rayTos, bt_obj)
-                
+
 
                 for i, ray_collision in enumerate(ray_collisions):
                     key = (ray_collision.rayFrom[0], ray_collision.rayFrom[1], ray_collision.rayFrom[2],
@@ -310,7 +310,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                     if key in measurements and d > measurements[key][0]:
                             continue
                     measurements[key] = (d, ray_collision.pt)
-        cloud = np.zeros((len(measurements), 3))        
+        cloud = np.zeros((len(measurements), 3))
         if not measurements:
             return np.array([0, 0, 0])
         for i, (_, pt) in enumerate(measurements.itervalues()):
@@ -328,7 +328,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
     def open_gripper(self, lr, target_val=None, step_viewer=1, max_vel=.02):
         #ipdb.set_trace()
         self._remove_constraints(lr)
-         
+
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = self.robot.GetDOFValues([joint_ind])[0]
@@ -342,7 +342,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             self.step()
         if self.viewer and step_viewer:
             self.viewer.Step()
-    
+
     def close_gripper(self, lr, step_viewer=1, max_vel=.02, close_dist_thresh=0.004, grab_dist_thresh=0.005):
         print 'CLOSING GRIPPER'
         # generate gripper finger trajectory
@@ -389,7 +389,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             for bt_obj in sim_obj.get_bullet_objects():
                 from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
                 to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
-                
+
                 for i in range(ray_froms.shape[0]):
                     #handles.append(self.env.drawarrow(ray_froms[i,:], ray_tos[i,:]))
                     if step_viewer:
@@ -405,31 +405,31 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                     # if rc.link == bt_obj.GetKinBody().GetLink('rope_59'):
                     #     #handles.append(self.env.drawarrow(rc.rayFrom, rc.rayTo))
                     #     self.viewer.Step()
-                    #     #ipdb.set_trace()                
+                    #     #ipdb.set_trace()
                     if np.linalg.norm(rc.pt - rc.rayFrom) < grab_dist_thresh:
                         if rc.link not in n_hits:
                             n_hits[rc.link] = 0
                         n_hits[rc.link] += 1
                         ## HACK so that we don't try to pick up bad objects
                         print rc.link
-                        if (n_hits[rc.link] > 5 or 
+                        if (n_hits[rc.link] > 5 or
                             type(sim_obj) == CoilSimulationObject or type(sim_obj) == RopeSimulationObject):
                             link_tf = rc.link.GetTransform()
                             link_tf[:3,3] = rc.pt
                             self._add_constraints(lr, rc.link, link_tf)
-        #ipdb.set_trace() 
+        #ipdb.set_trace()
         if self.viewer and step_viewer:
             self.viewer.Step()
-    
+
     def execute_trajectory(self, full_traj, step_viewer=1, interactive=False, max_cart_vel_trans_traj=.05, sim_callback=None):
         """
         TODO: incorporate other parts of sim_full_traj_maybesim
         """
         if sim_callback is None:
             sim_callback = lambda i: self.step()
-        
+
         traj, dof_inds = full_traj
-        
+
     #     # clip finger joint angles to the binary gripper angles if necessary
     #     for lr in 'lr':
     #         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
@@ -437,7 +437,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
     #             ind = dof_inds.index(joint_ind)
     #             traj[:,ind] = np.minimum(traj[:,ind], get_binary_gripper_angle(True))
     #             traj[:,ind] = np.maximum(traj[:,ind], get_binary_gripper_angle(False))
-        
+
         # in simulation mode, we must make sure to gradually move to the new starting position
         self.robot.SetActiveDOFs(dof_inds)
         curr_vals = self.robot.GetActiveDOFValues()
@@ -446,19 +446,19 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         transition_traj = ropesim.retime_traj(self.robot, dof_inds, transition_traj, max_cart_vel=max_cart_vel_trans_traj)
         animate_traj.animate_traj(transition_traj, self.robot, restore=False, pause=interactive,
             callback=sim_callback, step_viewer=step_viewer if self.viewer else 0)
-        
+
         traj[0] = transition_traj[-1]
         sim_util.unwrap_in_place(traj, dof_inds=dof_inds)
         traj = ropesim.retime_traj(self.robot, dof_inds, traj, max_cart_vel=.005) # make the trajectory slow enough for the simulation
 
         step_viewer*=5
-    
+
         animate_traj.animate_traj(traj, self.robot, restore=False, pause=interactive,
             callback=sim_callback, step_viewer=step_viewer if self.viewer else 0)
         if self.viewer and step_viewer:
             self.viewer.Step()
         return True
-    
+
     def _create_bullet(self):
         for lr in 'lr':
             if self.constraints[lr] or self.constraints_links[lr]:
@@ -470,7 +470,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             if self.constraints[lr] or self.constraints_links[lr]:
                 raise RuntimeError("Bullet environment can't be removed while the robot is grasping an object")
         super(DynamicSimulationRobotWorld, self)._remove_bullet()
-        
+
     def _get_finger_pts_grid(self, lr, min_sample_dist=0.005):
         sample_grid = None
         flr2finger_pts_grid = {}
@@ -486,7 +486,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                 sample_grid = np.array(np.meshgrid(np.linspace(0,1,num_sample_01), np.linspace(0,1,num_sample_03))).T.reshape((-1,2))
             flr2finger_pts_grid[finger_lr] = pt0 + sample_grid[:,0][:,None].dot(pt1 - pt0) + sample_grid[:,1][:,None].dot(pt3 - pt0)
         return flr2finger_pts_grid
-    
+
     def _remove_constraints(self, lr, grab_link=None):
         """
         If grab_link is None, remove all constraints that attaches the lr gripper, else remove all constraints that attaches between the lr gripper and grab_link
@@ -516,7 +516,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                 else:
                     self.constraints[lr] = []
                     self.constraints_links[lr] = []
-    
+
     def _add_constraints(self, lr, grab_link, grab_tf=None):
         if grab_tf is None:
             grab_tf = grab_link.GetTransform()
@@ -544,7 +544,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
 class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
 
     scale = 0.7
-    
+
     TABLE_HEIGHT = .77
     BIG_DIM = scale * 0.05
     SMALL_DIM = scale * 0.03
@@ -554,20 +554,20 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
     def __init__(self, n_big, n_small, **kwargs):
         super(ClutterSimulationRobotWorld, self).__init__(**kwargs)
         self.coil = CoilSimulationObject("coil", np.eye(4), .05, sim_util.RopeParams())
-        self.table = BoxSimulationObject("table", 
-                                         [1, 0, self.TABLE_HEIGHT-.1], 
+        self.table = BoxSimulationObject("table",
+                                         [1, 0, self.TABLE_HEIGHT-.1],
                                          [.85, 1, .1], dynamic=False)
         big_dims = (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM)
         self.container = ContainerSimulationObject()
         self.small_boxes = [BoxSimulationObject(
-                "small_box_{}".format(i), 
+                "small_box_{}".format(i),
                 (0, 0, 0),
-                (self.SMALL_DIM, self.SMALL_DIM, self.SMALL_DIM), 
+                (self.SMALL_DIM, self.SMALL_DIM, self.SMALL_DIM),
                 dynamic=True) for i in xrange(n_small)]
         self.big_boxes = [BoxSimulationObject(
-                "big_box_{}".format(i), 
+                "big_box_{}".format(i),
                 (0, 0, 0),
-                (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM), 
+                (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM),
                 dynamic=True) for i in xrange(n_big)]
         robot = XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False)
         objs = [robot, self.table, self.container, self.coil] + self.small_boxes + self.big_boxes
@@ -595,7 +595,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         T[1, 3] = -.3
         T[2, 3] = self.TABLE_HEIGHT + .01
         kinbdy.SetTransform(T)
-        blt_obj.SetTransform(T)        
+        blt_obj.SetTransform(T)
         self.color_container()
         self.update()
 
@@ -661,7 +661,8 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
             observe_objs = self.observe_objs
         cld = super(ClutterSimulationRobotWorld, self).observe_cloud(observe_objs)
         assert cld.shape[1] == 3
-        cld[:, 2] = cld[:, 2] - .02
+        # Uncomment this to shift point clouds down or up.
+        #cld[:, 2] = cld[:, 2] - .02
         return cld
 
     def remove_cleared_objs(self, debug=False):
@@ -671,7 +672,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         c_y += .05
         wf_to_cf = np.linalg.inv(self.container.get_pose())
 
-        handles = []        
+        handles = []
         if debug:
             from rapprentice import plotting_openrave
 
@@ -682,7 +683,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
             for i, x in enumerate(x_vals):
                 for j, y in enumerate(y_vals):
                     remove_region[i + j * grid_n, :2] = [x, y]
- 
+
             remove_region = self.container.get_pose().dot(remove_region.T)
             remove_region[2, :] = 1
             handles.append(self.env.plot3(remove_region[:3, :].T, 3, (1, 1, 0, 1)))
@@ -706,10 +707,10 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
             if box_x < c_x and box_y < c_y:
                 self.observe_objs.append(box)
             elif debug:
-                from rapprentice import plotting_openrave                    
+                from rapprentice import plotting_openrave
                 print box_x, box_y
                 print self.container.extents
-                
+
                 print_pts = box.get_bullet_objects()[0].GetTransform()[:3, 3]
                 print_pts[2] = 1
                 print print_pts
@@ -758,7 +759,7 @@ class DynamicRopeSimulationRobotWorld(DynamicSimulationRobotWorld):
         return True
 
 
- 
+
     def close_gripper(self, lr, step_viewer=1, max_vel=.02, close_dist_thresh=0.004, grab_dist_thresh=0.005):
         print 'CLOSING GRIPPER'
         # generate gripper finger trajectory
@@ -800,7 +801,7 @@ class DynamicRopeSimulationRobotWorld(DynamicSimulationRobotWorld):
             if self.viewer and step_viewer:
                 self.viewer.Step()
 
- 
+
         rope = [bt_obj for sim_obj in self.dyn_sim_objs for bt_obj in sim_obj.get_bullet_objects()][0]
         nodes, ctl_pts = rope.GetNodes(), rope.GetControlPoints()
 
@@ -834,6 +835,6 @@ class DynamicRopeSimulationRobotWorld(DynamicSimulationRobotWorld):
                 geom.SetDiffuseColor([1.,1.,1.])
         self.constraints[lr] = []
         self.constraints_links[lr] = []
-   
+
 
 

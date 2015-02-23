@@ -52,7 +52,7 @@ def sample_init_state(sim, viewer=None):
     np.random.shuffle(objs)
 
     init_state = {}
-    
+
     for i, obj in enumerate(objs):
         P = container_pose.dot(
             rand_pose(base_x,
@@ -61,6 +61,7 @@ def sample_init_state(sim, viewer=None):
         init_state[obj.name] = P
 
     sim.initialize(init_state, step_viewer=10)
+    sim.settle(step_viewer=10)
     cld = sim.observe_cloud()
     print 'simulation settled, observation size: {}'.format(cld.shape[0])
     if viewer is not None:
@@ -68,7 +69,7 @@ def sample_init_state(sim, viewer=None):
         handles = []
         handles.append(sim.env.plot3(cld, 3, (0, 1, 0, 1)))
         viewer.Idle()
-            
+
     return init_state, cld
 
 def gen_task_file(N, outf, viewer):
@@ -76,7 +77,7 @@ def gen_task_file(N, outf, viewer):
     sim = ClutterSimulationRobotWorld(2, 2)
     sim_util.reset_arms_to_side(sim)
 
-    if viewer:        
+    if viewer:
         viewer = trajoptpy.GetViewer(sim.env)
         camera_matrix = np.array([[ 0,    1, 0,   0],
                                   [-1,    0, 0.5, 0],
@@ -89,7 +90,7 @@ def gen_task_file(N, outf, viewer):
 
     if str(N) in outf:
         del outf[N]
-    
+
     for i in range(N):
         g = outf.create_group(str(i))
         state, cloud_xyz = sample_init_state(sim, viewer=viewer)
@@ -112,8 +113,8 @@ if __name__ == '__main__':
     outf = h5py.File(args.outf, 'w')
     gen_task_file(args.N, outf, args.viewer)
     outf.close()
-    
 
-        
 
-    
+
+
+
