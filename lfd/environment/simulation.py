@@ -402,7 +402,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             self.viewer.Step()
     
     def execute_trajectory(self, full_traj, step_viewer=1, interactive=False,
-                           max_cart_vel_trans_traj=.05, sim_callback=None):
+                           max_cart_vel_trans_traj=.05, max_cart_vel=.02, sim_callback=None):
         # TODO: incorporate other parts of sim_full_traj_maybesim
         if sim_callback is None:
             sim_callback = lambda i: self.step()
@@ -429,7 +429,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         
         traj[0] = transition_traj[-1]
         sim_util.unwrap_in_place(traj, dof_inds=dof_inds)
-        traj = ropesim.retime_traj(self.robot, dof_inds, traj)  # make the trajectory slow enough for the simulation
+        traj = ropesim.retime_traj(self.robot, dof_inds, traj, max_cart_vel=max_cart_vel)  # make the trajectory slow enough for the simulation
     
         animate_traj.animate_traj(traj, self.robot, restore=False, pause=interactive,
                                   callback=sim_callback, step_viewer=step_viewer if self.viewer else 0)
