@@ -7,7 +7,7 @@ import matplotlib
 from mpl_toolkits.mplot3d import art3d
 import colorsys
 
-def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color = 'gray', flipax = True, draw=True):
+def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color='gray', flipax=False, draw=True):
     xmin, ymin = mins
     xmax, ymax = maxes
     ncoarse = 10
