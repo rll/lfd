@@ -6,9 +6,11 @@ import settings
 import tps
 import solver
 import lfd.registration
+from lfd.registration import tps_experimental
 if lfd.registration._has_cuda:
     from lfd.tpsopt.batchtps import batch_tps_rpm_bij, GPUContext, TgtContext
 
+#TODO: base registration should not have corr. Specific registration should contain all hyperparameters used in the optimization of the RegistrationFactory
 class Registration(object):
     def __init__(self, demo, test_scene_state, f, corr):
         self.demo = demo
@@ -84,6 +86,10 @@ class TpsRpmBijRegistration(Registration):
         cost = np.r_[TpsRpmRegistration.get_objective2(x_nd, y_md, f, corr_nm, rad), 
                      TpsRpmRegistration.get_objective2(y_md, x_nd, g, corr_nm.T, rad)]
         return cost
+
+
+class TpsL2Registration(Registration):
+    pass #TODO
 
 
 class RegistrationFactory(object):
@@ -439,6 +445,68 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
                                        component_cost=True)
         costs = dict(zip(self.src_ctx.seg_names, cost_array))
         return costs
+
+
+class TpsL2RegistrationFactory(RegistrationFactory):
+    r"""As in:
+    
+    Bing Jian; Vemuri, B.C., "Robust Point Set Registration Using Gaussian Mixture Models," Pattern Analysis and Machine Intelligence, IEEE Transactions on , vol.33, no.8, pp.1633,1645, Aug. 2011.
+    
+    Tries to solve the optimization problem
+    
+    .. math::
+        :nowrap:
+
+        \begin{align*}
+            & \min_f
+                & d_{L2}(gmm(f(X), \sigma), gmm(Y))
+                + \lambda Tr(A^\top K A)
+                + Tr((B - I) R (B - I)) \\
+            & \text{subject to} 
+                & X^\top A = 0, 1^\top A = 0 \\
+        \end{align*}
+    
+    where :math:`d_{L2}` computes the L2 distance between two Gaussian mixture models.
+    """
+    def __init__(self, demos=None, 
+                 n_iter=settings.L2_N_ITER, opt_iter=settings.L2_OPT_ITER, 
+                 reg_init=settings.L2_REG[0], reg_final=settings.L2_REG[1], 
+                 rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
+                 rot_reg=settings.L2_ROT_REG):
+        """Inits TpsL2RegistrationFactory with demonstrations and parameters
+        
+        Args:
+            demos: dict that maps from demonstration name to Demonstration
+            n_iter: outer iterations
+            opt_iter: inner iterations for the L-BFGS-B subroutine
+            reg_init/reg_final: regularization on curvature
+            rad_init/rad_final: standard deviation for the Gaussian mixture models
+            rot_reg: regularization on rotation
+        """
+        super(TpsL2RegistrationFactory, self).__init__(demos=demos)
+        self.n_iter = n_iter
+        self.opt_iter = opt_iter
+        self.reg_init = reg_init
+        self.reg_final = reg_final
+        self.rad_init = rad_init
+        self.rad_final = rad_final
+        self.rot_reg = rot_reg
+    
+    def register(self, demo, test_scene_state, callback=None):
+        x_nd = demo.scene_state.cloud[:,:3]
+        y_md = test_scene_state.cloud[:,:3]
+        
+        f = tps_experimental.tps_l2(x_nd, y_md, 
+                                    n_iter=self.n_iter, opt_iter=self.opt_iter, 
+                                    reg_init=self.reg_init, reg_final=self.reg_final, 
+                                    rad_init=self.rad_init, rad_final=self.rad_final, 
+                                    rot_reg=self.rot_reg, 
+                                    callback=callback)
+        
+        return TpsL2Registration(demo, test_scene_state, f, self.reg_final, self.rad_final, self.rot_reg)
+    
+    def cost(self, demo, test_scene_state):
+        raise NotImplementedError
 
 
 class TpsSegmentRegistrationFactory(RegistrationFactory):

@@ -197,10 +197,10 @@ def tps_l2_obj(z, QN, NKN, NRN, NR, y_md, rad, reg, rot_reg):
     return energy, grad
 
 def tps_l2(x_ld, y_md, ctrl_nd=None, 
-            n_iter=settings.N_ITER, opt_iter=100, 
-            reg_init=settings.REG[0], reg_final=settings.REG[1], 
-            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-            rot_reg=settings.ROT_REG, 
+            n_iter=settings.L2_N_ITER, opt_iter=settings.L2_OPT_ITER, 
+            reg_init=settings.L2_REG[0], reg_final=settings.L2_REG[1], 
+            rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
+            rot_reg=settings.L2_ROT_REG, 
             callback=None):
     """TODO: default parameters
     """
@@ -278,13 +278,13 @@ def multi_tps_l2_obj(z_knd, solver_k, y_kmd, p_ktd, rad, reg, rot_reg, cov_coef,
     return total_energy, total_grad
 
 def multi_tps_l2(x_kld, y_kmd, p_ktd, ctrl_knd=None, 
-            n_iter=settings.N_ITER, opt_iter=100, 
-            reg_init=settings.REG[0], reg_final=settings.REG[1], 
-            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-            rot_reg=settings.ROT_REG, 
-            cov_coef=settings.COV_COEF, 
-            callback=None, 
-            multi_callback=None):
+                   n_iter=settings.L2_N_ITER, opt_iter=settings.L2_OPT_ITER, 
+                   reg_init=settings.L2_REG[0], reg_final=settings.L2_REG[1], 
+                   rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
+                   rot_reg=settings.L2_ROT_REG, 
+                   cov_coef=settings.COV_COEF, 
+                   callback=None, 
+                   multi_callback=None):
     if ctrl_knd is None:
         ctrl_knd = x_kld
     
