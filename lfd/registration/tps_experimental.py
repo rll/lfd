@@ -264,8 +264,8 @@ def tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd,
 
             xtarg_ld, wt_l = prepare_fit_ThinPlateSpline(x_ld, y_md, corr_lm)
             utarg_rd, wt_r = prepare_fit_ThinPlateSpline(u_rd, v_sd, corr_rs)
-            wt_r *= nu / beta_r
-            tpsn_fit(f, xtarg_ld, utarg_rd, reg, rot_reg, wt_l, wt_r)
+            wt_r *= nu
+            tpsn_fit(f, xtarg_ld, utarg_rd / beta_r[:,None], reg, rot_reg, wt_l, wt_r)
 
             if callback:
                 callback(i, i_em, x_ld, y_md, xtarg_ld, utarg_rd, wt_l, f, corr_lm, rad)
