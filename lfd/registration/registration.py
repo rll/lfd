@@ -86,6 +86,77 @@ class TpsRpmBijRegistration(Registration):
         return cost
 
 
+class TpsnRpmRegistration(Registration):
+    def __init__(self, demo, test_scene_state, f, corr, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, rad, radn, bend_coef, rot_coef):
+        super(TpsRpmRegistration, self).__init__(demo, test_scene_state, f, corr)
+        self.x_ld = x_ld
+        self.u_rd = u_rd
+        self.z_rd = z_rd
+        self.y_md = y_md
+        self.v_sd = v_sd
+        self.z_sd = z_sd
+        self.rad = rad
+        self.radn = radn
+        self.bend_coef = bend_coef
+        self.rot_coef = rot_coef 
+    
+    def get_objective(self):
+        x_nd = self.demo.scene_state.cloud[:,:3]
+        y_md = self.test_scene_state.cloud[:,:3]
+        # TODO: fill x_ld, u_rd, z_rd, y_md, v_sd, z_sd
+        cost = self.get_objective2(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, self.f, self.corr_lm, self.corr_rs, self.rad, self.radn, self.bend_coef, self.rot_coef)
+        return cost
+
+    @staticmethod
+    def get_objective2(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, f, corr_lm, corr_rs, rad, radn, bend_coef, rot_coef):
+        r"""Returns the following 5 objectives:
+        
+            - :math:`\frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2`
+            - :math:`\lambda Tr(A^\top K A)`
+            - :math:`Tr((B - I) R (B - I))`
+            - :math:`\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}`
+            - :math:`-\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij}`
+        """
+        cost = np.zeros(8)
+        xwarped_ld = f.transform_points()
+        uwarped_rd = f.transform_vectors()
+        zwarped_rd = f.transform_points(z_rd)
+
+        beta_r = np.linalg.norm(uwarped_rd, axis=1)
+
+        dist_lm = ssd.cdist(xwarped_ld, y_md, 'sqeuclidean')
+        dist_rs = ssd.cdist(uwarped_rd / beta_r[:,None], v_sd, 'sqeuclidean')
+        site_dist_rs = ssd.cdist(zwarped_rd, z_sd, 'sqeuclidean')
+        prior_prob_rs = np.exp( -site_dist_rs / (2*rad) )
+
+        l = len(x_ld)
+        r = len(u_rd)
+        # point matching cost
+        cost[0] = (corr_lm * dist_lm).sum() / l
+        # normal matching cost
+        cost[1] = (corr_rs * dist_rs).sum() / r
+
+        # bending cost
+        cost[2] = f.compute_bending_energy(bend_coef=bend_coef)
+
+        # rotation cost
+        cost[3] = f.compute_rotation_reg(rot_coef=rot_coef)
+
+        # point entropy
+        corr_lm = np.reshape(corr_lm, (1,-1))
+        nz_corr_lm = corr_lm[corr_lm != 0]
+        cost[4] = (2*rad / l) * (nz_corr_lm * np.log(nz_corr_lm)).sum()
+        cost[5] = -(2*rad / l) * nz_corr_lm.sum()
+
+        # normal entropy
+        corr_rs = np.reshape(corr_rs, (1,-1))
+        nz_corr_rs = corr_rs[corr_rs != 0]
+        nz_site_dist_rs = site_dist_rs[corr_rs != 0]
+        cost[6] = (2*radn / r) * (nz_corr_rs * np.log(nz_corr_rs / nz_site_dist_rs)).sum()
+        cost[7] = -(2*radn / r) * nz_corr_rs.sum()
+        return cost
+
+
 class RegistrationFactory(object):
     def __init__(self, demos=None):
         """Inits RegistrationFactory with demonstrations
@@ -462,17 +533,35 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     """
     TPS-RPM using normals information
     """
-    def __init__(self, demos):
+    def __init__(self, demos=None, 
+                 n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                 reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                 rot_reg=settings.ROT_REG, 
+                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
+                 prior_fn=None, 
+                 f_solver_factory=solver.AutoTpsSolverFactory()):
         raise NotImplementedError
     
     def register(self, demo, test_scene_state, callback=None):
-        raise NotImplementedError
-    
-    def batch_register(self, test_scene_state):
-        raise NotImplementedError
+        if self.prior_fn is not None:
+            prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
+        else:
+            prior_prob_nm = None
+        x_nd = demo.scene_state.cloud[:,:3]
+        y_md = test_scene_state.cloud[:,:3]
+        
+        f, corr_lm, corr_rs = tps_experimental.tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, 
+                                                        n_iter=self.n_iter, em_iter=self.em_iter, 
+                                                        reg_init=self.reg_init, reg_final=self.reg_final, 
+                                                        rad_init=self.rad_init, rad_final=self.rad_final, 
+                                                        radn_init=self.radn_init, radn_final=self.radn_final, 
+                                                        nu_init=nu_init, nu_final=nu_final, 
+                                                        rot_reg=self.rot_reg, 
+                                                        outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
+                                                        callback=callback)
+
+        return TpsnRpmRegistration(demo, test_scene_state, f, corr, self.rad_final)
     
     def cost(self, demo, test_scene_state):
-        raise NotImplementedError
-    
-    def batch_cost(self, test_scene_state):
         raise NotImplementedError
