@@ -215,8 +215,8 @@ def tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd,
              n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
              reg_init=settings.REG[0], reg_final=settings.REG[1], 
              rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-             radn_init=1.41, radn_final=0.39, 
-             nu_init=0.001, nu_final=1, 
+             radn_init=settings.RADN[0], radn_final=settings.RADN[1], 
+             nu_init=settings.NU[0], nu_final=settings.NU[1], 
              rot_reg=settings.ROT_REG, 
              outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
              callback=None):
@@ -268,7 +268,7 @@ def tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd,
             tpsn_fit(f, xtarg_ld, utarg_rd / beta_r[:,None], reg, rot_reg, wt_l, wt_r)
 
             if callback:
-                callback(i, i_em, x_ld, y_md, xtarg_ld, utarg_rd, wt_l, f, corr_lm, rad)
+                callback(f, corr_lm, corr_rs, y_md, v_sd, z_sd, xtarg_ld, utarg_rd, wt_l, wt_r, reg, rad, radn, nu, i, i_em)
         
     return f, corr_lm, corr_rs
 

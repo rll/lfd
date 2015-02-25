@@ -17,6 +17,13 @@ OUTLIER_PRIOR = .1
 OUTLIER_FRAC  = 1e-2
 
 
+# RPM with normals registration
+#: initial and final temperature for the normals in TPSN-RPM
+RADN = (0.005, 0.001)
+#: initial and final normals coefficient in TPSN-RPM
+NU = (0.1, 10)
+
+
 # registration with gpu
 #:
 MAX_CLD_SIZE       = 150
