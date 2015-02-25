@@ -241,7 +241,7 @@ def main():
         xwarped_ld = f.transform_points()
         uwarped_rd = f.transform_vectors()
         zwarped_rd = f.transform_points(z_rd)
-        plt.plot(xwarped_ld[x_wp_inds,0], xwarped_ld[x_wp_inds,1], "go")
+        plt.plot(xwarped_ld[:,0], xwarped_ld[:,1], "go")
         plot_vectors(uwarped_rd, zwarped_rd, "g")
         plt.plot(xwarped_ld[x_wp_inds,0], xwarped_ld[x_wp_inds,1], "ro")
     
@@ -263,7 +263,7 @@ def main():
         plt.plot(y_md[:,0], y_md[:,1], "bx")
     
         xwarped_ld = f.transform_points(x_ld)
-        plt.plot(xwarped_ld[x_wp_inds,0], xwarped_ld[x_wp_inds,1], "go")
+        plt.plot(xwarped_ld[:,0], xwarped_ld[:,1], "go")
         plt.plot(xwarped_ld[x_wp_inds,0], xwarped_ld[x_wp_inds,1], "ro")
     
         plt.plot(xtarg_ld[:,0], xtarg_ld[:,1], "c+")
