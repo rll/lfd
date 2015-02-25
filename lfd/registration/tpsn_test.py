@@ -281,8 +281,6 @@ def main():
         # reg_init = 1
         reg_final = .1
     if tpsn_min_param is None:
-        # rad_init, reg_init, radn_init, radn_final, nu_init, nu_final = 0, 10, 0.005, 0.001, 0.01, 0.1
-    
         tpsn_min_cost = float('inf')
         tpsn_min_param = None
         for rad_init in [0.1, 1, 10] if tpsn_min_param_ranges is None else tpsn_min_param_ranges[0]: #[2**i for i in range(-3, 4)]: #[0.1, 1, 10]:
