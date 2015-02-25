@@ -297,7 +297,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
             rot_reg=settings.ROT_REG, 
             outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
-            prior_prob_nm=None, callback=None):
+            prior_prob_nm=None, callback=None, args=()):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -337,7 +337,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
                 fsolve.solve(wt_n, xtarg_nd, reg, f)
             
             if callback:
-                callback(i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad)
+                callback(i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad, *args)
         
     return f, corr_nm
 
@@ -347,7 +347,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
                 rot_reg=settings.ROT_REG, 
                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
-                prior_prob_nm=None, callback=None):
+                prior_prob_nm=None, callback=None, args=()):
     _, d = x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -403,7 +403,7 @@ def tps_rpm_bij(x_nd, y_md, f_solver_factory=None, g_solver_factory=None,
                 gsolve.solve(wt_m, ytarg_md, reg, g)
             
             if callback:
-                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f, g, corr_nm, rad)
+                callback(i, i_em, x_nd, y_md, xtarg_nd, corr_nm, wt_n, f, g, corr_nm, rad, *args)
     
     return f, g, corr_nm
 

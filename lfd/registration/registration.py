@@ -176,7 +176,7 @@ class RegistrationFactory(object):
         else:
             self.demos = demos
         
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         """Registers demonstration scene onto the test scene
         
         Args:
@@ -190,7 +190,7 @@ class RegistrationFactory(object):
         """
         raise NotImplementedError
 
-    def batch_register(self, test_scene_state, callback=None):
+    def batch_register(self, test_scene_state, callback=None, args=()):
         """Registers every demonstration scene in demos onto the test scene
         
         Returns:
@@ -293,7 +293,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         self.prior_fn = prior_fn
         self.f_solver_factory = f_solver_factory
     
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         if self.prior_fn is not None:
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -308,7 +308,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                               rad_init=self.rad_init, rad_final=self.rad_final, 
                               rot_reg=self.rot_reg, 
                               outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                              prior_prob_nm=prior_prob_nm, callback=callback)
+                              prior_prob_nm=prior_prob_nm, callback=callback, args=args)
         
         return TpsRpmRegistration(demo, test_scene_state, f, corr, self.rad_final)
     
@@ -398,7 +398,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.f_solver_factory = f_solver_factory
         self.g_solver_factory = g_solver_factory
     
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         if self.prior_fn is not None:
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -413,7 +413,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                      rad_init=self.rad_init, rad_final=self.rad_final, 
                                      rot_reg=self.rot_reg, 
                                      outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                                     prior_prob_nm=prior_prob_nm, callback=callback)
+                                     prior_prob_nm=prior_prob_nm, callback=callback, args=args)
         
         return TpsRpmBijRegistration(demo, test_scene_state, f, g, corr, self.rad_final)
     
@@ -624,7 +624,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
         self.outlierprior = outlierprior
         self.outlierfrac = outlierfrac
     
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         x_ld = demo.scene_state.cloud[:,:3]
         u_rd = demo.scene_state.normals
         z_rd = demo.scene_state.sites
@@ -640,7 +640,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
                                                         nu_init=self.nu_init, nu_final=self.nu_final, 
                                                         rot_reg=self.rot_reg, 
                                                         outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                                                        callback=callback)
+                                                        callback=callback, args=args)
 
         return TpsnRpmRegistration(demo, test_scene_state, corr_lm, corr_rs, self.rad_final, self.radn_final, self.reg_final, self.rot_coef)
 

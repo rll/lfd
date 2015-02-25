@@ -219,7 +219,7 @@ def tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd,
              nu_init=settings.NU[0], nu_final=settings.NU[1], 
              rot_reg=settings.ROT_REG, 
              outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
-             callback=None):
+             callback=None, args=()):
     """
     TODO: hyperparameters
     """
@@ -268,7 +268,7 @@ def tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd,
             tpsn_fit(f, xtarg_ld, utarg_rd / beta_r[:,None], reg, rot_reg, wt_l, wt_r)
 
             if callback:
-                callback(f, corr_lm, corr_rs, y_md, v_sd, z_sd, xtarg_ld, utarg_rd, wt_l, wt_r, reg, rad, radn, nu, i, i_em)
+                callback(f, corr_lm, corr_rs, y_md, v_sd, z_sd, xtarg_ld, utarg_rd, wt_l, wt_r, reg, rad, radn, nu, i, i_em, *args)
         
     return f, corr_lm, corr_rs
 
