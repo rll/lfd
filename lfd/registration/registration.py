@@ -157,6 +157,7 @@ class TpsnRpmRegistration(Registration):
         # normal entropy
         corr_rs = np.reshape(corr_rs, (1,-1))
         nz_corr_rs = corr_rs[corr_rs != 0]
+        site_dist_rs = np.reshape(site_dist_rs, (1,-1))
         nz_site_dist_rs = site_dist_rs[corr_rs != 0]
         cost[6] = (2*radn / r) * (nz_corr_rs * np.log(nz_corr_rs / nz_site_dist_rs)).sum()
         cost[7] = -(2*radn / r) * nz_corr_rs.sum()

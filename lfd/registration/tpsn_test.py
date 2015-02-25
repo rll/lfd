@@ -1,170 +1,12 @@
-import scipy.io
+import argparse
 import numpy as np
-import scipy.spatial.distance as ssd
-import IPython as ipy
-import hc
-import settings 
-import matplotlib
 import matplotlib.pyplot as plt
-from lfd.rapprentice import plotting_plt
-import tps_experimental
-import tps
-from tps_experimental import ThinPlateSpline, ThinPlateSplineNormal
-import h5py
+from lfd.rapprentice.plotting_plt import plot_warped_grid_2d
+from lfd.registration import tps, tps_experimental
+from lfd.registration.registration import TpsRpmRegistration, TpsnRpmRegistration
 import lfd.rapprentice.math_utils as mu
 
-import argparse
-
-class Registration(object):
-    def __init__(self, demo, test_scene_state, f, corr):
-        self.demo = demo
-        self.test_scene_state = test_scene_state
-        self.f = f
-        self.corr = corr
-    
-    def get_objective(self):
-        raise NotImplementedError
-
-class TpsRpmRegistration(Registration):
-    def __init__(self, demo, test_scene_state, f, corr, rad):
-        super(TpsRpmRegistration, self).__init__(demo, test_scene_state, f, corr)
-        self.rad = rad
-    
-    def get_objective(self):
-        x_nd = self.demo.scene_state.cloud[:,:3]
-        y_md = self.test_scene_state.cloud[:,:3]
-        cost = self.get_objective2(x_nd, y_md, self.f, self.corr, self.rad)
-        return cost
-    
-    @staticmethod
-    def get_objective2(x_nd, y_md, f, corr_nm, rad):
-        r"""Returns the following 5 objectives:
-        
-            - :math:`\frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2`
-            - :math:`\lambda Tr(A^\top K A)`
-            - :math:`Tr((B - I) R (B - I))`
-            - :math:`\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}`
-            - :math:`-\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij}`
-        """
-        cost = np.zeros(5)
-        xwarped_nd = f.transform_points(x_nd)
-        dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
-        n = len(x_nd)
-        cost[0] = (corr_nm * dist_nm).sum() / n
-        cost[1:3] = f.get_objective()[1:]
-        corr_nm = np.reshape(corr_nm, (1,-1))
-        nz_corr_nm = corr_nm[corr_nm != 0]
-        cost[3] = (2*rad / n) * (nz_corr_nm * np.log(nz_corr_nm)).sum()
-        cost[4] = -(2*rad / n) * nz_corr_nm.sum()
-        return cost
-
-class TpsnRpmRegistration(Registration):
-    def __init__(self, demo, test_scene_state, f, corr, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, rad, radn, bend_coef, rot_coef):
-        super(TpsRpmRegistration, self).__init__(demo, test_scene_state, f, corr)
-        self.x_ld = x_ld
-        self.u_rd = u_rd
-        self.z_rd = z_rd
-        self.y_md = y_md
-        self.v_sd = v_sd
-        self.z_sd = z_sd
-        self.rad = rad
-        self.radn = radn
-        self.bend_coef = bend_coef
-        self.rot_coef = rot_coef 
-    
-    def get_objective(self):
-        x_nd = self.demo.scene_state.cloud[:,:3]
-        y_md = self.test_scene_state.cloud[:,:3]
-        # TODO: fill x_ld, u_rd, z_rd, y_md, v_sd, z_sd
-        cost = self.get_objective2(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, self.f, self.corr_lm, self.corr_rs, self.rad, self.radn, self.bend_coef, self.rot_coef)
-        return cost
-
-    @staticmethod
-    def get_objective2(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, f, corr_lm, corr_rs, rad, radn, bend_coef, rot_coef):
-        r"""Returns the following 5 objectives:
-        
-            - :math:`\frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2`
-            - :math:`\lambda Tr(A^\top K A)`
-            - :math:`Tr((B - I) R (B - I))`
-            - :math:`\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} \log m_{ij}`
-            - :math:`-\frac{2T}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij}`
-        """
-        cost = np.zeros(8)
-        xwarped_ld = f.transform_points()
-        uwarped_rd = f.transform_vectors()
-        zwarped_rd = f.transform_points(z_rd)
-
-        beta_r = np.linalg.norm(uwarped_rd, axis=1)
-
-        dist_lm = ssd.cdist(xwarped_ld, y_md, 'sqeuclidean')
-        dist_rs = ssd.cdist(uwarped_rd / beta_r[:,None], v_sd, 'sqeuclidean')
-        site_dist_rs = ssd.cdist(zwarped_rd, z_sd, 'sqeuclidean')
-        prior_prob_rs = np.exp( -site_dist_rs / (2*rad) )
-
-        l = len(x_ld)
-        r = len(u_rd)
-        # point matching cost
-        cost[0] = (corr_lm * dist_lm).sum() / l
-        # normal matching cost
-        cost[1] = (corr_rs * dist_rs).sum() / r
-
-        # bending cost
-        cost[2] = f.compute_bending_energy(bend_coef=bend_coef)
-
-        # rotation cost
-        cost[3] = f.compute_rotation_reg(rot_coef=rot_coef)
-
-        # point entropy
-        corr_lm = np.reshape(corr_lm, (1,-1))
-        nz_corr_lm = corr_lm[corr_lm != 0]
-        cost[4] = (2*rad / l) * (nz_corr_lm * np.log(nz_corr_lm)).sum()
-        cost[5] = -(2*rad / l) * nz_corr_lm.sum()
-
-        # normal entropy
-        corr_rs = np.reshape(corr_rs, (1,-1))
-        nz_corr_rs = corr_rs[corr_rs != 0]
-        site_dist_rs = np.reshape(site_dist_rs, (1,-1))
-        nz_site_dist_rs = site_dist_rs[corr_rs != 0]
-        cost[6] = (2*radn / r) * (nz_corr_rs * np.log(nz_corr_rs / nz_site_dist_rs)).sum()
-        cost[7] = -(2*radn / r) * nz_corr_rs.sum()
-        return cost
-
-def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color='gray', flipax=False, draw=True):
-    xmin, ymin = mins
-    xmax, ymax = maxes
-    ncoarse = 10
-    nfine = 100
-
-    if grid_res is None:
-        xcoarse = np.linspace(xmin, xmax, ncoarse)
-        ycoarse = np.linspace(ymin, ymax, ncoarse)
-    else:
-        xcoarse = np.arange(xmin, xmax, grid_res)
-        ycoarse = np.arange(ymin, ymax, grid_res)
-    xfine = np.linspace(xmin, xmax, nfine)
-    yfine = np.linspace(ymin, ymax, nfine)
-
-    lines = []
-
-    sgn = -1 if flipax else 1
-
-    for x in xcoarse:
-        xy = np.zeros((nfine, 2))
-        xy[:,0] = x
-        xy[:,1] = yfine
-        lines.append(f(xy)[:,::sgn])
-
-    for y in ycoarse:
-        xy = np.zeros((nfine, 2))
-        xy[:,0] = xfine
-        xy[:,1] = y
-        lines.append(f(xy)[:,::sgn])        
-
-    lc = matplotlib.collections.LineCollection(lines,colors=color,lw=.5)
-    ax = plt.gca()
-    ax.add_collection(lc)
-    if draw:
-        plt.draw()
+import IPython as ipy
 
 def generate_path(way_points, max_step=1.5, y_sym=True):
     way_points = np.asarray(way_points)
@@ -328,21 +170,21 @@ def plot_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_w
 
     plt.subplot(221, aspect='equal')
     plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]])
-    plot_warped_grid_2d(lambda pts: pts, grid_mins, grid_maxs, grid_res=1, draw=False)
+    plot_warped_grid_2d(lambda pts: pts, grid_mins, grid_maxs, grid_res=1, nfine=100, draw=False)
     plt.plot(x_ld[~x_wp_mask,0], x_ld[~x_wp_mask,1], "r+")
     plt.plot(x_ld[x_wp_mask,0], x_ld[x_wp_mask,1], "r+", mew=wp_mew, ms=wp_ms)
     plot_vectors(u_rd, z_rd, "r-")
 
     plt.subplot(222, aspect='equal')
     plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]])
-    plot_warped_grid_2d(lambda pts: pts, grid_mins, grid_maxs, grid_res=1, draw=False)
+    plot_warped_grid_2d(lambda pts: pts, grid_mins, grid_maxs, grid_res=1, nfine=100, draw=False)
     plt.plot(y_md[~y_wp_mask,0], y_md[~y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b')
     plt.plot(y_md[y_wp_mask,0], y_md[y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=wp_mew, ms=wp_ms)
     plot_vectors(v_sd, z_sd, "b:", linewidth=2, dashes=(2,2))
 
     plt.subplot(223, aspect='equal')
     plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]])
-    plot_warped_grid_2d(f_tps.transform_points, grid_mins, grid_maxs, grid_res=1, draw=False)
+    plot_warped_grid_2d(f_tps.transform_points, grid_mins, grid_maxs, grid_res=1, nfine=100, draw=False)
     xwarped_ld = f_tps.transform_points(x_ld)
     uwarped_rd = np.asarray([f_tps.compute_numerical_jacobian(z_d).dot(u_d) for z_d, u_d in zip(z_rd, u_rd)])
     # uwarped_rd = f_tps.transform_vectors(z_rd, u_rd)
@@ -356,7 +198,7 @@ def plot_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_w
 
     plt.subplot(224, aspect='equal')
     plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]])
-    plot_warped_grid_2d(f_tpsn.transform_points, grid_mins, grid_maxs, grid_res=1, draw=False)
+    plot_warped_grid_2d(f_tpsn.transform_points, grid_mins, grid_maxs, grid_res=1, nfine=100, draw=False)
     xwarped_ld = f_tpsn.transform_points()
     uwarped_rd = f_tpsn.transform_vectors()
     zwarped_rd = f_tpsn.transform_points(z_rd)
@@ -409,7 +251,7 @@ def main():
         grid_means = .5 * (x_ld.max(axis=0) + x_ld.min(axis=0))
         grid_mins = grid_means - (x_ld.max(axis=0) - x_ld.min(axis=0))
         grid_maxs = grid_means + (x_ld.max(axis=0) - x_ld.min(axis=0))
-        plotting_plt.plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs, draw=False)
+        plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs, draw=False)
         plt.draw()
     
     def tps_callback(i, i_em, x_ld, y_md, xtarg_ld, wt_n, f, corr_lm, rad):
@@ -429,7 +271,7 @@ def main():
         grid_means = .5 * (x_ld.max(axis=0) + x_ld.min(axis=0))
         grid_mins = grid_means - (x_ld.max(axis=0) - x_ld.min(axis=0))
         grid_maxs = grid_means + (x_ld.max(axis=0) - x_ld.min(axis=0))
-        plotting_plt.plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs, draw=False)
+        plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs, draw=False)
         plt.draw()
     
     if rad_final is None:
