@@ -642,7 +642,7 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
                                                         outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
                                                         callback=callback, args=args)
 
-        return TpsnRpmRegistration(demo, test_scene_state, corr_lm, corr_rs, self.rad_final, self.radn_final, self.reg_final, self.rot_coef)
+        return TpsnRpmRegistration(demo, test_scene_state, f, corr_lm, corr_rs, self.rad_final, self.radn_final, self.reg_final, self.rot_reg)
 
     def cost(self, demo, test_scene_state):
         raise NotImplementedError
