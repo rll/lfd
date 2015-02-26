@@ -484,6 +484,8 @@ def main():
         
         if not args.execution:
             break
+        
+        handles[:] = []
 
 if __name__ == '__main__':
     main()
