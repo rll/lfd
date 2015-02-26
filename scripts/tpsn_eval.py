@@ -27,7 +27,6 @@ import argparse
 # from lfd.rapprentice.yes_or_no import yes_or_no
  
 from lfd.rapprentice import berkeley_pr2
-from lfd.registration import tps_experimental
 try:
     from lfd.rapprentice import pr2_trajectories, PR2
     import rospy
@@ -70,7 +69,7 @@ def setup_demos(args, robot):
     demos = {}
     for action, seg_info in actions.iteritems():
         if 'towel' in args.actionfile and 'fold' not in action: continue
-        #TODO: use foldfirst08
+        if 'foldfirst08' in action: continue
         full_cloud = seg_info['cloud_xyz'][()]
         scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
         # too slow
@@ -384,12 +383,12 @@ def main():
 #     ### END DEBUG
     
     lfd_env, sim = setup_lfd_environment_sim(args)
-    demos = setup_demos(args, sim.robot)
+    demos_dict = setup_demos(args, sim.robot)
     if args.spline_type == 'tps':
-        reg_factory = TpsRpmRegistrationFactory(demos)
+        reg_factory = TpsRpmRegistrationFactory(demos_dict)
         callback = tps_callback
     elif args.spline_type == 'tpsn':
-        reg_factory = TpsnRpmRegistrationFactory(demos)
+        reg_factory = TpsnRpmRegistrationFactory(demos_dict)
         callback = tpsn_callback
     else:
         raise NotImplementedError
@@ -436,7 +435,7 @@ def main():
 #         sim.viewer.Idle()
         
         # TODO: using TPS-RPM for action selection
-        regs, demos = register_scenes(sim, TpsRpmRegistrationFactory(demos), test_scene_state)
+        regs, demos = register_scenes(sim, TpsRpmRegistrationFactory(demos_dict), test_scene_state)
         demo = demos[0]
         actions = h5py.File(args.actionfile, 'r')
         rgb = actions[demo.name]['rgb'][()]
@@ -462,17 +461,17 @@ def main():
         else:
             raise NotImplementedError    
         handles.extend(plot_cloud(sim, xwarped_ld, uwarped_rd, zwarped_rd, (0,1,0)))
-        sim.viewer.Idle()
+        # sim.viewer.Idle()
         test_aug_traj = traj_transferer.transfer(reg, demo, plotting=True)
         
         lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
         
-        sim.viewer.Idle()
+        # sim.viewer.Idle()
         
         if args.execution:
             lfd_env_real.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
     
-        ipy.embed()
+        # ipy.embed()
         
         if not args.execution:
             break
