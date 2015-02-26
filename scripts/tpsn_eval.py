@@ -42,7 +42,8 @@ def parse_input_args():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('actionfile', type=str)
-    parser.add_argument("spline_type", type=str, choices=['tps', 'tpsn'], default='tps', help="spline type for rpm")
+    parser.add_argument("spline_type", type=str, choices=['tps', 'tpsn'], help="spline type for rpm")
+    parser.add_argument("task", type=str, choices=['rope', 'towel'])
 
     parser.add_argument("--animation", type=int, default=0, help="animates if it is non-zero. the viewer is stepped according to this number")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
@@ -69,7 +70,8 @@ def setup_demos(args, robot):
     demos = {}
     for action, seg_info in actions.iteritems():
         if 'towel' in args.actionfile and 'fold' not in action: continue
-        if 'foldfirst08' in action: continue
+#         if 'foldfirst08' in action: continue
+        if not 'foldfirst08' in action: continue
         full_cloud = seg_info['cloud_xyz'][()]
         scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
         # too slow
@@ -385,10 +387,16 @@ def main():
     lfd_env, sim = setup_lfd_environment_sim(args)
     demos_dict = setup_demos(args, sim.robot)
     if args.spline_type == 'tps':
-        reg_factory = TpsRpmRegistrationFactory(demos_dict)
+        if args.task == 'towel':
+            reg_factory = TpsRpmRegistrationFactory(demos_dict, em_iter=5, reg_init=0.1, reg_final=0.0001, rad_init=0.01, rad_final=0.00005)
+        else:
+            reg_factory = TpsRpmRegistrationFactory(demos_dict)
         callback = tps_callback
     elif args.spline_type == 'tpsn':
-        reg_factory = TpsnRpmRegistrationFactory(demos_dict)
+        if args.task == 'towel':
+            reg_factory = TpsnRpmRegistrationFactory(demos_dict, em_iter=5, reg_init=0.1, reg_final=0.0001, rad_init=0.01, rad_final=0.00005)
+        else:
+            reg_factory = TpsnRpmRegistrationFactory(demos_dict)
         callback = tpsn_callback
     else:
         raise NotImplementedError
@@ -397,7 +405,6 @@ def main():
     if args.execution:
         rospy.init_node("exec_task",disable_signals=True)
         pr2 = PR2.PR2()
-        env = pr2.env
         robot = pr2.robot
         
         grabber = cloudprocpy.CloudGrabber()
@@ -437,6 +444,8 @@ def main():
         # TODO: using TPS-RPM for action selection
         regs, demos = register_scenes(sim, TpsRpmRegistrationFactory(demos_dict), test_scene_state)
         demo = demos[0]
+        
+        print "chosen demo:", demo.name
         actions = h5py.File(args.actionfile, 'r')
         rgb = actions[demo.name]['rgb'][()]
         depth = actions[demo.name]['depth'][()]
