@@ -218,6 +218,7 @@ class DynamicSimulation(StaticSimulation):
                 curr_trans = np.concatenate([np.asarray([link.GetTransform() for link in bt_obj.GetKinBody().GetLinks()])[:,:3,3] for bt_obj in self.dyn_bt_objs])
                 diff = np.sqrt(((curr_trans - prev_trans)**2).sum(axis=1))
                 if diff.max() < tol:
+                    print "settle tolerance reached"
                     break
                 prev_trans = curr_trans
         self._update_rave()
@@ -343,7 +344,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         if self.viewer and step_viewer:
             self.viewer.Step()
 
-    def close_gripper(self, lr, step_viewer=1, max_vel=.02, close_dist_thresh=0.004, grab_dist_thresh=0.005):
+    def close_gripper(self, lr, step_viewer=10, max_vel=.001, close_dist_thresh=0.004, grab_dist_thresh=0.005):
         print 'CLOSING GRIPPER'
         # generate gripper finger trajectory
         joint_ind = self.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
@@ -352,6 +353,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
         # execute gripper finger trajectory
         dyn_bt_objs = [x for sim_obj in self.dyn_sim_objs for x in sim_obj.get_bullet_objects()]
         next_val = start_val
+        i = 1
         while next_val:
             flr2finger_pts_grid = self._get_finger_pts_grid(lr)
             ray_froms, ray_tos = flr2finger_pts_grid['l'], flr2finger_pts_grid['r']
@@ -381,9 +383,10 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
 
             self.robot.SetDOFValues([next_val], [joint_ind])
             self.step()
-            if self.viewer and step_viewer:
+            if self.viewer and not i % step_viewer:
                 self.viewer.Step()
-        grasped_objs = []
+            i += 1
+        grasped_objs = set()
         handles = []
         # add constraints at the points where a ray hits a dynamic link within a distance of grab_dist_thresh
         for sim_obj in self.dyn_sim_objs:
@@ -415,7 +418,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                         print rc.link
                         if (n_hits[rc.link] > 5 or
                             type(sim_obj) == CoilSimulationObject or type(sim_obj) == RopeSimulationObject):
-                            grasped_objs.append(sim_obj)
+                            grasped_objs.add(sim_obj)
                             link_tf = rc.link.GetTransform()
                             link_tf[:3,3] = rc.pt
                             self._add_constraints(lr, rc.link, link_tf)
@@ -452,7 +455,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
 
         traj[0] = transition_traj[-1]
         sim_util.unwrap_in_place(traj, dof_inds=dof_inds)
-        traj = ropesim.retime_traj(self.robot, dof_inds, traj, max_cart_vel=.005) # make the trajectory slow enough for the simulation
+        traj = ropesim.retime_traj(self.robot, dof_inds, traj, max_cart_vel=.002) # make the trajectory slow enough for the simulation
 
         step_viewer*=5
 
@@ -560,6 +563,9 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         self.table = BoxSimulationObject("table",
                                          [1, 0, self.TABLE_HEIGHT-.1],
                                          [.85, 1, .1], dynamic=False)
+        self.floor = BoxSimulationObject("floor",
+                                         [1, 0, -self.TABLE_HEIGHT],
+                                         [10, 10, .01], dynamic=False)
         big_dims = (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM)
         self.container = ContainerSimulationObject()
         self.small_boxes = [BoxSimulationObject(
@@ -573,7 +579,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
                 (self.BIG_DIM, self.BIG_DIM, self.BIG_DIM),
                 dynamic=True) for i in xrange(n_big)]
         robot = XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False)
-        objs = [robot, self.table, self.container, self.coil] + self.small_boxes + self.big_boxes
+        objs = [robot, self.table, self.container, self.coil, self.floor] + self.small_boxes + self.big_boxes
         self.add_objects(objs)
         self.color_container()
         self.reset_robot()
@@ -657,8 +663,14 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         self.reset_container()
         # self.viewer.Idle()
 
-        self.settle(max_steps=self.MAX_STEPS, step_viewer=step_viewer)
+        self.settle(max_steps=self.MAX_STEPS, tol=1e-4, step_viewer=step_viewer)
         self.remove_cleared_objs()
+
+    def settle(self, max_steps=None, tol=1e-3, step_viewer=10):
+        if max_steps is None:
+            max_steps = self.MAX_STEPS
+        super(ClutterSimulationRobotWorld, self).settle(max_steps, tol, step_viewer)
+        
 
     def observe_cloud(self, observe_objs=None):
         if observe_objs is None:
@@ -672,11 +684,11 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
     def remove_cleared_objs(self, debug=False):
         self.observe_objs = [self.container]
         c_x, c_y = self.container.get_footprint()
-        c_x += .05
-        c_y += .05
+        # c_x += .05
+        # c_y += .05
         wf_to_cf = np.linalg.inv(self.container.get_pose())
 
-        removed = []
+        removed_objs = []
 
         handles = []
         if debug:
@@ -732,13 +744,14 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
 
     def compute_reward(self, already_cleared_objs, grasped_objs):
         reward = -.1
-        if sim.container in grasped_objs:
-            grasped_objs.remove(sim.container)
+        if self.container in grasped_objs:
+            grasped_objs.remove(self.container)
+
         cur_cleared_objs = self.remove_cleared_objs()
         if len(grasped_objs) > 0:
-            reward += len(grasped_objs)
-            if (self.coil not in grasped_objs + old_cleared_objs 
-                and self.coil in updated_cleared_objs):
+            reward += 1
+            if (self.coil not in grasped_objs + already_cleared_objs 
+                and self.coil in cur_cleared_objs):
                 # in case we pull the rope out with a box
                 reward += 1
 

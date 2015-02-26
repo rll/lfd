@@ -303,5 +303,5 @@ class ContainerSimulationObject(XmlSimulationObject):
         return kinbdy.GetTransform()
 
     def __repr__(self):
-        return "ContainerSimulationObject({}, {}, {})".format(self.init_trans, self.extents, self.thickness)
+        return "ContainerSimulationObject({}, {})".format(self.extents, self.thickness)
 

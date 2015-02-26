@@ -97,10 +97,13 @@ def label_demos(args, transferer, lfd_env, sim):
             traj = transferer.transfer(GlobalVars.demos[seg_name],
                                                 scene_state,
                                                 plotting=args.plotting)            
-
+            resp = raw_input('continue?[Y/n]')
+            if resp in ('n', 'N'):
+                continue
             feasible, misgrasp, grasped_objs = lfd_env.execute_augmented_trajectory(
                 traj, step_viewer=args.animation, interactive=args.interactive, return_grasped_objs=True)
             reward = sim.compute_reward(old_cleared_objs, grasped_objs)
+            print "reward:\t{}".format(reward)
             sim_util.reset_arms_to_side(sim)
             sim.settle(step_viewer=args.animation)
 
@@ -207,44 +210,47 @@ def rand_pose(x_max, y_max, z_offset=0):
     return T
 
 def sample_init_state(sim, animation=False, viewer=None, human_check=True):
-
-    base_x, base_y = sim.container.get_footprint()
-    container_pose = sim.container.get_pose()
-    z_start = sim.container.get_height() * 2
-
-    objs = [sim.coil] + sim.small_boxes + sim.big_boxes
-    new_objs = []
-    new_big = []
-    new_small = []
-
-    np.random.shuffle(objs)
-
-    init_state = {}
-
-    for i, obj in enumerate(objs):
-        P = container_pose.dot(
-            rand_pose(base_x,
-                      base_y,
-                      z_offset=i*OBJ_SPACING + z_start))
-        init_state[obj.name] = P
-
-    # TODO: remove other items in sim first? (like in replace rope)
-    sim.initialize(init_state, step_viewer=10)
-    sim.settle(step_viewer=animation)
-    cld = sim.observe_cloud()
-    print 'simulation settled, observation size: {}'.format(cld.shape[0])
-    if viewer is not None:
-        from rapprentice import plotting_openrave
-        handles = []
-        handles.append(sim.env.plot3(cld, 3, (0, 1, 0, 1)))
-        viewer.Idle()
-    sim.settle(step_viewer=animation)
     success = False
-    if human_check:
-        resp = raw_input("Use this simulation?[Y/n]")
-        success = resp not in ('N', 'n')
-    else:
-        success = True
+    while not success:
+
+        base_x, base_y = sim.container.get_footprint()
+        container_pose = sim.container.get_pose()
+        z_start = sim.container.get_height() * 2
+
+        objs = [sim.coil] + sim.small_boxes + sim.big_boxes
+        new_objs = []
+        new_big = []
+        new_small = []
+
+        np.random.shuffle(objs)
+
+        init_state = {}
+
+        for i, obj in enumerate(objs):
+            P = container_pose.dot(
+                rand_pose(base_x,
+                          base_y,
+                          z_offset=i*OBJ_SPACING + z_start))
+            init_state[obj.name] = P
+
+        # TODO: remove other items in sim first? (like in replace rope)
+        sim.initialize(init_state, step_viewer=10)
+        sim.settle(step_viewer=animation)
+        sim.settle(step_viewer=animation)
+        cld = sim.observe_cloud()
+        print 'simulation settled, observation size: {}'.format(cld.shape[0])
+        if viewer is not None:
+            from rapprentice import plotting_openrave
+            handles = []
+            handles.append(sim.env.plot3(cld, 3, (0, 1, 0, 1)))
+            viewer.Idle()
+            
+
+        if human_check:
+            resp = raw_input("Use this simulation?[Y/n]")
+            success = resp not in ('N', 'n')
+        else:
+            success = True
 
     return sim.get_state()
 
@@ -306,7 +312,7 @@ def parse_input_args():
     parser_eval.add_argument("--unified", type=int, default=0)
 
     parser_eval.add_argument("--downsample", type=int, default=1)
-    parser_eval.add_argument("--downsample_size", type=float, default=0.025)
+    parser_eval.add_argument("--downsample_size", type=float, default=0.012)
     parser_eval.add_argument("--upsample", type=int, default=0)
     parser_eval.add_argument(
         "--upsample_rad",
