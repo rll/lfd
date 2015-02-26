@@ -416,7 +416,7 @@ def main():
     while True:
         sim_util.reset_arms_to_side(sim)
         if args.execution:
-            pr2.head.set_pan_tilt(0,1.2)
+            pr2.head.set_pan_tilt(0,1.05)
             pr2.rarm.goto_posture('side')
             pr2.larm.goto_posture('side')
             pr2.rgrip.set_angle(0.54800022)
