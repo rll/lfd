@@ -19,7 +19,8 @@ class LfdEnvironment(object):
         self.sim = sim
         self.downsample_size = downsample_size
     
-    def execute_augmented_trajectory(self, aug_traj, step_viewer=1, interactive=False, sim_callback=None, check_feasible=False):
+    def execute_augmented_trajectory(self, aug_traj, step_viewer=1, interactive=False, sim_callback=None, check_feasible=False,
+                                     return_grasped_objs=False):
         open_or_close_finger_traj = np.zeros(aug_traj.n_steps, dtype=bool)
         if aug_traj.lr2open_finger_traj is not None:
             for lr in aug_traj.lr2open_finger_traj.keys():
@@ -34,6 +35,7 @@ class LfdEnvironment(object):
         misgraspl = False
         misgraspr = False
         lr2gripper_open = {'l':True, 'r':True}
+        grasped_objs = []
         for (start_ind, end_ind) in zip(np.r_[0, open_or_close_inds], np.r_[open_or_close_inds+1, aug_traj.n_steps]):
             if aug_traj.lr2open_finger_traj is not None:
                 for lr in aug_traj.lr2open_finger_traj.keys():
@@ -48,12 +50,12 @@ class LfdEnvironment(object):
                 for lr in aug_traj.lr2close_finger_traj.keys():
                     if aug_traj.lr2close_finger_traj[lr][start_ind]:
                         n_cnts = len(self.sim.constraints[lr])
-                        self.world.close_gripper(lr, step_viewer=step_viewer)
-                        if len(self.sim.constraints[lr]) == n_cnts and lr == 'l':
+                        grasped_objs.extend(self.world.close_gripper(lr, step_viewer=step_viewer))
+                        if len(grasped_objs) > 0 and lr == 'l':
                             misgraspl = True
                         elif lr == 'l':
                             misgraspl = False
-                        elif len(self.sim.constraints[lr]) == n_cnts and lr=='r':
+                        elif len(grasped_objs) > 0 and lr=='r':
                             misgraspr = True
                         else:
                             misgraspr = False
@@ -73,7 +75,11 @@ class LfdEnvironment(object):
             feasible &= eval_util.traj_is_safe(self.sim, full_traj, 0)
             if check_feasible and not feasible:
                 break
-            self.world.execute_trajectory(full_traj, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
+            self.world.execute_trajectory(
+                full_traj, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
+
+        if return_grasped_objs:
+            return feasible, misgrasp, grasped_objs
         return feasible, misgrasp
     
     def observe_scene(self):

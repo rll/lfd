@@ -212,7 +212,8 @@ class BellmanMaxMarginModel(MaxMarginModel):
     def read(fname, actions, num_features):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, num_features)
-        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1, "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
+        assert (len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1, 
+                "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars") # constant 1 is for w0
         param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
         mm_model.action_reward = param_f['action_reward'][()]
@@ -229,7 +230,7 @@ class BellmanMaxMarginModel(MaxMarginModel):
         self.yi = [var for var in self.model.getVars() if var.VarName.startswith('yi')]
         self.yi_val = []
     
-    def add_bellman_constraint(self, curr_action_phi, next_action_phi, update=True, final_transition=False):
+    def add_bellman_constraint(self, curr_action_phi, next_action_phi, reward, update=True, final_transition=False):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
         if final_transition:
@@ -240,9 +241,13 @@ class BellmanMaxMarginModel(MaxMarginModel):
         rhs_coeffs.append((1, yi_pos_var)) 
         rhs_coeffs.append((-1, yi_neg_var)) 
         rhs = grb.LinExpr(rhs_coeffs)
-        rhs += self.action_reward
-        if final_transition:
-            rhs += self.goal_reward
+        if reward is None:
+            # use a default
+            rhs += self.action_reward
+            if final_transition:
+                rhs += self.goal_reward
+        else:
+            rhs += reward
         # w'*curr_phi == -1 + yi_pos - yi_neg + gammma * w'*next_phi
         self.model.addConstr(lhs == rhs)
         #store the constraint so we can store them to a file later
@@ -309,7 +314,11 @@ class BellmanMaxMarginModel(MaxMarginModel):
             except KeyError:
                 rhs_phi = None
                 final_transition=True
-            self.add_bellman_constraint(lhs_phi, rhs_phi, update=False, final_transition=final_transition)
+            if 'reward' in constr:
+                reward = constr['reward'][()]
+            else:
+                reward = None
+            self.add_bellman_constraint(lhs_phi, rhs_phi, reward, update=False, final_transition=final_transition)
             sys.stdout.write("\rComputed Constraints {}/{}           ".format(n_added, n_total))
             sys.stdout.flush()            
             n_added += 1

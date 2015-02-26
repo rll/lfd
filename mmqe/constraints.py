@@ -39,7 +39,7 @@ class ConstraintGenerator(object):
         exp_phi = phi[feat_i]        
         return exp_phi, phi[f_mask, :], margins[m_mask]
 
-    def store_constrs(self, exp_phi, phi, margins, exp_a, outfile, constr_k=None):
+    def store_constrs(self, exp_phi, phi, margins, exp_a, outfile, reward=None, constr_k=None):
         if constr_k is None:
             constr_k = str(self.n_constrs)
         self.n_constrs += 1
@@ -48,6 +48,8 @@ class ConstraintGenerator(object):
         constr_g['exp_phi'] = exp_phi
         constr_g['rhs_phi'] = phi
         constr_g['margin'] = margins
+        if reward is not None:
+            constr_g['reward'] = reward
 
 
 class Margin(object):

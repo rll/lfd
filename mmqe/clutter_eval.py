@@ -81,6 +81,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 sim.viewer.Step()
             sim_state = sim.get_state()
             sim.set_state(sim_state)
+            old_cleared_objs = sim.remove_cleared_objs()
             scene_state = lfd_env.observe_scene()
             # plot cloud of the test scene
             handles = []
@@ -115,7 +116,9 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 except ValueError: # If something is cloud/traj is empty or something
                     redprint("**Raised value error during traj transfer")
                     break
-                (eval_stats.feasible, eval_stats.misgrasp) = lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=args.animation, check_feasible=args.eval.check_feasible)
+                (eval_stats.feasible, eval_stats.misgrasp, grasped_objs) = lfd_env.execute_augmented_trajectory(
+                    aug_traj, step_viewer=args.animation, check_feasible=args.eval.check_feasible, return_grasped_objs=True)
+                reward = sim.compute_reward(old_cleared_objs, grasped_objs)
 
                 sim.settle()
                 eval_stats.exec_elapsed_time += time.time() - start_time

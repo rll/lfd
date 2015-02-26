@@ -89,17 +89,18 @@ def label_demos(args, transferer, lfd_env, sim):
                         0,
                         1)))
             sim.viewer.Step()
+        old_cleared_objs = sim.remove_cleared_objs()
         costs = transferer.registration_factory.batch_cost(scene_state)
         best_keys = sorted(costs, key=costs.get)
         for seg_name in best_keys:
             redprint(seg_name)
             traj = transferer.transfer(GlobalVars.demos[seg_name],
                                                 scene_state,
-                                                plotting=args.plotting)
+                                                plotting=args.plotting)            
 
-
-            feasible, misgrasp = lfd_env.execute_augmented_trajectory(
-                traj, step_viewer=args.animation, interactive=args.interactive)
+            feasible, misgrasp, grasped_objs = lfd_env.execute_augmented_trajectory(
+                traj, step_viewer=args.animation, interactive=args.interactive, return_grasped_objs=True)
+            reward = sim.compute_reward(old_cleared_objs, grasped_objs)
             sim_util.reset_arms_to_side(sim)
             sim.settle(step_viewer=args.animation)
 
@@ -120,11 +121,11 @@ def label_demos(args, transferer, lfd_env, sim):
             success = False
             if user_input == 'y':
                 success = True
-                labeled_data.append((scene_state,seg_name))
+                labeled_data.append((scene_state,seg_name, reward))
                 break
             elif user_input == 'ys':
                 success = True
-                labeled_data.append((scene_state,seg_name))
+                labeled_data.append((scene_state,seg_name, reward))
                 save_success(outfile, labeled_data)
                 labeled_data = []
                 sim.set_state(sample_init_state(sim))
@@ -157,15 +158,12 @@ def save_success(outfile, labeled_data):
     i_task = get_next_task_i(outfile)
     print 'Saving ' +str(len(labeled_data)) + 'step knot to results, task', i_task
     for i_step in range(len(labeled_data)):
-        scene, action = labeled_data[i_step]
+        scene, action, reward = labeled_data[i_step]
         key = str((i_task, i_step))
         g = outfile.create_group(key)
         g['cloud_xyz'] = scene.cloud
         g['action'] = action
-        if i_step == len(labeled_data)-1:
-            g['knot'] = 1
-        else:
-            g['knot'] = 0
+        g['reward'] = reward
     outfile.flush()
 
 def get_next_failure_key(outfile):
@@ -478,6 +476,7 @@ def setup_registration_and_trajectory_transferer(args, sim):
             reg_factory = GpuTpsRpmRegistrationFactory(
                 GlobalVars.demos, args.eval.actionfile)
         elif args.eval.reg_type == 'bij':
+            print 'using GPU registration'
             reg_factory = GpuTpsRpmBijRegistrationFactory(
                 GlobalVars.demos, args.eval.actionfile)
         else:
@@ -489,6 +488,7 @@ def setup_registration_and_trajectory_transferer(args, sim):
         elif args.eval.reg_type == 'rpm':
             reg_factory = TpsRpmRegistrationFactory(GlobalVars.demos)
         elif args.eval.reg_type == 'bij':
+            # print 'using CPU registration'
             reg_factory = TpsRpmBijRegistrationFactory(
                 GlobalVars.demos, args.eval.actionfile)
         else:

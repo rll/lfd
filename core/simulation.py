@@ -383,6 +383,7 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
             self.step()
             if self.viewer and step_viewer:
                 self.viewer.Step()
+        grasped_objs = []
         handles = []
         # add constraints at the points where a ray hits a dynamic link within a distance of grab_dist_thresh
         for sim_obj in self.dyn_sim_objs:
@@ -414,12 +415,14 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                         print rc.link
                         if (n_hits[rc.link] > 5 or
                             type(sim_obj) == CoilSimulationObject or type(sim_obj) == RopeSimulationObject):
+                            grasped_objs.append(sim_obj)
                             link_tf = rc.link.GetTransform()
                             link_tf[:3,3] = rc.pt
                             self._add_constraints(lr, rc.link, link_tf)
         #ipdb.set_trace()
         if self.viewer and step_viewer:
             self.viewer.Step()
+        return grasped_objs
 
     def execute_trajectory(self, full_traj, step_viewer=1, interactive=False, max_cart_vel_trans_traj=.05, sim_callback=None):
         """
@@ -549,7 +552,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
     BIG_DIM = scale * 0.05
     SMALL_DIM = scale * 0.03
 
-    MAX_STEPS=3000
+    MAX_STEPS=5000
 
     def __init__(self, n_big, n_small, **kwargs):
         super(ClutterSimulationRobotWorld, self).__init__(**kwargs)
@@ -584,6 +587,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
     def set_state(self, *args):
         super(ClutterSimulationRobotWorld, self).set_state(*args)
         self.color_container()
+        
 
 
     def reset_container(self):
@@ -672,6 +676,8 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         c_y += .05
         wf_to_cf = np.linalg.inv(self.container.get_pose())
 
+        removed = []
+
         handles = []
         if debug:
             from rapprentice import plotting_openrave
@@ -700,25 +706,43 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
 
         if not np.all(coil_out):
             self.observe_objs.append(self.coil)
+        else:
+            removed_objs.append(self.coil)
 
         for box in self.small_boxes + self.big_boxes:
             bt_cf = wf_to_cf.dot(box.get_bullet_objects()[0].GetTransform())
             box_x, box_y = np.abs(bt_cf[0, 3]), np.abs(bt_cf[1, 3])
             if box_x < c_x and box_y < c_y:
                 self.observe_objs.append(box)
-            elif debug:
-                from rapprentice import plotting_openrave
-                print box_x, box_y
-                print self.container.extents
+            else:
+                removed_objs.append(box)
+                if debug:
+                    from rapprentice import plotting_openrave
+                    print box_x, box_y
+                    print self.container.extents
+                    
+                    print_pts = box.get_bullet_objects()[0].GetTransform()[:3, 3]
+                    print_pts[2] = 1
+                    print print_pts
+                    handles.append(self.env.plot3(print_pts[None, :], 10, (1, 0, 0, 1)))
+                    self.viewer.Idle()
+                    
+                    print "{} removed".format(box.name)
+        return removed_objs
 
-                print_pts = box.get_bullet_objects()[0].GetTransform()[:3, 3]
-                print_pts[2] = 1
-                print print_pts
-                handles.append(self.env.plot3(print_pts[None, :], 10, (1, 0, 0, 1)))
-                self.viewer.Idle()
+    def compute_reward(self, already_cleared_objs, grasped_objs):
+        reward = -.1
+        if sim.container in grasped_objs:
+            grasped_objs.remove(sim.container)
+        cur_cleared_objs = self.remove_cleared_objs()
+        if len(grasped_objs) > 0:
+            reward += len(grasped_objs)
+            if (self.coil not in grasped_objs + old_cleared_objs 
+                and self.coil in updated_cleared_objs):
+                # in case we pull the rope out with a box
+                reward += 1
 
-                print "{} removed".format(box.name)
-
+        return reward
 
 class DynamicRopeSimulationRobotWorld(DynamicSimulationRobotWorld):
 

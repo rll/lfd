@@ -68,7 +68,7 @@ def sample_init_state(sim, viewer=None):
         from rapprentice import plotting_openrave
         handles = []
         handles.append(sim.env.plot3(cld, 3, (0, 1, 0, 1)))
-        viewer.Idle()
+        # viewer.Idle()
 
     return init_state, cld
 
