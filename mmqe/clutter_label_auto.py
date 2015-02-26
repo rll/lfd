@@ -38,7 +38,7 @@ import random
 from string import lower
 
 OBJ_SPACING = 0.1
-# Usage: python scripts/label.py --animation 2 label bigdata/misc/overhand_actions.h5 data/misc/Sep14_train2.h5 finger bij --gpu
+
 
 class GlobalVars:
     exec_log = None
@@ -407,66 +407,56 @@ def setup_log_file(args):
         atexit.register(GlobalVars.exec_log.close)
         GlobalVars.exec_log(0, "main.args", args)
 
-
 def set_global_vars(args):
-    if args.random_seed is not None:
-        np.random.seed(args.random_seed)
+    if args.random_seed is not None: np.random.seed(args.random_seed)
     GlobalVars.actions = h5py.File(args.eval.actionfile, 'r')
     actions_root, actions_ext = os.path.splitext(args.eval.actionfile)
-    GlobalVars.actions_cache = h5py.File(
-        actions_root + '.cache' + actions_ext, 'a')
-
+    GlobalVars.actions_cache = h5py.File(actions_root + '.cache' + actions_ext, 'a')
+    
     GlobalVars.demos = {}
     for action, seg_info in GlobalVars.actions.iteritems():
         if args.eval.ground_truth:
             rope_nodes = seg_info['rope_nodes'][()]
             scene_state = GroundTruthRopeSceneState(
-                rope_nodes,
-                ROPE_RADIUS,
-                upsample=args.eval.upsample,
-                upsample_rad=args.eval.upsample_rad,
+                rope_nodes, ROPE_RADIUS, 
+                upsample=args.eval.upsample, upsample_rad=args.eval.upsample_rad, 
                 downsample_size=args.eval.downsample_size)
         else:
             full_cloud = seg_info['cloud_xyz'][()]
-            scene_state = SceneState(
-                full_cloud, downsample_size=args.eval.downsample_size)
+            scene_state = SceneState(full_cloud, downsample_size=args.eval.downsample_size)
         lr2arm_traj = {}
         lr2finger_traj = {}
         lr2ee_traj = {}
         lr2open_finger_traj = {}
         lr2close_finger_traj = {}
         for lr in 'lr':
-            arm_name = {"l": "leftarm", "r": "rightarm"}[lr]
+            arm_name = {"l":"leftarm", "r":"rightarm"}[lr]
             lr2arm_traj[lr] = np.asarray(seg_info[arm_name])
             lr2finger_traj[lr] = sim_util.gripper_joint2gripper_l_finger_joint_values(
-                np.asarray(
-                    seg_info[
-                        '%s_gripper_joint' %
-                        lr]))[
-                :,
-                None]
+                np.asarray(seg_info['%s_gripper_joint'%lr]))[:,None]
             lr2ee_traj[lr] = np.asarray(
-                seg_info["%s_gripper_tool_frame" % lr]['hmat'])
+                seg_info["%s_gripper_tool_frame"%lr]['hmat'])
             lr2open_finger_traj[lr] = np.zeros(
                 len(lr2finger_traj[lr]), dtype=bool)
             lr2close_finger_traj[lr] = np.zeros(
                 len(lr2finger_traj[lr]), dtype=bool)
-            opening_inds, closing_inds = sim_util.get_opening_closing_inds(
-                lr2finger_traj[lr])
-# opening_inds/closing_inds are indices before the opening/closing happens, so increment those indices (if they are not out of bound)
-# opening_inds = np.clip(opening_inds+1, 0, len(lr2finger_traj[lr])-1) # TODO figure out if +1 is necessary
+            opening_inds, closing_inds = sim_util.get_opening_closing_inds(lr2finger_traj[lr])
+#             # opening_inds/closing_inds are indices before the opening/closing happens, so increment those indices (if they are not out of bound)
+#             opening_inds = np.clip(opening_inds+1, 0, len(lr2finger_traj[lr])-1) # TODO figure out if +1 is necessary
 #             closing_inds = np.clip(closing_inds+1, 0, len(lr2finger_traj[lr])-1)
             lr2open_finger_traj[lr][opening_inds] = True
             lr2close_finger_traj[lr][closing_inds] = True
+            # HACK TO MAKE SURE WE ALWAYS CLOSE GRIPPER
+            if np.any(closing_inds) and not np.any(opening_inds):
+                lr2open_finger_traj[lr][-1] = True
+
+
         aug_traj = AugmentedTrajectory(
-            lr2arm_traj=lr2arm_traj,
-            lr2finger_traj=lr2finger_traj,
-            lr2ee_traj=lr2ee_traj,
-            lr2open_finger_traj=lr2open_finger_traj,
+            lr2arm_traj=lr2arm_traj, lr2finger_traj=lr2finger_traj, 
+            lr2ee_traj=lr2ee_traj, lr2open_finger_traj=lr2open_finger_traj, 
             lr2close_finger_traj=lr2close_finger_traj)
         demo = Demonstration(action, scene_state, aug_traj)
         GlobalVars.demos[action] = demo
-
 
 def setup_lfd_environment_sim(args):
     actions = h5py.File(args.eval.actionfile, 'r')
