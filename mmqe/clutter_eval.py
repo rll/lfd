@@ -83,8 +83,9 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim.set_state(sim_state)
             old_cleared_objs = sim.remove_cleared_objs()
             scene_state = lfd_env.observe_scene()
-            if len(scene_state.cloud) > MAX_CLD_SIZE:
-                scene_state.cloud = scene_state.cloud[
+            ds_scene_state = scend_state
+            if len(sceene_state) > MAX_CLD_SIZE:
+                ds_scene_state.cloud = scene_state.cloud[
                     np.random.choice(range(len(scene_state.cloud)), 
                                      size=MAX_CLD_SIZE, 
                                      replace=False)]
@@ -98,8 +99,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_stats = eval_util.EvalStats()
 
             start_time = time.time()
-            # try:
-            (agenda, q_values_root), goal_found = action_selection.plan_agenda(scene_state, i_step)
+            # try:            
+            (agenda, q_values_root), goal_found = action_selection.plan_agenda(ds_scene_state, i_step)
             # except ValueError: #e.g. if cloud is empty - any action is hopeless
             #     redprint("**Raised Value Error during action selection")
             #     break
