@@ -82,8 +82,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim_state = sim.get_state()
             sim.set_state(sim_state)
             old_cleared_objs = sim.remove_cleared_objs()
-            scene_state = lfd_env.observe_scene()
-            ds_scene_state = scene_state
+            scene_state = lfd_env.observe_scene()            
+            ds_scene_state = SceneState(scene_state.cloud.copy())
             if len(scene_state.cloud) > MAX_CLD_SIZE:
                 ds_scene_state.cloud = scene_state.cloud[
                     np.random.choice(range(len(scene_state.cloud)), 
@@ -126,7 +126,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 (eval_stats.feasible, eval_stats.misgrasp, grasped_objs) = lfd_env.execute_augmented_trajectory(
                     aug_traj, step_viewer=50, check_feasible=args.eval.check_feasible, return_grasped_objs=True)
                 reward = sim.compute_reward(old_cleared_objs, grasped_objs)
-
+                
                 sim.settle(step_viewer=50)
                 eval_stats.exec_elapsed_time += time.time() - start_time
                 
