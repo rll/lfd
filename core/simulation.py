@@ -383,8 +383,8 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
 
             self.robot.SetDOFValues([next_val], [joint_ind])
             self.step()
-            if self.viewer and not i % step_viewer:
-                self.viewer.Step()
+            # if self.viewer and not i % step_viewer:
+            #     self.viewer.Step()
             i += 1
         grasped_objs = set()
         handles = []

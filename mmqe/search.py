@@ -26,6 +26,8 @@ class SearchNode(object):
             self.child_ids = child_ids
 
         self.child_id2ind = dict([(C_ID, i) for i, C_ID in enumerate(self.child_ids)])
+
+        self.reward = 0
         
 
         if parent is None:
@@ -71,15 +73,18 @@ class ExpandingNode(SearchNode):
         SearchNode.id_map[ID] = self
 
 class MaxNode(SearchNode):
-    def __init__(self, ID, state, child_vals, child_ids=None, parent = None):
+    def __init__(self, ID, state, child_vals, reward = 0, child_ids=None, parent = None):
         SearchNode.__init__(self, ID, state, child_vals, child_ids=child_ids, parent=parent)
-        self.value = np.max(self.child_vals)
+        self.reward = reward
+        self.value = self.reward + np.max(self.child_vals)
 
     def update(self, v, c_id):
         SearchNode.update(self, v, c_id)
         expanded_inds = self.child_expands == np.max(self.child_expands)
         old_value = self.value
-        self.value = np.max(self.child_vals[expanded_inds])
+ 
+        self.value = self.reward + np.max(self.child_vals[expanded_inds])
+        print "Reward:\t{}Value:\t{}".format(self.reward, self.value)
         if self.parent != self:
             self.parent.update(self.value, self.ID)
 
@@ -118,23 +123,26 @@ def beam_search(start_state, timestep, actions, expander, evaluator, sim, width=
             child_node = ExpandingNode(child_id, parent_node)
         agenda = []
         for res in expand_res:
-            next_s, next_s_id, is_goal = res
+            next_s, next_s_id, reward = res
             parent = SearchNode.id_map[next_s_id].parent
             del SearchNode.id_map[next_s_id]
 
-            if is_goal:
-                goal_found = True
-                parent.update(np.inf, next_s_id)
-                break
+            # if is_goal:
+            #     goal_found = True
+            #     parent.update(np.inf, next_s_id)
+            #     break
             #elif not res.feasible or res.misgrasp:
             #    parent.update(-np.inf, next_s_id)
             #    continue
             child_vals = evaluator(next_s, timestep+d+1)
-            child_node = MaxNode(next_s_id, next_s, child_vals, parent=parent)
+            print "Q-value:{}".format(child_vals)
+            child_node = MaxNode(next_s_id, next_s, child_vals, reward=reward, parent=parent)
             parent.update(child_node.value, next_s_id)
             agenda.append(child_node)
-        if goal_found:
-            break
+        # if goal_found:
+        #     break
     # Reset back to the original state before returning
     sim.set_state(id2simstate[root_id])
-    return root.select_best(), goal_found
+    res = root.select_best()
+    print "value returned:\t{}".format(res)
+    return res, goal_found

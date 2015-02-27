@@ -25,6 +25,7 @@ class State(object):
         self.cloud = cloud
 
 def get_feat_cls(args):
+    print args.feature_type
     if args.feature_type == 'base':
         return BatchRCFeats
     elif args.feature_type == 'mul':
@@ -36,6 +37,7 @@ def get_feat_cls(args):
     elif args.feature_type == 'mul_s_map':
         return SimpleMulMapIndFeats
     elif args.feature_type == 'mul_quad':
+        print 'returning quadsimple'
         return QuadSimpleMulFeats
     elif args.feature_type == 'mul_quad_ind':
         return QuadSimpleMulIndFeats

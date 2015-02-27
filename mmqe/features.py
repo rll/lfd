@@ -204,7 +204,7 @@ class LandmarkFeats(MulFeats):
     
     
 
-class QuadMulFeats(BatchRCFeats):         
+class QuadMulFeats(BatchRCFeats):
 
     N_feats = sum([x+1 for x in range(MulFeats.N_costs)]) + MulFeats.N_costs
 
@@ -219,7 +219,9 @@ class QuadMulFeats(BatchRCFeats):
         self.costs = np.zeros((self.N, QuadMulFeats.N_feats))
         for i in range(self.N):
             self.costs[i, :] = get_quad_terms(costs[i])
-        return np.c_[self.costs, self.indicators]
+        res = np.c_[self.costs, self.indicators]
+        print res.shape
+        return res
 
     def get_ind(self, a):
         return self.name2ind[a]
@@ -259,6 +261,7 @@ class QuadSimpleMulFeats(BatchRCFeats):
     def __init__(self, actionfile):
         BatchRCFeats.__init__(self, actionfile)
         self.weights = np.zeros(QuadSimpleMulFeats.get_size(self.N))
+        print 'QuadSimple n-feats: {}'.format(self.N_feats)
  
     def features(self, state, **kwargs):
         self.tgt_cld = state.cloud
@@ -267,7 +270,9 @@ class QuadSimpleMulFeats(BatchRCFeats):
         self.costs = np.zeros((self.N, QuadSimpleMulFeats.N_feats))
         for i in range(self.N):
             self.costs[i, :] = get_quad_terms(costs[i])
-        return np.c_[self.costs, self.indicators]
+        res = np.c_[self.costs, self.indicators]
+        print res.shape
+        return res
 
     def get_ind(self, a):
         return self.name2ind[a]
@@ -347,7 +352,8 @@ class QuadSimpleMulBendIndFeats(BatchRCFeats):
         for i in range(self.N):
             self.costs[i, :] = get_quad_terms(costs[i])
 
-        return np.c_[self.costs, self.indicators, self.regind_feats]
+        res = np.c_[self.costs, self.indicators, self.regind_feats]
+        return res
 
     @staticmethod
     def get_size(num_actions):

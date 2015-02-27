@@ -27,6 +27,7 @@ class ConstraintGenerator(object):
         #ipdb.set_trace()
 
         phi              = self.feature.features(state, timestep=timestep)
+
         if exp_a == 'failure':
             return -1, phi, -1
         feat_i           = self.feature.get_ind(exp_a)

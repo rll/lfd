@@ -7,6 +7,8 @@ from mmqe.search import beam_search
 from rapprentice import registration
 from rapprentice.knot_classifier import isKnot as is_knot
 
+from constants import MAX_CLD_SIZE
+
 
 import IPython as ipy
 
@@ -61,17 +63,27 @@ class FeatureActionSelection(ActionSelection):
             return score
 
         def simulate_transfer(state, action, next_state_id):
+            ## HACK FOR CLUTTER WORLD
+            old_cleared_objs = self.lfd_env.world.remove_cleared_objs()
             aug_traj=self.transferer.transfer(self.demos[action], state, plotting=False)
-            self.lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0)
+            _, _, grasped_objs = self.lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=0, return_grasped_objs=True)
+            reward = self.lfd_env.world.compute_reward(old_cleared_objs, grasped_objs)
             result_state = self.lfd_env.observe_scene()
 
+            if len(result_state.cloud) > MAX_CLD_SIZE:
+                result_state.cloud = result_state.cloud[
+                    np.random.choice(range(len(result_state.cloud)), 
+                                     size=MAX_CLD_SIZE, 
+                                     replace=False)]
+
+
             # Get the rope simulation object and determine if it's a knot
-            for sim_obj in self.lfd_env.sim.sim_objs:
-                if isinstance(sim_obj, simulation_object.RopeSimulationObject):
-                    rope_sim_obj = sim_obj
-                    break
-            rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
-            return (result_state, next_state_id, rope_knot)
+            # for sim_obj in self.lfd_env.sim.sim_objs:
+            #     if isinstance(sim_obj, simulation_object.RopeSimulationObject):
+            #         rope_sim_obj = sim_obj
+            #         break
+            # rope_knot = is_knot(rope_sim_obj.rope.GetControlPoints())
+            return (result_state, next_state_id, reward)
 
         return beam_search(scene_state, timestep, self.features.src_ctx.seg_names, simulate_transfer,
                            evaluator, self.lfd_env.sim, width=self.width,
