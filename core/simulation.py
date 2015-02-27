@@ -663,7 +663,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         self.reset_container()
         # self.viewer.Idle()
 
-        self.settle(max_steps=self.MAX_STEPS, tol=1e-4, step_viewer=step_viewer)
+        self.settle(max_steps=self.MAX_STEPS, tol=1e-4, step_viewer=50)
         self.remove_cleared_objs()
 
     def settle(self, max_steps=None, tol=1e-3, step_viewer=10):

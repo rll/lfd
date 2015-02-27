@@ -6,6 +6,10 @@ from features import BatchRCFeats, MulFeats, QuadMulFeats, QuadSimpleMulFeats, Q
 from constraints import ConstraintGenerator, BatchCPMargin
 from max_margin import MaxMarginModel, BellmanMaxMarginModel
 
+from core.constants import MAX_CLD_SIZE
+
+import numpy as np
+
 import os.path as osp
 import h5py, sys
 from string import lower
@@ -90,7 +94,11 @@ def build_constraints(args):
         sys.stdout.write('\rcomputing constraints {}/{}\t\t\t\t'.format(i, n_constraints))
         sys.stdout.flush()
         demo_info = exp_demofile[demo_k]
-        state = State(i, demo_info['cloud_xyz'][:])
+        cld_xyz = demo_info['cloud_xyz'][:]        
+        if 'reward' in demo_info:
+            reward = demo_info['reward'][()]
+        else:
+            reward = None
         if demo_k.startswith('f'):
             exp_a = 'failure'
         else:
@@ -100,8 +108,17 @@ def build_constraints(args):
             exp_a = demo_info['action'][()]
             if exp_a.startswith('endstate'): # this is a knot
                 continue
-        exp_phi, phi, margins = constr_generator.compute_constrs(state, exp_a, timestep)
-        constr_generator.store_constrs(exp_phi, phi, margins, exp_a, constrfile, constr_k=str(demo_k))
+        
+        for j in range(args.n_duplicate):
+            state = State(i*args.n_duplicate + j, cld_xyz)
+            if len(cld_xyz) > MAX_CLD_SIZE:
+                state.cloud = cld_xyz[
+                    np.random.choice(range(len(cld_xyz)), 
+                                     size=MAX_CLD_SIZE, 
+                                     replace=False)]
+            exp_phi, phi, margins = constr_generator.compute_constrs(state, exp_a, timestep)
+            constr_generator.store_constrs(exp_phi, phi, margins, exp_a, constrfile, 
+                                           reward=reward, constr_k='{}_{}'.format(demo_k, j))
         constrfile.flush()
     print ""
     print "Constraint Generation Complete\nTime Taken:\t{}".format(time.time() - start)
@@ -144,8 +161,8 @@ def optimize_model(args):
     mm_model.save_weights_to_file(args.weightfile)
 
 def do_all(args):
-    model_dir = '../data/models'
-    weights_dir = '../data/weights'
+    model_dir = '../mmqe_data/models'
+    weights_dir = '../mmqe_data/weights'
     _, demofname = osp.split(args.demofile)
     labels = osp.splitext(demofname)[0]
     args.constrfile = '{}/{}_{}.h5'.format(model_dir, labels, args.feature_type)
@@ -173,6 +190,7 @@ def parse_arguments():
     parser_build_constraints.add_argument('demofile',   nargs='?', default='../data/labels/all_labels_fixed.h5')
     parser_build_constraints.add_argument('constrfile', nargs='?', default='../data/models/all_labels_fixed.h5')
     parser_build_constraints.add_argument('actionfile', nargs='?', default='../data/misc/actions.h5')
+    parser_build_constraints.add_argument('--n_duplicate', type=int, default=1)
     parser_build_constraints.set_defaults(func=build_constraints)
 
     # build-model subparser
@@ -197,6 +215,7 @@ def parse_arguments():
     parser_all.add_argument('demofile',   nargs='?', default='../data/labels/labels_Jul_3_0.1.h5')
     parser_all.add_argument('actionfile', nargs='?', default='../data/misc/actions.h5')
     parser_all.add_argument('--max_constraints', type=int, default=1000)
+    parser_all.add_argument('--n_duplicate', type=int, default=1)
     parser_all.add_argument('--C', '-c', type=float, nargs='*', default=[1])
     parser_all.add_argument('--D', '-d', type=float, nargs='*', default=[1])
     parser_all.add_argument('--F', '-f', type=float, default=1)

@@ -281,6 +281,7 @@ class BellmanMaxMarginModel(MaxMarginModel):
     @staticmethod
     def parse_key(key):
         # parsing hackery to get a tuple of ints from its str representation
+        key = key.split('_')[0] # to account for duplicated examples
         return [int(x) for x in key.strip('(').strip(')').strip(' ').split(',')]
     
     def load_constraints_from_file(self, fname, max_constrs=None):

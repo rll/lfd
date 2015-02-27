@@ -25,6 +25,7 @@ class ConstraintGenerator(object):
         None for the expert action indicates this is an unrecoverable state
         """
         #ipdb.set_trace()
+
         phi              = self.feature.features(state, timestep=timestep)
         if exp_a == 'failure':
             return -1, phi, -1

@@ -6,7 +6,7 @@ import copy
 import pprint
 import argparse
 from core import demonstration, registration, transfer, sim_util
-from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY
+from core.constants import ROPE_RADIUS, MAX_ACTIONS_TO_TRY, MAX_CLD_SIZE
 
 from core.demonstration import SceneState, GroundTruthRopeSceneState, AugmentedTrajectory, Demonstration
 from core.simulation import DynamicSimulationRobotWorld, DynamicRopeSimulationRobotWorld, ClutterSimulationRobotWorld
@@ -61,7 +61,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
         rope_params.angStiffness = args.eval.rope_param_angStiffness
 
 
-    obj_removed = []
+    rewards = []
     num_successes = 0
     num_total = 0
     for i_task, task_info in holdout_items:
@@ -83,6 +83,12 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim.set_state(sim_state)
             old_cleared_objs = sim.remove_cleared_objs()
             scene_state = lfd_env.observe_scene()
+            if len(scene_state.cloud) > MAX_CLD_SIZE:
+                scene_state.cloud = scene_state.cloud[
+                    np.random.choice(range(len(scene_state.cloud)), 
+                                     size=MAX_CLD_SIZE, 
+                                     replace=False)]
+
             # plot cloud of the test scene
             handles = []
             if args.plotting:
@@ -92,22 +98,22 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             eval_stats = eval_util.EvalStats()
 
             start_time = time.time()
-            try:
-                (agenda, q_values_root), goal_found = action_selection.plan_agenda(scene_state, i_step)
-            except ValueError: #e.g. if cloud is empty - any action is hopeless
-                redprint("**Raised Value Error during action selection")
-                break
+            # try:
+            (agenda, q_values_root), goal_found = action_selection.plan_agenda(scene_state, i_step)
+            # except ValueError: #e.g. if cloud is empty - any action is hopeless
+            #     redprint("**Raised Value Error during action selection")
+            #     break
             eval_stats.action_elapsed_time += time.time() - start_time
  
             eval_stats.generalized = True
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
-
+            
+            print q_values_root[0]
+            print agenda[0]
 
             for i_choice in range(num_actions_to_try):
                 if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
                     eval_stats.generalized = False
-                    break
-                redprint("TRYING %s"%agenda[i_choice])
 
                 best_root_action = str(agenda[i_choice])
                 start_time = time.time()
@@ -117,10 +123,10 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                     redprint("**Raised value error during traj transfer")
                     break
                 (eval_stats.feasible, eval_stats.misgrasp, grasped_objs) = lfd_env.execute_augmented_trajectory(
-                    aug_traj, step_viewer=args.animation, check_feasible=args.eval.check_feasible, return_grasped_objs=True)
+                    aug_traj, step_viewer=50, check_feasible=args.eval.check_feasible, return_grasped_objs=True)
                 reward = sim.compute_reward(old_cleared_objs, grasped_objs)
 
-                sim.settle()
+                sim.settle(step_viewer=50)
                 eval_stats.exec_elapsed_time += time.time() - start_time
                 
                 if not args.eval.check_feasible or eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action and we care about feasibility
@@ -130,8 +136,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             print "BEST ACTION:", best_root_action
 
             sim.remove_cleared_objs()
-            objs_left = len(sim.observe_objs) - 1
-            success = objs_left <= 0
+            
+            rewards.append(reward)
 
             results = {'scene_state':scene_state, 
                        'best_action':best_root_action, 
@@ -139,8 +145,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                        'aug_traj':aug_traj, 
                        'eval_stats':eval_stats, 
                        'sim_state':sim_state, 
-                       'success': success, 
-                       'objs_left': objs_left}
+                       'reward': reward}
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, results)
             
             if not eval_stats.generalized:
@@ -153,16 +158,15 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
                 assert not knot
                 break
             
-            if success:
-                num_successes += 1
-                break;
-        obj_removed.append(5 - objs_left)
+            # if success:
+            #     num_successes += 1
+            #     break;
 
         task_time = (.8) * (time.time() - task_start)  + (.2) * task_time if task_time else time.time() - task_start
         num_total += 1
         redprint('Eval Successes / Total: {}/{}'.format(num_successes, num_total))
         redprint('Success Rate: {}'.format(float(num_successes)/num_total))
-        redprint('Avg Num Removed: {}'.format(np.mean(obj_removed)))
+        redprint('Avg Reward: {}'.format(np.mean(rewards) * 5))
         redprint('Estimated Time Left: {}'.format((len(holdout_items) - num_total) * task_time))
 
 def replay_on_holdout(args, action_selection, transfer, lfd_env, sim):
@@ -464,14 +468,21 @@ def main():
     trajoptpy.SetInteractive(args.interactive)
     lfd_env, sim = setup_lfd_environment_sim(args)
     reg_and_traj_transferer = setup_registration_and_trajectory_transferer(args, sim)
+
     if args.eval.action_selection == 'feature':
         get_features(args)
     if args.eval.action_selection == 'greedy':
         action_selection = GreedyActionSelection(reg_and_traj_transferer.registration_factory)
     elif args.eval.search_parallel:
-        action_selection = ParallelFeatureActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, args=args, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth)
+        action_selection = ParallelFeatureActionSelection(
+            reg_and_traj_transferer.registration_factory, GlobalVars.features, 
+            GlobalVars.actions, GlobalVars.demos, args=args, lfd_env=lfd_env, 
+            width=args.eval.width, depth=args.eval.depth)
     else:
-        action_selection = FeatureActionSelection(reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, depth=args.eval.depth, debug=2)
+        action_selection = FeatureActionSelection(
+            reg_and_traj_transferer.registration_factory, GlobalVars.features, GlobalVars.actions, 
+            GlobalVars.demos, simulator=reg_and_traj_transferer, lfd_env=lfd_env, width=args.eval.width, 
+            depth=args.eval.depth)#TODO: figure out why this was here, debug=2)
 
     if args.subparser_name == "eval":
         start = time.time()

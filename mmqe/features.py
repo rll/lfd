@@ -8,6 +8,8 @@ import numpy as np
 from tpsopt.batchtps import SrcContext, TgtContext, batch_tps_rpm_bij, GPUContext
 from tpsopt.registration import unit_boxify
 
+from core.constants import MAX_CLD_SIZE
+
 import ipdb
 import IPython as ipy
 from pdb import pm, set_trace
@@ -136,7 +138,13 @@ class SimpleMulGripperFeats(MulFeats):
         self.weights = np.r_[x, np.zeros(self.N+1)]
  
     def features(self, state, **kwargs):
-        self.tgt_cld = state.cloud
+        cld_xyz = state.cloud
+        if len(cld_xyz) > MAX_CLD_SIZE:
+            cld_xyz = cld_xyz[
+                np.random.choice(range(len(cld_xyz)), 
+                                 size=MAX_CLD_SIZE, 
+                                 replace=False)]
+        self.tgt_cld = cld_xyz
         self.tgt_ctx.set_cld(self.tgt_cld)
         rloc = state.cloud[0] # the location to set if the left/right gripper doesn't close for an action
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx, component_cost=True)[:, :SimpleMulFeats.N_costs]

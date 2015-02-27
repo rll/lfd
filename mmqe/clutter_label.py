@@ -90,19 +90,26 @@ def label_demos(args, transferer, lfd_env, sim):
                         1)))
             sim.viewer.Step()
         old_cleared_objs = sim.remove_cleared_objs()
-        costs = transferer.registration_factory.batch_cost(scene_state)
+        costs = transferer.registration_factory.batch_cost(
+            scene_state)
         best_keys = sorted(costs, key=costs.get)
         for seg_name in best_keys:
             redprint(seg_name)
-            traj = transferer.transfer(GlobalVars.demos[seg_name],
-                                                scene_state,
-                                                plotting=args.plotting)            
+            traj = transferer.transfer(
+                GlobalVars.demos[seg_name],
+                scene_state,
+                plotting=args.plotting)            
             resp = raw_input('continue?[Y/n]')
             if resp in ('n', 'N'):
                 continue
-            feasible, misgrasp, grasped_objs = lfd_env.execute_augmented_trajectory(
-                traj, step_viewer=args.animation, interactive=args.interactive, return_grasped_objs=True)
-            reward = sim.compute_reward(old_cleared_objs, grasped_objs)
+            (feasible, 
+             misgrasp, 
+             grasped_objs) = lfd_env.execute_augmented_trajectory(
+                traj, step_viewer=args.animation, 
+                interactive=args.interactive, 
+                return_grasped_objs=True)
+            reward = sim.compute_reward(
+                old_cleared_objs, grasped_objs)
             print "reward:\t{}".format(reward)
             sim_util.reset_arms_to_side(sim)
             sim.settle(step_viewer=args.animation)
@@ -159,7 +166,8 @@ def save_failure(outfile, failure_scene):
 
 def save_success(outfile, labeled_data):
     i_task = get_next_task_i(outfile)
-    print 'Saving ' +str(len(labeled_data)) + 'step knot to results, task', i_task
+    print 'Saving {} step knot to results, task {}'.format(
+        len(labeled_data), i_task)
     for i_step in range(len(labeled_data)):
         scene, action, reward = labeled_data[i_step]
         key = str((i_task, i_step))
