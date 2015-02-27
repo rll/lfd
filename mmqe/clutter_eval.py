@@ -83,8 +83,8 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim.set_state(sim_state)
             old_cleared_objs = sim.remove_cleared_objs()
             scene_state = lfd_env.observe_scene()
-            ds_scene_state = scend_state
-            if len(sceene_state) > MAX_CLD_SIZE:
+            ds_scene_state = scene_state
+            if len(scene_state.cloud) > MAX_CLD_SIZE:
                 ds_scene_state.cloud = scene_state.cloud[
                     np.random.choice(range(len(scene_state.cloud)), 
                                      size=MAX_CLD_SIZE, 
