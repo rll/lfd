@@ -1,0 +1,10 @@
+python build.py mul_grip bellman ~/tmp.tmp full ../mmqe_data/labels/labeled_demos_2_26_auto.h5 ../mmqe_data/mmqe_box_demos_feb12.h5 --n_duplicate 5 --C .01 .1 1 10 100 1000
+
+python gen_cluttered_tasks.py ../mmqe_data/misc/quick_eval.h5 20 --viewer
+
+rm ../mmqe_data/results/working_results.h5 
+
+# test w/viewer
+python clutter_eval.py --animation 2 --resultfile ../mmqe_data/results/working_results.h5 eval ../mmqe_data/mmqe_box_demos_feb12.h5 ../mmqe_data/misc/quick_eval.h5 feature finger bij --weightfile ../mmqe_data/weights/labeled_demos_2_26_auto_mul_grip_c=100.0_d=1_bellman.h5 --gpu --feature_type mul_grip 
+
+# test w/o viewer
