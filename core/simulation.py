@@ -394,10 +394,10 @@ class DynamicSimulationRobotWorld(DynamicSimulation, RobotWorld):
                 from_to_ray_collisions = self.bt_env.RayTest(ray_froms, ray_tos, bt_obj)
                 to_from_ray_collisions = self.bt_env.RayTest(ray_tos, ray_froms, bt_obj)
 
-                for i in range(ray_froms.shape[0]):
-                    #handles.append(self.env.drawarrow(ray_froms[i,:], ray_tos[i,:]))
-                    if step_viewer:
-                        self.viewer.Step()
+                # for i in range(ray_froms.shape[0]):
+                #     #handles.append(self.env.drawarrow(ray_froms[i,:], ray_tos[i,:]))
+                #     if step_viewer:
+                #         self.viewer.Step()
                 ray_collisions = [rc for rcs in [from_to_ray_collisions, to_from_ray_collisions] for rc in rcs]
                 #handles.append(self.env.plot3(np.asarray([x.pt for x in ray_collisions]), 2, (1,0,0)))
                 n_hits = {}
@@ -676,7 +676,7 @@ class ClutterSimulationRobotWorld(DynamicSimulationRobotWorld):
         if observe_objs is None:
             observe_objs = self.observe_objs
         cld = super(ClutterSimulationRobotWorld, self).observe_cloud(observe_objs)
-        assert cld.shape[1] == 3
+        # assert cld.shape[1] == 3
         # Uncomment this to shift point clouds down or up.
         #cld[:, 2] = cld[:, 2] - .02
         return cld

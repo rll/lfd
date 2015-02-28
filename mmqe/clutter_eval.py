@@ -139,6 +139,7 @@ def eval_on_holdout(args, action_selection, reg_and_traj_transferer, lfd_env, si
             sim.remove_cleared_objs()
             
             rewards.append(reward)
+            print "Reward observed: {}".format(reward)
 
             results = {'scene_state':scene_state, 
                        'best_action':best_root_action, 
