@@ -13,7 +13,7 @@ class RegistrationAndTrajectoryTransferer(object):
         self.registration_factory = registration_factory
         self.trajectory_transferer = trajectory_transferer
     
-    def transfer(self, demo, test_scene_state, callback=None, plotting=False):
+    def transfer(self, demo, test_scene_state, callback=None, args=(), plotting=False):
         """Registers demonstration scene onto the test scene and uses this registration to transfer the demonstration trajectory
         
         Args:
@@ -26,8 +26,8 @@ class RegistrationAndTrajectoryTransferer(object):
         raise NotImplementedError
 
 class TwoStepRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
-    def transfer(self, demo, test_scene_state, callback=None, plotting=False):
-        reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
+    def transfer(self, demo, test_scene_state, callback=None, args=(), plotting=False):
+        reg = self.registration_factory.register(demo, test_scene_state, callback=callback, args=args)
         test_aug_traj = self.trajectory_transferer.transfer(reg, demo, plotting=plotting)
         return test_aug_traj
 
@@ -50,8 +50,8 @@ class UnifiedRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransf
         self.use_collision_cost = use_collision_cost
         self.init_trajectory_transferer = init_trajectory_transferer
 
-    def transfer(self, demo, test_scene_state, callback=None, plotting=False):
-        reg = self.registration_factory.register(demo, test_scene_state, callback=callback)
+    def transfer(self, demo, test_scene_state, callback=None, args=(), plotting=False):
+        reg = self.registration_factory.register(demo, test_scene_state, callback=callback, args=args)
 
         handles = []
         if plotting:

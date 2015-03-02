@@ -6,9 +6,11 @@ import settings
 import tps
 import solver
 import lfd.registration
+from lfd.registration import tps_experimental
 if lfd.registration._has_cuda:
     from lfd.tpsopt.batchtps import batch_tps_rpm_bij, GPUContext, TgtContext
 
+#TODO: base registration should not have corr. Specific registration should contain all hyperparameters used in the optimization of the RegistrationFactory
 class Registration(object):
     def __init__(self, demo, test_scene_state, f, corr):
         self.demo = demo
@@ -86,25 +88,28 @@ class TpsRpmBijRegistration(Registration):
         return cost
 
 
+class TpsL2Registration(Registration):
+    pass #TODO
+
+
 class TpsnRpmRegistration(Registration):
-    def __init__(self, demo, test_scene_state, f, corr, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, rad, radn, bend_coef, rot_coef):
-        super(TpsRpmRegistration, self).__init__(demo, test_scene_state, f, corr)
-        self.x_ld = x_ld
-        self.u_rd = u_rd
-        self.z_rd = z_rd
-        self.y_md = y_md
-        self.v_sd = v_sd
-        self.z_sd = z_sd
+    def __init__(self, demo, test_scene_state, f, corr_lm, corr_rs, rad, radn, bend_coef, rot_coef):
+        super(TpsnRpmRegistration, self).__init__(demo, test_scene_state, f, corr_lm)
+        self.x_ld = demo.scene_state.cloud[:,:3]
+        self.u_rd = demo.scene_state.normals
+        self.z_rd = demo.scene_state.sites
+        self.y_md = test_scene_state.cloud[:,:3]
+        self.v_sd = test_scene_state.normals
+        self.z_sd = test_scene_state.sites
+        self.corr_lm = corr_lm
+        self.corr_rs = corr_rs
         self.rad = rad
         self.radn = radn
         self.bend_coef = bend_coef
-        self.rot_coef = rot_coef 
+        self.rot_coef = rot_coef
     
     def get_objective(self):
-        x_nd = self.demo.scene_state.cloud[:,:3]
-        y_md = self.test_scene_state.cloud[:,:3]
-        # TODO: fill x_ld, u_rd, z_rd, y_md, v_sd, z_sd
-        cost = self.get_objective2(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, self.f, self.corr_lm, self.corr_rs, self.rad, self.radn, self.bend_coef, self.rot_coef)
+        cost = self.get_objective2(self.x_ld, self.u_rd, self.z_rd, self.y_md, self.v_sd, self.z_sd, self.f, self.corr_lm, self.corr_rs, self.rad, self.radn, self.bend_coef, self.rot_coef)
         return cost
 
     @staticmethod
@@ -151,8 +156,9 @@ class TpsnRpmRegistration(Registration):
         # normal entropy
         corr_rs = np.reshape(corr_rs, (1,-1))
         nz_corr_rs = corr_rs[corr_rs != 0]
-        nz_site_dist_rs = site_dist_rs[corr_rs != 0]
-        cost[6] = (2*radn / r) * (nz_corr_rs * np.log(nz_corr_rs / nz_site_dist_rs)).sum()
+        prior_prob_rs = np.reshape(prior_prob_rs, (1,-1))
+        nz_prior_prob_rs = prior_prob_rs[corr_rs != 0]
+        cost[6] = (2*radn / r) * (nz_corr_rs * np.log(nz_corr_rs / nz_prior_prob_rs)).sum()
         cost[7] = -(2*radn / r) * nz_corr_rs.sum()
         return cost
 
@@ -170,7 +176,7 @@ class RegistrationFactory(object):
         else:
             self.demos = demos
         
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         """Registers demonstration scene onto the test scene
         
         Args:
@@ -184,7 +190,7 @@ class RegistrationFactory(object):
         """
         raise NotImplementedError
 
-    def batch_register(self, test_scene_state, callback=None):
+    def batch_register(self, test_scene_state, callback=None, args=()):
         """Registers every demonstration scene in demos onto the test scene
         
         Returns:
@@ -287,7 +293,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         self.prior_fn = prior_fn
         self.f_solver_factory = f_solver_factory
     
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         if self.prior_fn is not None:
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -302,7 +308,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
                               rad_init=self.rad_init, rad_final=self.rad_final, 
                               rot_reg=self.rot_reg, 
                               outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                              prior_prob_nm=prior_prob_nm, callback=callback)
+                              prior_prob_nm=prior_prob_nm, callback=callback, args=args)
         
         return TpsRpmRegistration(demo, test_scene_state, f, corr, self.rad_final)
     
@@ -392,7 +398,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
         self.f_solver_factory = f_solver_factory
         self.g_solver_factory = g_solver_factory
     
-    def register(self, demo, test_scene_state, callback=None):
+    def register(self, demo, test_scene_state, callback=None, args=()):
         if self.prior_fn is not None:
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
@@ -407,7 +413,7 @@ class TpsRpmBijRegistrationFactory(RegistrationFactory):
                                      rad_init=self.rad_init, rad_final=self.rad_final, 
                                      rot_reg=self.rot_reg, 
                                      outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                                     prior_prob_nm=prior_prob_nm, callback=callback)
+                                     prior_prob_nm=prior_prob_nm, callback=callback, args=args)
         
         return TpsRpmBijRegistration(demo, test_scene_state, f, g, corr, self.rad_final)
     
@@ -512,6 +518,68 @@ class BatchGpuTpsRpmBijRegistrationFactory(TpsRpmBijRegistrationFactory):
         return costs
 
 
+class TpsL2RegistrationFactory(RegistrationFactory):
+    r"""As in:
+    
+    Bing Jian; Vemuri, B.C., "Robust Point Set Registration Using Gaussian Mixture Models," Pattern Analysis and Machine Intelligence, IEEE Transactions on , vol.33, no.8, pp.1633,1645, Aug. 2011.
+    
+    Tries to solve the optimization problem
+    
+    .. math::
+        :nowrap:
+
+        \begin{align*}
+            & \min_f
+                & d_{L2}(gmm(f(X), \sigma), gmm(Y))
+                + \lambda Tr(A^\top K A)
+                + Tr((B - I) R (B - I)) \\
+            & \text{subject to} 
+                & X^\top A = 0, 1^\top A = 0 \\
+        \end{align*}
+    
+    where :math:`d_{L2}` computes the L2 distance between two Gaussian mixture models.
+    """
+    def __init__(self, demos=None, 
+                 n_iter=settings.L2_N_ITER, opt_iter=settings.L2_OPT_ITER, 
+                 reg_init=settings.L2_REG[0], reg_final=settings.L2_REG[1], 
+                 rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
+                 rot_reg=settings.L2_ROT_REG):
+        """Inits TpsL2RegistrationFactory with demonstrations and parameters
+        
+        Args:
+            demos: dict that maps from demonstration name to Demonstration
+            n_iter: outer iterations
+            opt_iter: inner iterations for the L-BFGS-B subroutine
+            reg_init/reg_final: regularization on curvature
+            rad_init/rad_final: standard deviation for the Gaussian mixture models
+            rot_reg: regularization on rotation
+        """
+        super(TpsL2RegistrationFactory, self).__init__(demos=demos)
+        self.n_iter = n_iter
+        self.opt_iter = opt_iter
+        self.reg_init = reg_init
+        self.reg_final = reg_final
+        self.rad_init = rad_init
+        self.rad_final = rad_final
+        self.rot_reg = rot_reg
+    
+    def register(self, demo, test_scene_state, callback=None):
+        x_nd = demo.scene_state.cloud[:,:3]
+        y_md = test_scene_state.cloud[:,:3]
+        
+        f = tps_experimental.tps_l2(x_nd, y_md, 
+                                    n_iter=self.n_iter, opt_iter=self.opt_iter, 
+                                    reg_init=self.reg_init, reg_final=self.reg_final, 
+                                    rad_init=self.rad_init, rad_final=self.rad_final, 
+                                    rot_reg=self.rot_reg, 
+                                    callback=callback)
+        
+        return TpsL2Registration(demo, test_scene_state, f, self.reg_final, self.rad_final, self.rot_reg)
+    
+    def cost(self, demo, test_scene_state):
+        raise NotImplementedError
+
+
 class TpsSegmentRegistrationFactory(RegistrationFactory):
     def __init__(self, demos):
         raise NotImplementedError
@@ -534,34 +602,47 @@ class TpsnRpmRegistrationFactory(RegistrationFactory):
     TPS-RPM using normals information
     """
     def __init__(self, demos=None, 
-                 n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
-                 reg_init=settings.REG[0], reg_final=settings.REG[1], 
-                 rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
-                 rot_reg=settings.ROT_REG, 
-                 outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
-                 prior_fn=None, 
-                 f_solver_factory=solver.AutoTpsSolverFactory()):
-        raise NotImplementedError
+                  n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                  reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                  rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                  radn_init=settings.RADN[0], radn_final=settings.RADN[1], 
+                  nu_init=settings.NU[0], nu_final=settings.NU[1], 
+                  rot_reg=settings.ROT_REG, 
+                  outlierprior=settings.OUTLIER_PRIOR, outlierfrac=settings.OUTLIER_FRAC, 
+                  callback=None):
+        self.n_iter = n_iter
+        self.em_iter = em_iter
+        self.reg_init = reg_init
+        self.reg_final = reg_final
+        self.rad_init = rad_init
+        self.rad_final = rad_final
+        self.radn_init = radn_init
+        self.radn_final = radn_final
+        self.nu_init = nu_init
+        self.nu_final = nu_final
+        self.rot_reg = rot_reg
+        self.outlierprior = outlierprior
+        self.outlierfrac = outlierfrac
     
-    def register(self, demo, test_scene_state, callback=None):
-        if self.prior_fn is not None:
-            prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
-        else:
-            prior_prob_nm = None
-        x_nd = demo.scene_state.cloud[:,:3]
+    def register(self, demo, test_scene_state, callback=None, args=()):
+        x_ld = demo.scene_state.cloud[:,:3]
+        u_rd = demo.scene_state.normals
+        z_rd = demo.scene_state.sites
         y_md = test_scene_state.cloud[:,:3]
+        v_sd = test_scene_state.normals
+        z_sd = test_scene_state.sites
         
         f, corr_lm, corr_rs = tps_experimental.tpsn_rpm(x_ld, u_rd, z_rd, y_md, v_sd, z_sd, 
                                                         n_iter=self.n_iter, em_iter=self.em_iter, 
                                                         reg_init=self.reg_init, reg_final=self.reg_final, 
                                                         rad_init=self.rad_init, rad_final=self.rad_final, 
                                                         radn_init=self.radn_init, radn_final=self.radn_final, 
-                                                        nu_init=nu_init, nu_final=nu_final, 
+                                                        nu_init=self.nu_init, nu_final=self.nu_final, 
                                                         rot_reg=self.rot_reg, 
                                                         outlierprior=self.outlierprior, outlierfrac=self.outlierfrac, 
-                                                        callback=callback)
+                                                        callback=callback, args=args)
 
-        return TpsnRpmRegistration(demo, test_scene_state, f, corr, self.rad_final)
-    
+        return TpsnRpmRegistration(demo, test_scene_state, f, corr_lm, corr_rs, self.rad_final, self.radn_final, self.reg_final, self.rot_reg)
+
     def cost(self, demo, test_scene_state):
         raise NotImplementedError

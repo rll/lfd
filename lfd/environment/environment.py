@@ -30,8 +30,9 @@ class LfdEnvironment(object):
 
         traj, dof_inds = aug_traj.get_full_traj(self.sim.robot)
         feasible = True
-        misgraspl = False
-        misgraspr = False
+        # TODO: feal with misgrap boolean somewhere else
+#         misgraspl = False
+#         misgraspr = False
         lr2gripper_open = {'l':True, 'r':True}
         for (start_ind, end_ind) in zip(np.r_[0, open_or_close_inds], np.r_[open_or_close_inds+1, aug_traj.n_steps]):
             if aug_traj.lr2open_finger_traj is not None:
@@ -46,19 +47,19 @@ class LfdEnvironment(object):
             if aug_traj.lr2close_finger_traj is not None:
                 for lr in aug_traj.lr2close_finger_traj.keys():
                     if aug_traj.lr2close_finger_traj[lr][start_ind]:
-                        n_cnts = len(self.sim.constraints[lr])
+#                         n_cnts = len(self.sim.constraints[lr])
                         self.world.close_gripper(lr, step_viewer=step_viewer)
-                        if len(self.sim.constraints[lr]) == n_cnts and lr == 'l':
-                            misgraspl = True
-                        elif lr == 'l':
-                            misgraspl = False
-                        elif len(self.sim.constraints[lr]) == n_cnts and lr=='r':
-                            misgraspr = True
-                        else:
-                            misgraspr = False
+#                         if len(self.sim.constraints[lr]) == n_cnts and lr == 'l':
+#                             misgraspl = True
+#                         elif lr == 'l':
+#                             misgraspl = False
+#                         elif len(self.sim.constraints[lr]) == n_cnts and lr=='r':
+#                             misgraspr = True
+#                         else:
+#                             misgraspr = False
                         #misgrasp |= len(self.sim.constraints[lr]) == n_cnts
                         lr2gripper_open[lr] = False
-            misgrasp = misgraspl or misgraspr
+#             misgrasp = misgraspl or misgraspr
             # don't execute trajectory for finger joint if the corresponding gripper is closed
             active_inds = np.ones(len(dof_inds), dtype=bool)
             for lr in 'lr':
@@ -73,7 +74,7 @@ class LfdEnvironment(object):
             if check_feasible and not feasible:
                 break
             self.world.execute_trajectory(full_traj, step_viewer=step_viewer, interactive=interactive, sim_callback=sim_callback)
-        return feasible, misgrasp
+        return feasible#, misgrasp
     
     def observe_scene(self):
         full_cloud = self.world.observe_cloud()
