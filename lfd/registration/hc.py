@@ -150,7 +150,7 @@ def groupwise_tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=None):
     grad_knd = np.concatenate(grad_knd)
     return energy, grad_knd
 
-def groupwise_tps_hc2(x_kld, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, callback=None):
+def groupwise_tps_hc2(x_kld, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, callback=None, args=()):
     """
     Specify y_md to perform biased groupwise registration
     """
@@ -187,7 +187,7 @@ def groupwise_tps_hc2(x_kld, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=1
         params_to_multi_tps(z_knd, f_k)
         for f in f_k:
             f.trans_g -= trans_d
-        callback(f_k, y_md)
+        callback(f_k, y_md, *args)
         for f in f_k:
             f.trans_g += trans_d
         # print groupwise_tps_hc2_obj(z_knd, f_k, reg, rot_reg, y_md=y_trans_md)[0]
@@ -210,9 +210,11 @@ def groupwise_tps_hc2_cov_obj(z_knd, f_k, p_ktd, reg, rot_reg, cov_coef, y_md=No
     
     return energy, grad_knd
 
-def groupwise_tps_hc2_cov(x_kld, p_ktd, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, cov_coef=settings.COV_COEF, callback=None, multi_callback=None):
+def groupwise_tps_hc2_cov(x_kld, p_ktd, y_md=None, ctrl_knd=None, f_init_k=None, opt_iter=100, reg=settings.REG[1], rot_reg=settings.ROT_REG, cov_coef=settings.COV_COEF, callback=None, args=(), multi_callback=None, multi_args=()):
     # intitalize z from independent optimizations from the one without covariance
-    f_k = groupwise_tps_hc2(x_kld, y_md=y_md, ctrl_knd=ctrl_knd, f_init_k=f_init_k, opt_iter=opt_iter, reg=reg, rot_reg=rot_reg, callback=callback)
+    print "groupwise"
+    f_k = groupwise_tps_hc2(x_kld, y_md=y_md, ctrl_knd=ctrl_knd, f_init_k=f_init_k, opt_iter=opt_iter, reg=reg, rot_reg=rot_reg, callback=callback, args=args)
+    print "groupwise cov"
 
     # translate problem by trans_d. At the end, problem needs to be translated back
     if y_md is not None:
@@ -235,7 +237,7 @@ def groupwise_tps_hc2_cov(x_kld, p_ktd, y_md=None, ctrl_knd=None, f_init_k=None,
         params_to_multi_tps(z_knd, f_k)
         for f in f_k:
             f.trans_g -= trans_d
-        multi_callback(f_k, p_ktd, y_md)
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
         for f in f_k:
             f.trans_g += trans_d
         # print groupwise_tps_hc2_cov_obj(z_knd, f_k, p_ktd, reg, rot_reg, cov_coef, y_md=y_trans_md, L_ktkn=L_ktkn)[0]

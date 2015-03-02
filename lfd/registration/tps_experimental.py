@@ -607,7 +607,7 @@ def tps_l2(x_ld, y_md, ctrl_nd=None,
             reg_init=settings.L2_REG[0], reg_final=settings.L2_REG[1], 
             rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
             rot_reg=settings.L2_ROT_REG, 
-            callback=None):
+            callback=None, args=()):
     """TODO: default parameters
     """
     if ctrl_nd is None:
@@ -627,7 +627,7 @@ def tps_l2(x_ld, y_md, ctrl_nd=None,
         z_nd = res[0]
         f.z_ng = z_nd
         if callback is not None:
-            callback(f, y_md)
+            callback(f, y_md, *args)
     return f
 
 def pairwise_tps_l2_obj(z_knd, f_k, y_md, rad, reg, rot_reg):
@@ -722,36 +722,49 @@ def params_to_multi_tps(z_knd, f_k):
         i += n
     return f_k
 
-def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, 
+def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None, 
                             n_iter=settings.L2_N_ITER, opt_iter=settings.L2_OPT_ITER, 
                             reg_init=settings.L2_REG[0], reg_final=settings.L2_REG[1], 
                             rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
                             rot_reg=settings.L2_ROT_REG, 
                             cov_coef=settings.COV_COEF, 
-                            callback=None, 
-                            multi_callback=None):
-    if ctrl_knd is None:
-        ctrl_knd = x_kld
-    
-    # intitalize z from independent optimizations
-    f_k = []
-    for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, ctrl_knd):
-        n, d = ctrl_nd.shape
-        f = tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=n_iter, opt_iter=opt_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init, rad_final=rad_final, rot_reg=rot_reg, callback=callback)
-        f_k.append(f)
+                            callback=None, args=(), 
+                            multi_callback=None, multi_args=()):
+    if f_init_k is None:
+        if ctrl_knd is None:
+            ctrl_knd = x_kld
+        else:
+            if len(ctrl_knd) != len(x_kld):
+                raise ValueError("The number of control points in ctrl_knd is different from the number of point sets in x_kld")
+        f_k = []
+        # intitalize z from independent optimizations
+        f_k = []
+        for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, ctrl_knd):
+            n, d = ctrl_nd.shape
+            f = tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=n_iter, opt_iter=opt_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init, rad_final=rad_final, rot_reg=rot_reg, callback=callback, args=args)
+            f_k.append(f)
+    else:  
+        if len(f_init_k) != len(x_kld):
+            raise ValueError("The number of ThinPlateSplines in f_init_k is different from the number of point sets in x_kld")
+        f_k = f_init_k
     z_knd = multi_tps_to_params(f_k)
 
     # put together matrix for computing sum of variances
     L_ktkn = compute_sum_var_matrix(f_k, p_ktd)
 
     if multi_callback is not None:
-        multi_callback(f_k, y_md, p_ktd)
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
 
-    res = so.fmin_l_bfgs_b(pairwise_tps_l2_cov_obj, z_knd, None, args=(f_k, y_md, p_ktd, rad_final, reg_final, rot_reg, cov_coef, L_ktkn), maxfun=opt_iter)
+    def opt_multi_callback(z_knd):
+        params_to_multi_tps(z_knd, f_k)
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
+
+    res = so.fmin_l_bfgs_b(pairwise_tps_l2_cov_obj, z_knd, None, args=(f_k, y_md, p_ktd, rad_final, reg_final, rot_reg, cov_coef, L_ktkn), maxfun=opt_iter, 
+                           callback=opt_multi_callback if multi_callback is not None else None)
     z_knd = res[0]
 
     f_k = params_to_multi_tps(z_knd, f_k)
     if multi_callback is not None:
-        multi_callback(f_k, y_md, p_ktd)
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
 
     return f_k
