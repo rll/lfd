@@ -1,3 +1,4 @@
+import os
 import scipy.io
 import numpy as np
 import scipy.spatial.distance as ssd
@@ -369,6 +370,9 @@ def callback2(i, i_em, x_ld, y_md, xtarg_ld, wt_n, f, corr_lm, rad):
     plt.draw()
 
 def plot_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_wp_inds, wp_mew=1.5, wp_ms=8):
+    plt.rc('font', family='serif',serif='Times')
+    plt.rc('text', usetex=True)
+
     l = x_ld.shape[0]
     m = y_md.shape[0]
     x_wp_mask = np.zeros(l, dtype=bool)
@@ -431,6 +435,72 @@ def plot_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_w
 
     plt.draw()
     return fig
+
+def plot_separate_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_wp_inds, mew=1, ms=8, wp_mew=2, wp_ms=12):
+    plt.rc('font', family='serif',serif='Times')
+    plt.rc('text', usetex=True)
+
+    l = x_ld.shape[0]
+    m = y_md.shape[0]
+    x_wp_mask = np.zeros(l, dtype=bool)
+    x_wp_mask[x_wp_inds] = True
+    y_wp_mask = np.zeros(m, dtype=bool)
+    y_wp_mask[y_wp_inds] = True
+
+    plt.ion()
+
+    axis_mins = np.min(np.r_[x_ld, y_md], axis=0) - 1.5
+    axis_maxs = np.max(np.r_[x_ld, y_md], axis=0) + 1.5
+    grid_mins = axis_mins - 10
+    grid_maxs = axis_maxs + 10
+
+    fig0 = plt.figure("figure paper 0", figsize=(4, 3))
+    fig0.clear()
+    plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]], 'equal')
+    plot_warped_grid_2d(lambda pts: pts, grid_mins, grid_maxs, grid_res=1, draw=False)
+    plt.plot(x_ld[~x_wp_mask,0], x_ld[~x_wp_mask,1], "r+", mew=mew, ms=ms)
+    plt.plot(x_ld[x_wp_mask,0], x_ld[x_wp_mask,1], "r+", mew=wp_mew, ms=wp_ms)
+    plot_vectors(u_rd, z_rd, "r-", linewidth=2)
+
+    fig1 = plt.figure("figure paper 1", figsize=(4, 3))
+    fig1.clear()
+    plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]], 'equal')
+    plot_warped_grid_2d(lambda pts: pts, grid_mins, grid_maxs, grid_res=1, draw=False)
+    plt.plot(y_md[~y_wp_mask,0], y_md[~y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=mew, ms=ms)
+    plt.plot(y_md[y_wp_mask,0], y_md[y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=wp_mew, ms=wp_ms)
+    plot_vectors(v_sd, z_sd, "b:", linewidth=3, dashes=(2,2))
+
+    fig2 = plt.figure("figure paper 2", figsize=(4, 3))
+    fig2.clear()
+    plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]], 'equal')
+    plot_warped_grid_2d(f_tps.transform_points, grid_mins, grid_maxs, grid_res=1, draw=False)
+    xwarped_ld = f_tps.transform_points(x_ld)
+    uwarped_rd = np.asarray([f_tps.compute_numerical_jacobian(z_d).dot(u_d) for z_d, u_d in zip(z_rd, u_rd)])
+    # uwarped_rd = f_tps.transform_vectors(z_rd, u_rd)
+    zwarped_rd = f_tps.transform_points(z_rd)
+    plt.plot(xwarped_ld[~x_wp_mask,0],xwarped_ld[~x_wp_mask,1], "r+", mew=mew, ms=ms)
+    plt.plot(xwarped_ld[x_wp_mask,0], xwarped_ld[x_wp_mask,1], "r+", mew=wp_mew, ms=wp_ms)
+    plot_vectors(uwarped_rd, zwarped_rd, "r-", linewidth=2)
+    plt.plot(y_md[~y_wp_mask,0], y_md[~y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=mew, ms=ms)
+    plt.plot(y_md[y_wp_mask,0], y_md[y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=wp_mew, ms=wp_ms)
+    plot_vectors(v_sd, z_sd, "b:", linewidth=3, dashes=(2,2))
+
+    fig3 = plt.figure("figure paper 3", figsize=(4, 3))
+    fig3.clear()
+    plt.axis([axis_mins[0], axis_maxs[0], axis_mins[1], axis_maxs[1]], 'equal')
+    plot_warped_grid_2d(f_tpsn.transform_points, grid_mins, grid_maxs, grid_res=1, draw=False)
+    xwarped_ld = f_tpsn.transform_points()
+    uwarped_rd = f_tpsn.transform_vectors()
+    zwarped_rd = f_tpsn.transform_points(z_rd)
+    plt.plot(xwarped_ld[~x_wp_mask,0],xwarped_ld[~x_wp_mask,1], "r+", mew=mew, ms=ms)
+    plt.plot(xwarped_ld[x_wp_mask,0], xwarped_ld[x_wp_mask,1], "r+", mew=wp_mew, ms=wp_ms)
+    plot_vectors(uwarped_rd, zwarped_rd, "r-", linewidth=2)
+    plt.plot(y_md[~y_wp_mask,0], y_md[~y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=mew, ms=ms)
+    plt.plot(y_md[y_wp_mask,0], y_md[y_wp_mask,1], 'o', markerfacecolor='none', markeredgecolor='b', mew=wp_mew, ms=wp_ms)
+    plot_vectors(v_sd, z_sd, "b:", linewidth=3, dashes=(2,2))
+
+    plt.draw()
+    return fig0, fig1, fig2, fig3
 
 x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_wp_inds, rad_final, reg_final = generate_problem(args.index)
 tpsn_min_param, tps_min_param, tpsn_min_param_ranges, tps_min_param_ranges = get_params(args.index)
@@ -501,9 +571,14 @@ f_tps, corr_lm = tps.tps_rpm(x_ld, y_md,
 print tpsn_min_param
 print tps_min_param
 
-fig = plot_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_wp_inds)
+# fig = plot_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_wp_inds)
+# if args.outfile is not None:
+    # plt.savefig(args.outfile, bbox_inches='tight')
+figs = plot_separate_paper(f_tpsn, f_tps, x_ld, u_rd, z_rd, y_md, v_sd, z_sd, x_wp_inds, y_wp_inds)
 if args.outfile is not None:
-    plt.savefig(args.outfile, bbox_inches='tight')
+    file_name, file_ext = os.path.splitext(args.outfile)
+    for i, fig in enumerate(figs):
+        fig.savefig(file_name + str(i) + file_ext, bbox_inches='tight')
 
 #     for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds1[:-1], pts_segmentation_inds1[1:])):
 #         color = 'r' if len(pts_segmentation_inds1)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds1)-2),1,1)), (i_end-i_start,1))
