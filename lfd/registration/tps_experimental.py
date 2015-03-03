@@ -644,7 +644,7 @@ def pairwise_tps_l2_obj(z_knd, f_k, y_md, rad, reg, rot_reg):
     grad_knd = np.concatenate(grad_knd)
     return energy, grad_knd
 
-def compute_sum_var_matrix(f_k, p_ktd):
+def compute_sum_var_matrix(f_k, p_ktd, w_t=None):
     """Computes the kt by kn matrix L_ktkn for calculating the sum of variances.
 
     The sum of variances is given by
@@ -667,22 +667,26 @@ def compute_sum_var_matrix(f_k, p_ktd):
             _, n = QN_tn.shape
             L_1kn = (-1/k) * QN_1kn
             L_1kn[i:i+n] += QN_tn[j,:]
+            if w_t is not None:
+                L_1kn *= np.sqrt(w_t[j])
             L_ktkn.append(L_1kn)
             i += n
     L_ktkn = np.array(L_ktkn)
     return L_ktkn
 
-def tps_cov_obj(z_knd, f_k, p_ktd, L_ktkn=None):
+def tps_cov_obj(z_knd, f_k, p_ktd, L_ktkn=None, w_t=None):
     f_k = params_to_multi_tps(z_knd, f_k)
 
     if L_ktkn is None:
-        L_ktkn = compute_sum_var_matrix(f_k, p_ktd)
+        L_ktkn = compute_sum_var_matrix(f_k, p_ktd, w_t=w_t)
 
     k, t, d = p_ktd.shape
     Lz_ktd = L_ktkn.dot(z_knd.reshape((-1,d)))
     energy = (1/k) * np.sum(np.square(Lz_ktd))
     grad_knd = (1/k) * 2 * L_ktkn.T.dot(Lz_ktd).reshape(-1)
 
+    # if w_t is None:
+    #     w_t = np.ones(t)
     # fp_ktd = []
     # for f, p_td in zip(f_k, p_ktd):
     #     fp_td = f.transform_points(p_td)
@@ -691,16 +695,16 @@ def tps_cov_obj(z_knd, f_k, p_ktd, L_ktkn=None):
     # energy2 = 0
     # for j in range(t):
     #     fp_kd = fp_ktd[:,j,:]
-    #     energy2 += (1/k) * np.trace((fp_kd - fp_kd.mean(axis=0)).T.dot(fp_kd - fp_kd.mean(axis=0)))
+    #     energy2 += (1/k) * w_t[j] * np.trace((fp_kd - fp_kd.mean(axis=0)).T.dot(fp_kd - fp_kd.mean(axis=0)))
     # print "energy cov equal?", np.allclose(energy, energy2)
 
     return energy, grad_knd
 
-def pairwise_tps_l2_cov_obj(z_knd, f_k, y_md, p_ktd, rad, reg, rot_reg, cov_coef, L_ktkn=None):
+def pairwise_tps_l2_cov_obj(z_knd, f_k, y_md, p_ktd, rad, reg, rot_reg, cov_coef, L_ktkn=None, w_t=None):
     f_k = params_to_multi_tps(z_knd, f_k)
 
     pw_tps_l2_energy, pw_tps_l2_grad_knd = pairwise_tps_l2_obj(z_knd, f_k, y_md, rad, reg, rot_reg)
-    cov_energy, cov_grad_knd = tps_cov_obj(z_knd, f_k, p_ktd, L_ktkn=L_ktkn)
+    cov_energy, cov_grad_knd = tps_cov_obj(z_knd, f_k, p_ktd, L_ktkn=L_ktkn, w_t=w_t)
     energy = pw_tps_l2_energy + cov_coef * cov_energy
     grad_knd = pw_tps_l2_grad_knd + cov_coef * cov_grad_knd
     
@@ -728,6 +732,7 @@ def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None,
                             rad_init=settings.L2_RAD[0], rad_final=settings.L2_RAD[1], 
                             rot_reg=settings.L2_ROT_REG, 
                             cov_coef=settings.COV_COEF, 
+                            w_t=None, 
                             callback=None, args=(), 
                             multi_callback=None, multi_args=()):
     if f_init_k is None:
@@ -750,7 +755,7 @@ def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None,
     z_knd = multi_tps_to_params(f_k)
 
     # put together matrix for computing sum of variances
-    L_ktkn = compute_sum_var_matrix(f_k, p_ktd)
+    L_ktkn = compute_sum_var_matrix(f_k, p_ktd, w_t=w_t)
 
     if multi_callback is not None:
         multi_callback(f_k, y_md, p_ktd, *multi_args)
@@ -759,7 +764,7 @@ def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None,
         params_to_multi_tps(z_knd, f_k)
         multi_callback(f_k, y_md, p_ktd, *multi_args)
 
-    res = so.fmin_l_bfgs_b(pairwise_tps_l2_cov_obj, z_knd, None, args=(f_k, y_md, p_ktd, rad_final, reg_final, rot_reg, cov_coef, L_ktkn), maxfun=opt_iter, 
+    res = so.fmin_l_bfgs_b(pairwise_tps_l2_cov_obj, z_knd, None, args=(f_k, y_md, p_ktd, rad_final, reg_final, rot_reg, cov_coef, L_ktkn, w_t), maxfun=opt_iter, 
                            callback=opt_multi_callback if multi_callback is not None else None)
     z_knd = res[0]
 
