@@ -88,10 +88,10 @@ def setup_demos(args, robot, actionfile=None):
     
     demos = {}
     for action, seg_info in actions.iteritems():
-        if 'towel' in action and ('00_seg' in action or '20_seg' in action): continue
-#         if 'towel' in action and ('20_seg' in action or '30_seg' in action): continue
-#         if 'towel' in action and ('10_seg' in action or '20_seg' in action): continue
+#         if 'towel' in action and '00_seg' in action: continue
+#         if 'towel' in action and '10_seg' in action: continue
 #         if 'towel' in action and '20_seg' in action: continue
+        if 'towel' in action and '30_seg' in action: continue
         # TODO
 #         if 'seg00' not in action or 'failure' in action: continue
 #         if len(demos) > 5: break
@@ -102,10 +102,10 @@ def setup_demos(args, robot, actionfile=None):
 #                       clouds.downsample(full_cloud[full_cloud[:,1] > 0], 0.05)]
 #         scene_state = SceneState(cloud)
 #         scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
-        if 'towel' in action:
-            scene_state = create_scene_state(full_cloud, args.downsample_size)
-        else:
-            scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
+#         if 'towel' in action:
+#             scene_state = create_scene_state(full_cloud, args.downsample_size)
+#         else:
+        scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
         scene_state.rgb = seg_info['rgb'][()] #TODO
         lr2arm_traj = {}
         lr2finger_traj = {}
@@ -292,18 +292,28 @@ def main():
 #             clouds = h5py.File('../bigdata/misc/ropeclutter_0.h5', 'r')
 #             test_scene_state = SceneState(clouds['ropeclutter_00_seg00']['cloud_xyz'][()], downsample_size=args.downsample_size)
 #             test_scene_state = demos[2].scene_state
-            cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:00:22.pkl", "rb" ))
-#             cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:03:40.pkl", "rb" ))
+#             cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:00:22.pkl", "rb" ))
+            cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:03:40.pkl", "rb" ))
             cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
             cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
             rgb = cloud_dict['rgb']
             depth = cloud_dict['depth']
             T_w_k = cloud_dict['T_w_k']
             new_xyz = cloud_proc_func(rgb, depth, T_w_k)
-            if 'towel' in action_name:
-                test_scene_state = create_scene_state(new_xyz, args.downsample_size)
-            else:
-                test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
+            
+            # move tape
+            cloud = new_xyz
+            med = np.median(cloud[:,0])
+            cloud = cloud[np.logical_and((med - .2) < cloud[:,0], cloud[:,0] < (med + .2)), :]
+            tape_inds = np.logical_or(cloud[:,0] < (cloud[:,0].min() + 0.06), cloud[:,0] > (cloud[:,0].max() - 0.06))
+            towel_cloud = cloud[~tape_inds, :]
+            tape_cloud = cloud[tape_inds, :]
+            tape_cloud[:,1] -= .2
+            new_xyz = np.r_[tape_cloud, towel_cloud]
+#             if 'towel' in action_name:
+#                 test_scene_state = create_scene_state(new_xyz, args.downsample_size)
+#             else:
+            test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
         handles = []
         
         if args.method == 'rpm':
@@ -312,7 +322,7 @@ def main():
             demo = demos[0]
             def tps_callback(i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad, sim):
                 registration_plot_cb(sim, x_nd, y_md, f)
-            reg_factory = TpsRpmRegistrationFactory(demos_dict, em_iter=5, reg_init=0.1, reg_final=0.0001, rad_init=0.01, rad_final=0.00005)
+            reg_factory = TpsRpmRegistrationFactory(demos_dict, reg_init=100, reg_final=10, rad_init=0.1, rad_final=0.001) #, em_iter=5, reg_init=0.1, reg_final=0.0001, rad_init=0.01, rad_final=0.00005)
             reg = reg_factory.register(demo, test_scene_state, callback=tps_callback, args=(sim,))
             
             test_aug_traj = traj_transferer.transfer(reg, demo, plotting=True)
@@ -372,7 +382,11 @@ def main():
                 f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=0, w_t=None, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
                                                            callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
             else:
-                f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=.1, w_t=w_t, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                if 'towel' in action_name:
+                    cov_coef = .3
+                else:
+                    cov_coef = .1
+                f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=cov_coef, w_t=w_t, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
                                                            callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
             
             handles.extend(multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors))
