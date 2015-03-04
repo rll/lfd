@@ -12,6 +12,8 @@ from lfd.transfer.transfer import PoseTrajectoryTransferer
 import scipy.spatial.distance as ssd
 import sys
 import colorsys
+import pickle
+import datetime
 from lfd.lfmd.analyze_data import dof_val_cost, align_trajs
 from lfd.registration import tps_experimental, hc
 from lfd.rapprentice import plotting_openrave
@@ -34,7 +36,7 @@ import importlib
 def parse_input_args():
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('actionfile', type=str)
+    parser.add_argument('actionfiles', type=str, nargs='*')
 
     parser.add_argument("--animation", type=int, default=0, help="animates if it is non-zero. the viewer is stepped according to this number")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
@@ -62,8 +64,10 @@ def parse_input_args():
     args = parser.parse_args()
     return args
 
-def setup_demos(args, robot):
-    actions = h5py.File(args.actionfile)
+def setup_demos(args, robot, actionfile=None):
+    if actionfile is None:
+        actionfile = args.actionfiles[0]
+    actions = h5py.File(actionfile)
     
     demos = {}
     for action, seg_info in actions.iteritems():
@@ -103,7 +107,7 @@ def setup_demos(args, robot):
     return demos
 
 def setup_lfd_environment_sim(args):
-    actions = h5py.File(args.actionfile, 'r')
+    actions = h5py.File(args.actionfiles[0], 'r')
     
     if args.fake_data_segment is None:
         fake_data_segment = actions.keys()[0]
@@ -195,15 +199,6 @@ def main():
     trajoptpy.SetInteractive(args.interactive)
     
     lfd_env, sim = setup_lfd_environment_sim(args)
-    demos_dict = setup_demos(args, sim.robot)
-    
-    # sorted by demo name
-    _, demos, aug_trajs = zip(*sorted([(name, demo, demo.aug_traj) for name, demo in demos_dict.items()], key=lambda x: x[0]))
-
-    if 'board' in args.actionfile:
-        active_lr = 'l'
-    else:
-        active_lr = 'r'
 
     traj_transferer = PoseTrajectoryTransferer(sim)
 
@@ -218,7 +213,7 @@ def main():
         world = RealRobotWorld(pr2)
         lfd_env_real = environment.LfdEnvironment(world, sim, downsample_size=args.downsample_size)
     
-    while True:
+    for actionfile in args.actionfiles:
         sim_util.reset_arms_to_side(sim)
         if args.execution:
             pr2.head.set_pan_tilt(0,1.05)
@@ -229,6 +224,18 @@ def main():
             pr2.join_all()
             time.sleep(.5)
             pr2.update_rave()
+
+        demos_dict = setup_demos(args, sim.robot, actionfile=actionfile)
+        
+        # sorted by demo name
+        _, demos, aug_trajs = zip(*sorted([(name, demo, demo.aug_traj) for name, demo in demos_dict.items()], key=lambda x: x[0]))
+    
+        if 'towelone_0.h5' in actionfile:
+            active_lr = 'lr'
+        elif 'towelthree_0.h5' in actionfile:
+            active_lr = 'l'
+        else:
+            active_lr = 'r'
         
         if args.execution:        
             rgb, depth = grabber.getRGBD()
@@ -236,6 +243,14 @@ def main():
             cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
             cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
             new_xyz = cloud_proc_func(rgb, depth, T_w_k)
+            cloud_dict = {}
+            cloud_dict['rgb'] = rgb
+            cloud_dict['depth'] = depth
+            cloud_dict['T_w_k'] = T_w_k
+            action_name = os.path.splitext(os.path.basename(actionfile))[0]
+            ts = time.time()
+            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M:%S')
+            pickle.dump(cloud_dict, open("clouds/" + action_name + "_" + st + ".pkl", "wb" ))
             test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
         else:
 #             clouds = h5py.File('../bigdata/misc/ropeclutter_0.h5', 'r')
@@ -319,7 +334,7 @@ def main():
             def __init__(self):
                 self.f = tps_experimental.ThinPlateSpline(np.zeros((4,3)), np.zeros((4,3)))
         reg = IdentityRegistration()
-        test_aug_traj = aligned_aug_trajs[3]
+        test_aug_traj = aligned_aug_trajs[0]
         not_active_lr = 'r' if active_lr is 'l' else 'l'
         del test_aug_traj.lr2arm_traj[not_active_lr]
         del test_aug_traj.lr2ee_traj[not_active_lr]
@@ -340,9 +355,6 @@ def main():
             lfd_env_real.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
     
         # ipy.embed()
-        
-        if not args.execution:
-            break
         
         handles[:] = []
 
