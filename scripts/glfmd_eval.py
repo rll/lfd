@@ -302,7 +302,6 @@ def main():
                                                    callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
         
         handles.extend(multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors))
-        handles.append(sim.env.drawlinestrip(np.mean(p_ktd, axis=0), 5, (0,0,1)))
 
 #         f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=10, cov_coef=.0001, reg_init=1, reg_final=.1, rad_init=.1, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
 #                                                    callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
@@ -332,7 +331,8 @@ def main():
         fp_ktd = []
         for f, p_td in zip(f_k, p_ktd):
             fp_ktd.append(f.transform_points(p_td))
-        fp_ktd = np.asarray(p_ktd)
+        fp_ktd = np.asarray(fp_ktd)
+        handles.append(sim.env.drawlinestrip(np.mean(fp_ktd, axis=0), 5, (0,0,1)))
         test_aug_traj.lr2ee_traj[active_lr][:,:3,3] = np.mean(fp_ktd, axis=0)
         test_demo = demos[0]
         test_demo.aug_traj = test_aug_traj
