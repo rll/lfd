@@ -38,8 +38,8 @@ import importlib
 def parse_input_args():
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('actionfiles', type=str, nargs='*')
     parser.add_argument("method", type=str, choices=['rpm', 'pair', 'cov'], help="tps-rpm, pairwise l2, or pairwise l2 with covariance")
+    parser.add_argument('actionfiles', type=str, nargs='*')
 
     parser.add_argument("--animation", type=int, default=0, help="animates if it is non-zero. the viewer is stepped according to this number")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
