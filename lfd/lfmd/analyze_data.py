@@ -12,8 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 from scipy import optimize
-from pykalman import KalmanFilter
-from pykalman.standard import _last_dims
+# from pykalman import KalmanFilter
+# from pykalman.standard import _last_dims
 import trajoptpy
 import IPython as ipy
 
@@ -28,7 +28,7 @@ from lfd.environment.environment import LfdEnvironment
 from lfd.registration.registration import TpsRpmBijRegistrationFactory, TpsRpmRegistrationFactory, TpsSegmentRegistrationFactory, BatchGpuTpsRpmBijRegistrationFactory, BatchGpuTpsRpmRegistrationFactory
 from lfd.transfer import planning
 from lfd.transfer.transfer import TrajectoryTransferer
-
+from lfd.registration.plotting_openrave import plotting_openrave
 
 DT = 0.01
 
@@ -36,8 +36,8 @@ def dof_val_cost(aug_traj1, aug_traj2, t1, t2, lr, coefs):
     t1_v = t1+1 if t1 == 0 else t1
     t2_v = t2+1 if t2 == 0 else t2
     cost = 0.0
-    if coefs[0] != 0:
-        cost = coefs[0] * np.linalg.norm(aug_traj2.lr2ee_traj[lr][t2,:3,3] - aug_traj1.lr2ee_traj[lr][t1,:3,3])
+    if np.all(coefs[0] != 0):
+        cost = np.linalg.norm(coefs[0] * (aug_traj2.lr2ee_traj[lr][t2,:3,3] - aug_traj1.lr2ee_traj[lr][t1,:3,3]))
     if coefs[1] != 0:
         rot1 = aug_traj1.lr2ee_traj[lr][t1,:3,:3]
         rot2 = aug_traj2.lr2ee_traj[lr][t2,:3,:3]
@@ -54,11 +54,10 @@ def dof_val_cost(aug_traj1, aug_traj2, t1, t2, lr, coefs):
         rot_vel2 = (aug_traj2.lr2ee_traj[lr][t2_v,:3,:3].dot(aug_traj2.lr2ee_traj[lr][t2_v-1,:3,:3].T)) / DT
         aa_diff = openravepy.axisAngleFromRotationMatrix(rot_vel2.dot(rot_vel1.T))
         cost += coefs[3] * np.linalg.norm(aa_diff)
-    if aug_traj1.lr2force_traj and aug_traj2.lr2force_traj:
-        if coefs[4] != 0:
-            cost += coefs[4] * np.linalg.norm(aug_traj2.lr2force_traj[lr][t2,:3] - aug_traj1.lr2force_traj[lr][t1,:3])
-        if coefs[5] != 0:
-            cost += coefs[5] * np.linalg.norm(aug_traj2.lr2force_traj[lr][t2,3:] - aug_traj1.lr2force_traj[lr][t1,3:])
+    if coefs[4] != 0 and aug_traj1.lr2force_traj and aug_traj2.lr2force_traj:
+        cost += coefs[4] * np.linalg.norm(aug_traj2.lr2force_traj[lr][t2,:3] - aug_traj1.lr2force_traj[lr][t1,:3])
+    if coefs[5] != 0 and aug_traj1.lr2force_traj and aug_traj2.lr2force_traj:
+        cost += coefs[5] * np.linalg.norm(aug_traj2.lr2force_traj[lr][t2,3:] - aug_traj1.lr2force_traj[lr][t1,3:])
     return cost
 
 def dtw(aug_traj1, aug_traj2, dof_cost):
