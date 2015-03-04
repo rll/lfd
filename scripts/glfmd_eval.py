@@ -18,7 +18,7 @@ import pickle
 import datetime
 from lfd.lfmd.analyze_data import dof_val_cost, align_trajs
 from lfd.registration import tps_experimental, hc
-from lfd.rapprentice import plotting_openrave
+from lfd.rapprentice import plotting_openrave, clouds
 import IPython as ipy
 
 import argparse
@@ -88,6 +88,10 @@ def setup_demos(args, robot, actionfile=None):
     
     demos = {}
     for action, seg_info in actions.iteritems():
+        if 'towel' in action and ('00_seg' in action or '20_seg' in action): continue
+#         if 'towel' in action and ('20_seg' in action or '30_seg' in action): continue
+#         if 'towel' in action and ('10_seg' in action or '20_seg' in action): continue
+#         if 'towel' in action and '20_seg' in action: continue
         # TODO
 #         if 'seg00' not in action or 'failure' in action: continue
 #         if len(demos) > 5: break
@@ -97,7 +101,11 @@ def setup_demos(args, robot, actionfile=None):
 #         cloud = np.r_[clouds.downsample(full_cloud[full_cloud[:,1] < 0], 0.015),
 #                       clouds.downsample(full_cloud[full_cloud[:,1] > 0], 0.05)]
 #         scene_state = SceneState(cloud)
-        scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
+#         scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
+        if 'towel' in action:
+            scene_state = create_scene_state(full_cloud, args.downsample_size)
+        else:
+            scene_state = SceneState(full_cloud, downsample_size=args.downsample_size)
         scene_state.rgb = seg_info['rgb'][()] #TODO
         lr2arm_traj = {}
         lr2finger_traj = {}
@@ -210,6 +218,15 @@ def show_image(rgb, name):
     cv2.imshow(name, rgb)
     cv2.waitKey()
 
+def create_scene_state(new_xyz, downsample_size):
+    cloud = new_xyz
+    med = np.median(cloud[:,0])
+    cloud = cloud[np.logical_and((med - .2) < cloud[:,0], cloud[:,0] < (med + .2)), :]
+    tape_cloud = np.r_[cloud[cloud[:,0] < (cloud[:,0].min() + 0.04)], cloud[cloud[:,0] > (cloud[:,0].max() - 0.04)]]
+    cloud = np.r_[clouds.downsample(new_xyz, downsample_size), clouds.downsample(tape_cloud, 0.015)]
+    scene_state = SceneState(cloud)
+    return scene_state
+
 def main():
     args = parse_input_args()
     
@@ -231,6 +248,8 @@ def main():
         lfd_env_real = environment.LfdEnvironment(world, sim, downsample_size=args.downsample_size)
     
     for actionfile in args.actionfiles:
+        action_name = os.path.splitext(os.path.basename(actionfile))[0]
+
         sim_util.reset_arms_to_side(sim)
         if args.execution:
             pr2.head.set_pan_tilt(0,1.05)
@@ -264,7 +283,7 @@ def main():
             cloud_dict['rgb'] = rgb
             cloud_dict['depth'] = depth
             cloud_dict['T_w_k'] = T_w_k
-            action_name = os.path.splitext(os.path.basename(actionfile))[0]
+            cloud_dict['new_xyz'] = new_xyz
             ts = time.time()
             st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M:%S')
             pickle.dump(cloud_dict, open("clouds/" + action_name + "_" + args.method + "_" + st + ".pkl", "wb" ))
@@ -272,8 +291,19 @@ def main():
         else:
 #             clouds = h5py.File('../bigdata/misc/ropeclutter_0.h5', 'r')
 #             test_scene_state = SceneState(clouds['ropeclutter_00_seg00']['cloud_xyz'][()], downsample_size=args.downsample_size)
-            test_scene_state = demos[2].scene_state
-        
+#             test_scene_state = demos[2].scene_state
+            cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:00:22.pkl", "rb" ))
+#             cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:03:40.pkl", "rb" ))
+            cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
+            cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
+            rgb = cloud_dict['rgb']
+            depth = cloud_dict['depth']
+            T_w_k = cloud_dict['T_w_k']
+            new_xyz = cloud_proc_func(rgb, depth, T_w_k)
+            if 'towel' in action_name:
+                test_scene_state = create_scene_state(new_xyz, args.downsample_size)
+            else:
+                test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
         handles = []
         
         if args.method == 'rpm':
