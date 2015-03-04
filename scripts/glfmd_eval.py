@@ -204,12 +204,12 @@ def multi_l2_callback(f_k, y_md, p_ktd, sim, colors):
         x_ld = f.x_la
         xwarped_nd = f.transform_points()
 #         handles.append(sim.env.plot3(x_ld, 3, color))
-        handles.append(sim.env.plot3(xwarped_nd, 5, color))
+        handles.append(sim.env.plot3(xwarped_nd, 4, color))
         pwarped_td = f.transform_points(p_td)
         handles.append(sim.env.drawlinestrip(pwarped_td, 2, color))
 #         handles.extend(plotting_openrave.draw_grid(sim.env, f.transform_points, x_ld.min(axis=0) - .1, x_ld.max(axis=0) + .1, xres=.05, yres=.05, zres=.04, color=color))
     if y_md is not None:
-        handles.append(sim.env.plot3(y_md, 8, (0,0,1)))
+        handles.append(sim.env.plot3(y_md, 6, (0,0,1)))
     sim.viewer.Step()
     return handles
 
@@ -249,6 +249,18 @@ def main():
     
     for actionfile in args.actionfiles:
         action_name = os.path.splitext(os.path.basename(actionfile))[0]
+        
+        if 'towel' in action_name:
+            camera_matrix = np.array([[   0, 1,   0, 0],
+                                      [-0.5, 0, 0.9, 0],
+                                      [ 0.9, 0, 0.5, 0],
+                                      [ 3.7, 0, 2.5, 1]])
+        else:
+            camera_matrix = np.array([[-0.48599024, -0.8711036 ,  0.07065408,  0.        ],
+                                      [ 0.65262916, -0.30795373,  0.69227139,  0.        ],
+                                      [-0.58128192,  0.38254805,  0.71817012,  0.        ],
+                                      [-0.91415922,  1.07139038,  2.8212597 ,  1.        ]])
+        sim.viewer.SetCameraManipulatorMatrix(camera_matrix)
 
         sim_util.reset_arms_to_side(sim)
         if args.execution:
@@ -327,6 +339,15 @@ def main():
             reg = reg_factory.register(demo, test_scene_state, callback=tps_callback, args=(sim,))
             
             test_aug_traj = traj_transferer.transfer(reg, demo, plotting=True)
+            
+            x_ld = demo.scene_state.cloud
+            xwarped_ld = reg.f.transform_points(x_ld)
+            y_md = test_scene_state.cloud
+            p_td = demo.aug_traj.lr2ee_traj[active_lr][:,:3,3]
+            fp_td = reg.f.transform_points(p_td)
+            handles.append(sim.env.plot3(xwarped_ld, 4, (1,0,0)))
+            handles.append(sim.env.plot3(y_md, 6, (0,0,1)))
+            handles.append(sim.env.drawlinestrip(fp_td, 5, (0,0,1)))
         else:
             sys.stdout.write("aligning trajectories... ")
             sys.stdout.flush()
@@ -334,7 +355,7 @@ def main():
             sys.stdout.flush()
             print "done"
     
-            demo_colors = [colorsys.hsv_to_rgb(hue, 1, 1) for hue in np.linspace(0, 1, len(demos), endpoint=False)]
+            demo_colors = [colorsys.hsv_to_rgb(hue, 1, 1) for hue in np.linspace(0, 1, max(len(demos), 4), endpoint=False)]
             
     #         for demo in demos:
     #             show_image(demo.scene_state.rgb, demo.name)
@@ -352,7 +373,7 @@ def main():
     #             for lr in active_lr:
     #                 handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 5, color))
     #         sim.viewer.Idle()
-    
+
             x_kld = []
             for demo in demos:
                 x_kld.append(demo.scene_state.cloud)
@@ -389,9 +410,15 @@ def main():
                     cov_coef = .1
                 f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=cov_coef, w_t=w_t, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
                                                            callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
+
+            fp_ktd = []
+            for f, p_td in zip(f_k, p_ktd):
+                fp_ktd.append(f.transform_points(p_td))
+            fp_ktd = np.asarray(fp_ktd)
+            handles.append(sim.env.drawlinestrip(np.mean(fp_ktd, axis=0), 5, (0,0,1)))
             
             handles.extend(multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors))
-    
+            
     #         f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=10, cov_coef=.0001, reg_init=1, reg_final=.1, rad_init=.1, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
     #                                                    callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
             
@@ -416,16 +443,16 @@ def main():
             not_active_lr = 'r' if active_lr is 'l' else 'l'
             del test_aug_traj.lr2arm_traj[not_active_lr]
             del test_aug_traj.lr2ee_traj[not_active_lr]
-            fp_ktd = []
-            for f, p_td in zip(f_k, p_ktd):
-                fp_ktd.append(f.transform_points(p_td))
-            fp_ktd = np.asarray(fp_ktd)
-            handles.append(sim.env.drawlinestrip(np.mean(fp_ktd, axis=0), 5, (0,0,1)))
             test_aug_traj.lr2ee_traj[active_lr][:,:3,3] = np.mean(fp_ktd, axis=0)
             test_demo = demos[-1]
             test_demo.aug_traj = test_aug_traj
             test_aug_traj = traj_transferer.transfer(reg, test_demo)
         
+        if args.execution:
+            ts = time.time()
+            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M:%S')
+            sim.viewer.SaveScreenshot("screenshots/" + action_name + "_" + args.method + "_" + st + ".png")
+
         lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
         
         # sim.viewer.Idle()
