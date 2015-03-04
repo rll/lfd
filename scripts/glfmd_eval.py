@@ -267,7 +267,7 @@ def main():
             action_name = os.path.splitext(os.path.basename(actionfile))[0]
             ts = time.time()
             st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M:%S')
-            pickle.dump(cloud_dict, open("clouds/" + action_name + "_" + st + ".pkl", "wb" ))
+            pickle.dump(cloud_dict, open("clouds/" + action_name + "_" + args.method + "_" + st + ".pkl", "wb" ))
             test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
         else:
 #             clouds = h5py.File('../bigdata/misc/ropeclutter_0.h5', 'r')
@@ -391,6 +391,16 @@ def main():
         # ipy.embed()
         
         handles[:] = []
+
+    if args.execution:
+        pr2.head.set_pan_tilt(0,1.05)
+        pr2.rarm.goto_posture('side')
+        pr2.larm.goto_posture('side')
+        pr2.rgrip.set_angle(0.54800022)
+        pr2.lgrip.set_angle(0.54800022)
+        pr2.join_all()
+        time.sleep(.5)
+        pr2.update_rave()
 
 if __name__ == '__main__':
     main()
