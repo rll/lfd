@@ -291,29 +291,30 @@ def main():
         else:
 #             clouds = h5py.File('../bigdata/misc/ropeclutter_0.h5', 'r')
 #             test_scene_state = SceneState(clouds['ropeclutter_00_seg00']['cloud_xyz'][()], downsample_size=args.downsample_size)
-#             test_scene_state = demos[2].scene_state
-#             cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:00:22.pkl", "rb" ))
-            cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:03:40.pkl", "rb" ))
-            cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
-            cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
-            rgb = cloud_dict['rgb']
-            depth = cloud_dict['depth']
-            T_w_k = cloud_dict['T_w_k']
-            new_xyz = cloud_proc_func(rgb, depth, T_w_k)
-            
-            # move tape
-            cloud = new_xyz
-            med = np.median(cloud[:,0])
-            cloud = cloud[np.logical_and((med - .2) < cloud[:,0], cloud[:,0] < (med + .2)), :]
-            tape_inds = np.logical_or(cloud[:,0] < (cloud[:,0].min() + 0.06), cloud[:,0] > (cloud[:,0].max() - 0.06))
-            towel_cloud = cloud[~tape_inds, :]
-            tape_cloud = cloud[tape_inds, :]
-            tape_cloud[:,1] -= .2
-            new_xyz = np.r_[tape_cloud, towel_cloud]
-#             if 'towel' in action_name:
-#                 test_scene_state = create_scene_state(new_xyz, args.downsample_size)
-#             else:
-            test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
+            if 'towel' in action_name:
+                cloud_dict = pickle.load(open("clouds/toweltwomarker_0_cov_2015-03-03_20:03:40.pkl", "rb" ))
+                cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
+                cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
+                rgb = cloud_dict['rgb']
+                depth = cloud_dict['depth']
+                T_w_k = cloud_dict['T_w_k']
+                new_xyz = cloud_proc_func(rgb, depth, T_w_k)
+                
+                # move tape
+                cloud = new_xyz
+                med = np.median(cloud[:,0])
+                cloud = cloud[np.logical_and((med - .2) < cloud[:,0], cloud[:,0] < (med + .2)), :]
+                tape_inds = np.logical_or(cloud[:,0] < (cloud[:,0].min() + 0.06), cloud[:,0] > (cloud[:,0].max() - 0.06))
+                towel_cloud = cloud[~tape_inds, :]
+                tape_cloud = cloud[tape_inds, :]
+                tape_cloud[:,1] -= .2
+                new_xyz = np.r_[tape_cloud, towel_cloud]
+    #             if 'towel' in action_name:
+    #                 test_scene_state = create_scene_state(new_xyz, args.downsample_size)
+    #             else:
+                test_scene_state = SceneState(new_xyz, downsample_size=args.downsample_size)
+            else:
+                test_scene_state = demos[-1].scene_state
         handles = []
         
         if args.method == 'rpm':
@@ -411,7 +412,7 @@ def main():
                 def __init__(self):
                     self.f = tps_experimental.ThinPlateSpline(np.zeros((4,3)), np.zeros((4,3)))
             reg = IdentityRegistration()
-            test_aug_traj = aligned_aug_trajs[0]
+            test_aug_traj = aligned_aug_trajs[-1]
             not_active_lr = 'r' if active_lr is 'l' else 'l'
             del test_aug_traj.lr2arm_traj[not_active_lr]
             del test_aug_traj.lr2ee_traj[not_active_lr]
@@ -421,7 +422,7 @@ def main():
             fp_ktd = np.asarray(fp_ktd)
             handles.append(sim.env.drawlinestrip(np.mean(fp_ktd, axis=0), 5, (0,0,1)))
             test_aug_traj.lr2ee_traj[active_lr][:,:3,3] = np.mean(fp_ktd, axis=0)
-            test_demo = demos[0]
+            test_demo = demos[-1]
             test_demo.aug_traj = test_aug_traj
             test_aug_traj = traj_transferer.transfer(reg, test_demo)
         
