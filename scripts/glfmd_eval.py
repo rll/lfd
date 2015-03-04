@@ -8,6 +8,8 @@ from lfd.environment import environment
 from lfd.environment import sim_util
 from lfd.environment.robot_world import RealRobotWorld
 from lfd.demonstration.demonstration import Demonstration, SceneState, AugmentedTrajectory
+from lfd.registration.registration import TpsRpmRegistrationFactory
+from lfd.registration.plotting_openrave import registration_plot_cb
 from lfd.transfer.transfer import PoseTrajectoryTransferer
 import scipy.spatial.distance as ssd
 import sys
@@ -37,6 +39,7 @@ def parse_input_args():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('actionfiles', type=str, nargs='*')
+    parser.add_argument("method", type=str, choices=['rpm', 'pair', 'cov'], help="tps-rpm, pairwise l2, or pairwise l2 with covariance")
 
     parser.add_argument("--animation", type=int, default=0, help="animates if it is non-zero. the viewer is stepped according to this number")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
@@ -63,6 +66,20 @@ def parse_input_args():
 
     args = parser.parse_args()
     return args
+
+def register_scenes(sim, reg_factory, scene_state):
+    print "registering all scenes... "
+    regs = []
+    demos = []
+    
+    for action, demo in reg_factory.demos.iteritems():
+        reg = reg_factory.register(demo, scene_state)
+        regs.append(reg)
+        demos.append(demo)
+    q_values, regs, demos = zip(*sorted([(reg.f.get_objective().sum(), reg, demo) for (reg, demo) in zip(regs, demos)]))
+    print "done"
+    
+    return regs, demos
 
 def setup_demos(args, robot, actionfile=None):
     if actionfile is None:
@@ -257,96 +274,113 @@ def main():
 #             test_scene_state = SceneState(clouds['ropeclutter_00_seg00']['cloud_xyz'][()], downsample_size=args.downsample_size)
             test_scene_state = demos[2].scene_state
         
-        sys.stdout.write("aligning trajectories... ")
-        sys.stdout.flush()
-        aligned_aug_trajs = align_aug_trajs(aug_trajs, active_lr, np.asarray(args.pos_coef), args.rot_coef, args.pos_vel_coef, args.rot_vel_coef, args.downsample_traj)
-        sys.stdout.flush()
-        print "done"
-
-        demo_colors = [colorsys.hsv_to_rgb(hue, 1, 1) for hue in np.linspace(0, 1, len(demos), endpoint=False)]
-        
-#         for demo in demos:
-#             show_image(demo.scene_state.rgb, demo.name)
-#         show_image(test_scene_state.rgb, "test")
-
         handles = []
-#         for demo, aug_traj, color in zip(demos, aug_trajs, demo_colors):
-#             handles.append(sim.env.plot3(demo.scene_state.cloud, 5, color))
-#             for lr in active_lr:
-#                 handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
-#             lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=args.animation, interactive=args.interactive)
-#         sim.viewer.Step()
-
-#         for demo, aug_traj, color in zip(demos, aligned_aug_trajs, demo_colors):
-#             handles.append(sim.env.plot3(demo.scene_state.cloud, 5, color))
-#             for lr in active_lr:
-#                 handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 5, color))
-#         sim.viewer.Idle()
-
-        x_kld = []
-        for demo in demos:
-            x_kld.append(demo.scene_state.cloud)
-        y_md = test_scene_state.cloud
         
-        assert len(active_lr) == 1
-        p_ktd = []
-        for aligned_aug_traj in aligned_aug_trajs:
-            p_ktd.append(aligned_aug_traj.lr2ee_traj[active_lr][:,:3,3])
-        p_ktd = np.array(p_ktd)
+        if args.method == 'rpm':
+            regs, demos = register_scenes(sim, TpsRpmRegistrationFactory(demos_dict), test_scene_state)
+            reg = regs[0]
+            demo = demos[0]
+            def tps_callback(i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad, sim):
+                registration_plot_cb(sim, x_nd, y_md, f)
+            reg_factory = TpsRpmRegistrationFactory(demos_dict, em_iter=5, reg_init=0.1, reg_final=0.0001, rad_init=0.01, rad_final=0.00005)
+            reg = reg_factory.register(demo, test_scene_state, callback=tps_callback, args=(sim,))
+            
+            test_aug_traj = traj_transferer.transfer(reg, demo, plotting=True)
+        else:
+            sys.stdout.write("aligning trajectories... ")
+            sys.stdout.flush()
+            aligned_aug_trajs = align_aug_trajs(aug_trajs, active_lr, np.asarray(args.pos_coef), args.rot_coef, args.pos_vel_coef, args.rot_vel_coef, args.downsample_traj)
+            sys.stdout.flush()
+            print "done"
+    
+            demo_colors = [colorsys.hsv_to_rgb(hue, 1, 1) for hue in np.linspace(0, 1, len(demos), endpoint=False)]
+            
+    #         for demo in demos:
+    #             show_image(demo.scene_state.rgb, demo.name)
+    #         show_image(test_scene_state.rgb, "test")
+    
+    #         for demo, aug_traj, color in zip(demos, aug_trajs, demo_colors):
+    #             handles.append(sim.env.plot3(demo.scene_state.cloud, 5, color))
+    #             for lr in active_lr:
+    #                 handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 2, color))
+    #             lfd_env.execute_augmented_trajectory(aug_traj, step_viewer=args.animation, interactive=args.interactive)
+    #         sim.viewer.Step()
+    
+    #         for demo, aug_traj, color in zip(demos, aligned_aug_trajs, demo_colors):
+    #             handles.append(sim.env.plot3(demo.scene_state.cloud, 5, color))
+    #             for lr in active_lr:
+    #                 handles.append(sim.env.drawlinestrip(aug_traj.lr2ee_traj[lr][:,:3,3], 5, color))
+    #         sim.viewer.Idle()
+    
+            x_kld = []
+            for demo in demos:
+                x_kld.append(demo.scene_state.cloud)
+            y_md = test_scene_state.cloud
+            
+            assert len(active_lr) == 1
+            p_ktd = []
+            for aligned_aug_traj in aligned_aug_trajs:
+                p_ktd.append(aligned_aug_traj.lr2ee_traj[active_lr][:,:3,3])
+            p_ktd = np.array(p_ktd)
+            
+            traj_rad = 0.2
+            w_kt = []
+            for x_ld, p_td in zip(x_kld, p_ktd):
+                dist_tl = ssd.cdist(p_td, x_ld, 'sqeuclidean')
+                dist_t = np.min(dist_tl, axis=1)
+                w_kt.append(np.exp(-dist_t / (traj_rad**2)))
+            w_kt = np.asarray(w_kt)
+            w_t = w_kt.mean(axis=0)
+            
+            f_k = []
+            for x_ld in x_kld:
+                from lfd.rapprentice import clouds
+                f = tps_experimental.ThinPlateSpline(x_ld, clouds.downsample(x_ld, .05))
+    #             f = tps_experimental.ThinPlateSpline(x_ld, x_ld)
+                f_k.append(f)
+            if args.method == 'pair':
+                f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=0, w_t=None, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                                                           callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
+            else:
+                f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=.1, w_t=w_t, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                                                           callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
+            
+            handles.extend(multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors))
+    
+    #         f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=10, cov_coef=.0001, reg_init=1, reg_final=.1, rad_init=.1, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+    #                                                    callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
+            
+    #         f_k = []
+    #         for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, x_kld):
+    #             n, d = ctrl_nd.shape
+    #             f = tps_experimental.tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=10, opt_iter=100, reg_init=0.1, reg_final=0.01, rad_init=.1, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], callback=l2_callback, args=(sim,))
+    #             f_k.append(f)
+    #         f_k = hc.groupwise_tps_hc2(x_kld, y_md=y_md, f_init_k=f_k, opt_iter=100, reg=0.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+    #                                        callback=multi_l2_callback, args=(p_ktd, sim, demo_colors))
+    #         
+    #         f_k = hc.groupwise_tps_hc2_cov(x_kld, p_ktd, f_init_k=f_k, y_md=y_md, opt_iter=100, reg=0.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], cov_coef=.0001, 
+    #                                        callback=multi_l2_callback, args=(p_ktd, sim, demo_colors), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
+    # #         multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors)
+            
+            # hack to compute test_aug_traj
+            class IdentityRegistration(object):
+                def __init__(self):
+                    self.f = tps_experimental.ThinPlateSpline(np.zeros((4,3)), np.zeros((4,3)))
+            reg = IdentityRegistration()
+            test_aug_traj = aligned_aug_trajs[0]
+            not_active_lr = 'r' if active_lr is 'l' else 'l'
+            del test_aug_traj.lr2arm_traj[not_active_lr]
+            del test_aug_traj.lr2ee_traj[not_active_lr]
+            fp_ktd = []
+            for f, p_td in zip(f_k, p_ktd):
+                fp_ktd.append(f.transform_points(p_td))
+            fp_ktd = np.asarray(fp_ktd)
+            handles.append(sim.env.drawlinestrip(np.mean(fp_ktd, axis=0), 5, (0,0,1)))
+            test_aug_traj.lr2ee_traj[active_lr][:,:3,3] = np.mean(fp_ktd, axis=0)
+            test_demo = demos[0]
+            test_demo.aug_traj = test_aug_traj
+            test_aug_traj = traj_transferer.transfer(reg, test_demo)
         
-        traj_rad = 0.2
-        w_kt = []
-        for x_ld, p_td in zip(x_kld, p_ktd):
-            dist_tl = ssd.cdist(p_td, x_ld, 'sqeuclidean')
-            dist_t = np.min(dist_tl, axis=1)
-            w_kt.append(np.exp(-dist_t / (traj_rad**2)))
-        w_kt = np.asarray(w_kt)
-        w_t = w_kt.mean(axis=0)
-        
-        f_k = []
-        for x_ld in x_kld:
-            from lfd.rapprentice import clouds
-            f = tps_experimental.ThinPlateSpline(x_ld, clouds.downsample(x_ld, .05))
-#             f = tps_experimental.ThinPlateSpline(x_ld, x_ld)
-            f_k.append(f)
-        f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=2, cov_coef=.1, w_t=w_t, reg_init=100, reg_final=10, rad_init=1, rad_final=.1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
-                                                   callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
-        
-        handles.extend(multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors))
-
-#         f_k = tps_experimental.pairwise_tps_l2_cov(x_kld, y_md, p_ktd, f_init_k=f_k, n_iter=10, cov_coef=.0001, reg_init=1, reg_final=.1, rad_init=.1, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
-#                                                    callback=l2_callback, args=(sim,), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
-        
-#         f_k = []
-#         for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, x_kld):
-#             n, d = ctrl_nd.shape
-#             f = tps_experimental.tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=10, opt_iter=100, reg_init=0.1, reg_final=0.01, rad_init=.1, rad_final=.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], callback=l2_callback, args=(sim,))
-#             f_k.append(f)
-#         f_k = hc.groupwise_tps_hc2(x_kld, y_md=y_md, f_init_k=f_k, opt_iter=100, reg=0.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
-#                                        callback=multi_l2_callback, args=(p_ktd, sim, demo_colors))
-#         
-#         f_k = hc.groupwise_tps_hc2_cov(x_kld, p_ktd, f_init_k=f_k, y_md=y_md, opt_iter=100, reg=0.01, rot_reg=np.r_[1e-4, 1e-4, 1e-1], cov_coef=.0001, 
-#                                        callback=multi_l2_callback, args=(p_ktd, sim, demo_colors), multi_callback=multi_l2_callback, multi_args=(sim, demo_colors))
-# #         multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors)
-        
-        # hack to compute test_aug_traj
-        class IdentityRegistration(object):
-            def __init__(self):
-                self.f = tps_experimental.ThinPlateSpline(np.zeros((4,3)), np.zeros((4,3)))
-        reg = IdentityRegistration()
-        test_aug_traj = aligned_aug_trajs[0]
-        not_active_lr = 'r' if active_lr is 'l' else 'l'
-        del test_aug_traj.lr2arm_traj[not_active_lr]
-        del test_aug_traj.lr2ee_traj[not_active_lr]
-        fp_ktd = []
-        for f, p_td in zip(f_k, p_ktd):
-            fp_ktd.append(f.transform_points(p_td))
-        fp_ktd = np.asarray(fp_ktd)
-        handles.append(sim.env.drawlinestrip(np.mean(fp_ktd, axis=0), 5, (0,0,1)))
-        test_aug_traj.lr2ee_traj[active_lr][:,:3,3] = np.mean(fp_ktd, axis=0)
-        test_demo = demos[0]
-        test_demo.aug_traj = test_aug_traj
-        test_aug_traj = traj_transferer.transfer(reg, test_demo)
         lfd_env.execute_augmented_trajectory(test_aug_traj, step_viewer=args.animation, interactive=args.interactive)
         
         # sim.viewer.Idle()
