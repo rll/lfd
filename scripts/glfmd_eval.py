@@ -8,11 +8,7 @@ from lfd.environment import environment
 from lfd.environment import sim_util
 from lfd.environment.robot_world import RealRobotWorld
 from lfd.demonstration.demonstration import Demonstration, SceneState, AugmentedTrajectory
-from lfd.registration.registration import TpsRpmRegistrationFactory, TpsnRpmRegistrationFactory
-from lfd.registration.plotting_openrave import registration_plot_cb
 from lfd.transfer.transfer import PoseTrajectoryTransferer
-from lfd.transfer.registration_transfer import TwoStepRegistrationAndTrajectoryTransferer
-import pickle
 import scipy.spatial.distance as ssd
 import sys
 import colorsys
@@ -72,8 +68,8 @@ def setup_demos(args, robot):
     demos = {}
     for action, seg_info in actions.iteritems():
         # TODO
-        if 'seg00' not in action or 'failure' in action: continue
-        if len(demos) > 5: break
+#         if 'seg00' not in action or 'failure' in action: continue
+#         if len(demos) > 5: break
         full_cloud = seg_info['cloud_xyz'][()]
 #         #TODO
 #         from lfd.rapprentice import clouds
@@ -244,7 +240,7 @@ def main():
         else:
 #             clouds = h5py.File('../bigdata/misc/ropeclutter_0.h5', 'r')
 #             test_scene_state = SceneState(clouds['ropeclutter_00_seg00']['cloud_xyz'][()], downsample_size=args.downsample_size)
-            test_scene_state = demos[-1].scene_state
+            test_scene_state = demos[2].scene_state
         
         sys.stdout.write("aligning trajectories... ")
         sys.stdout.flush()
@@ -319,8 +315,7 @@ def main():
 # #         multi_l2_callback(f_k, y_md, p_ktd, sim, demo_colors)
         
         # hack to compute test_aug_traj
-        from lfd.registration.registration import Registration
-        class IdentityRegistration(Registration):
+        class IdentityRegistration(object):
             def __init__(self):
                 self.f = tps_experimental.ThinPlateSpline(np.zeros((4,3)), np.zeros((4,3)))
         reg = IdentityRegistration()
