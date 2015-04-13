@@ -30,8 +30,10 @@ def color_cylinders(cyl_sim_objs):
                 for geom in link.GetGeometries():
                     geom.SetDiffuseColor(color)
 
-
 def create_rope_demo(env, rope_poss):
+    """
+    Creates the demonstration rope
+    """
     rope_sim_obj = create_rope(rope_poss)
     env.sim.add_objects([rope_sim_obj])
     env.sim.settle()
@@ -80,6 +82,7 @@ def main():
                                [.2,  .2, table_height+0.006]])
     demo = create_rope_demo(env, demo_rope_poss)
 
+    # specifies the amount / direction of perturbation of the rope?
     test_rope_poss = np.array([[.2, -.2, table_height+0.006],
                                [.5, -.4, table_height+0.006],
                                [.8,  .0, table_height+0.006],
@@ -87,6 +90,8 @@ def main():
                                [.6,  .0, table_height+0.006],
                                [.4,  .2, table_height+0.006],
                                [.2,  .2, table_height+0.006]])
+
+    # creates rope for the test scene
     test_rope_sim_obj = create_rope(test_rope_poss)
     sim.add_objects([test_rope_sim_obj])
     sim.settle()
@@ -95,12 +100,21 @@ def main():
     reg_factory = TpsRpmRegistrationFactory()
     traj_transferer = FingerTrajectoryTransferer(sim)
 
+
+    # what is this plotting
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
-    reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-    a = datetime.datetime.now()
-    decomp_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
-    b = datetime.datetime.now()
-    decomp_time = b-a
+
+    # How problem instance is created 
+    # reg_factory - 
+    # traj_transferer - 
+    # demo - 
+    # test_scene_state -
+    import pdb; pdb.set_trace()
+    # reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    # a = datetime.datetime.now()
+    # decomp_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
+    # b = datetime.datetime.now()
+    # decomp_time = b-a
 
     reg_and_traj_transferer = UnifiedRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
     a = datetime.datetime.now()
@@ -108,14 +122,14 @@ def main():
     b = datetime.datetime.now()
     unified_time = b-a
 
-    reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-    a = datetime.datetime.now()
-    twostep_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
-    b = datetime.datetime.now()
-    twostep_time = b-a
+    # reg_and_traj_transferer = TwoStepRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    # a = datetime.datetime.now()
+    # twostep_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
+    # b = datetime.datetime.now()
+    # twostep_time = b-a
 
-    print 'decomp time:', decomp_time
-    print 'unified time:', unified_time
+    # print 'decomp time:', decomp_time
+    # print 'unified time:', unified_time
     print 'two step time:', twostep_time
 
 if __name__ == '__main__':

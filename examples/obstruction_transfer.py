@@ -139,7 +139,8 @@ def main():
     traj_transferer = FingerTrajectoryTransferer(sim)
 
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
-    reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    # reg_and_traj_transferer = DecompRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    reg_and_traj_transferer = UnifiedRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
     test_aug_traj = reg_and_traj_transferer.transfer(demo, test_scene_state, callback=plot_cb, plotting=True)
 
     env.execute_augmented_trajectory(test_aug_traj)

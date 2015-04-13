@@ -29,7 +29,10 @@ def color_cylinders(cyl_sim_objs):
                     geom.SetDiffuseColor(color)
 
 def create_rope(rope_poss, capsule_height=.02):
+    # import pdb; pdb.set_trace()
     rope_pos_dists = np.linalg.norm(np.diff(rope_poss, axis=0), axis=1)
+    # cumsum: returns the cumulative sum along a given axis
+    # np.r_: easy way to create a matrix
     xp = np.r_[0, np.cumsum(rope_pos_dists/capsule_height)]
     init_rope_nodes = mu.interp2d(np.arange(xp[-1]+1), xp, rope_poss)
     rope_sim_obj = RopeSimulationObject("rope", init_rope_nodes)
