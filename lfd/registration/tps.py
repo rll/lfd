@@ -44,14 +44,22 @@ def tps_apply_kernel(distmat, dim):
     
     
 def tps_kernel_matrix(x_na):
-    dim = x_na.shape[1]
+    dim = x_na.shape[1] # x_na.shape: 260 x 3, dim = 3
     distmat = ssd.squareform(ssd.pdist(x_na))
-    return tps_apply_kernel(distmat,dim)
+    # ssd.pdist(x_na) - computes the distance between
+    # the 260 points, a total of 260 * 259 / 2 entries
+    # ssd.squareform: converts the distance vector 
+    # to a square-form distance matrix of 260x260
+    # with the diagonal entries all being zero
+    return tps_apply_kernel(distmat,dim) # returns -distmat for dim of 3
 
 def tps_kernel_matrix2(x_na, y_ma):
+    # x_na: (260, 3), y_ma = (456, 3)
     dim = x_na.shape[1]
-    distmat = ssd.cdist(x_na, y_ma)
-    return tps_apply_kernel(distmat, dim)
+    distmat = ssd.cdist(x_na, y_ma) # 260x456
+    # ssd.cdist: computes the distance between each pair of the two
+    # collections of inputs
+    return tps_apply_kernel(distmat, dim) # returns -distmat
 
 def tps_eval(x_ma, lin_ag, trans_g, w_ng, x_na):
     K_mn = tps_kernel_matrix2(x_ma, x_na)
@@ -81,7 +89,7 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     assert H.shape[1] == n_vars
     assert f.shape[0] == n_vars
     assert A.shape[1] == n_vars
-    n_cnts = A.shape[0]
+    n_cnts = A.shape[0] 
     
     _u,_s,_vh = np.linalg.svd(A.T)
     N = _u[:,n_cnts:]
@@ -100,13 +108,18 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     return x
 
 def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
+    """
+    X_na: center of the basis function
+    """
+    import pdb; pdb.set_trace()
+
     if wt_n is None: wt_n = np.ones(len(x_na))
     n,d = x_na.shape
     
     K_nn = tps_kernel_matrix(x_na)
     Q = np.c_[np.ones((n,1)), x_na, K_nn]
     rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
-    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_na]].T
+    A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_na]].T # for the equality constraint (augmented)
     
     solve_dim_separately = not np.isscalar(bend_coef) or (wt_n.ndim > 1 and wt_n.shape[1] > 1)
     
@@ -130,17 +143,21 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
             wt_n = wt_n[:,None]
         if wt_n.shape[1] == 1:
             wt_n = np.tile(wt_n, (1,d))
-        theta = np.empty((1+d+n,d))
+        theta = np.empty((1+d+n,d)) 
+        # A is nxd
+        # B is dxd
+        # C is 1xd
         z = np.empty((n,d))
         for i in range(d):
-            WQ = wt_n[:,i][:,None] * Q
+            # Q is a giant matrix
+            WQ = wt_n[:,i][:,None] * Q 
             QWQ = Q.T.dot(WQ)
             H = QWQ
-            H[d+1:,d+1:] += bend_coefs[i] * K_nn
-            H[1:d+1, 1:d+1] += np.diag(rot_coefs)
+            H[d+1:,d+1:] += bend_coefs[i] * K_nn # A (adding the term a^TKa
+            H[1:d+1, 1:d+1] += np.diag(rot_coefs) # B (adding regularization term)
              
-            f = -WQ.T.dot(y_ng[:,i])
-            f[1+i] -= rot_coefs[i]
+            f = -WQ.T.dot(y_ng[:,i]) # linear term for A
+            f[1+i] -= rot_coefs[i] # linear term for b 
             
             if ret_factorization:
                 theta[:,i], (N, z[:,i]) = solve_eqp1(H, f, A, ret_factorization=True)
@@ -152,13 +169,19 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
     return theta
 
 def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret_factorization=False):
+    print("in tps fit decomp")
+    import pdb; pdb.set_trace()
     if wt_n is None: wt_n = np.ones(len(x_na))
     n,d = x_na.shape
     
-    K_nn = tps_kernel_matrix(x_na)
-    K_bn_lambda = tps_kernel_matrix2(x_na, tau_bd).T
-    Q = np.c_[np.ones((n,1)), x_na, K_nn]
+    K_nn = tps_kernel_matrix(x_na) # the distance matrix for center points
+    K_bn_lambda = tps_kernel_matrix2(x_na, tau_bd).T # dual ones?
+    Q = np.c_[np.ones((n,1)), x_na, K_nn] # 260 x 264
+
+    # the rotational coefficients
     rot_coefs = np.ones(d) * rot_coef if np.isscalar(rot_coef) else rot_coef
+    
+    # initialize the matrix A (4 x 264)
     A = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), x_na]].T
     
     solve_dim_separately = not np.isscalar(bend_coef) or (wt_n.ndim > 1 and wt_n.shape[1] > 1)
@@ -193,6 +216,7 @@ def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret
         z = np.empty((n,d))
         for i in range(d):
             WQ = wt_n[:,i][:,None] * Q
+            import pdb; pdb.set_trace()
             QWQ = Q.T.dot(WQ)
             H = QWQ
             H[d+1:,d+1:] += bend_coefs[i] * K_nn
@@ -208,7 +232,8 @@ def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret
                 theta[:,i], (N, z[:,i]) = solve_eqp1(H, f, A, ret_factorization=True)
             else:
                 theta[:,i] = solve_eqp1(H, f, A)
-    
+   
+    # deciding what to return
     if ret_factorization:
         return theta, (N, z)
     return theta
@@ -222,7 +247,6 @@ def lambda_linear_term(K_bn, tau_bd, lambda_bd):
     b_term = -lambda_bd.T.dot(tau_bd)
     c_term = -lambda_bd.T.dot(np.ones((b,1)))
     return np.c_[c_term, b_term, a_term].T
-
 
 class ThinPlateSpline(Transformation):
     """

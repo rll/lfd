@@ -343,9 +343,11 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
                                          f, closing_pts=None,
                                          no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
                                           alpha=settings.ALPHA, beta_pos=settings.BETA_POS, gamma=settings.GAMMA):
+    # jointly optimize over registration and trajectory
     orig_dof_inds = robot.GetActiveDOFIndices()
     orig_dof_vals = robot.GetDOFValues()
 
+    # some sanity checks
     n_steps = old_traj.shape[0]
     dof_inds = sim_util.dof_inds_from_name(robot, manip_name)
     assert old_traj.shape[1] == len(dof_inds)
@@ -354,7 +356,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
             assert len(old_finger_pts_traj)== n_steps
     assert len(flr2finger_link_names) == len(flr2old_finger_pts_trajs)
 
-    # expand these
+    # expand these 
     (n,d) = f.x_na.shape
     bend_coefs = np.ones(d) * f.bend_coef if np.isscalar(f.bend_coef) else f.bend_coef
     rot_coefs = np.ones(d) * f.rot_coef if np.isscalar(f.rot_coef) else f.rot_coef
@@ -368,6 +370,8 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
         wt_n = np.tile(wt_n, (1,d))
 
     if no_collision_cost_first:
+        # never used?
+        import pdb; pdb.set_trace()
         init_traj, _, (N, init_z) , _, _ = joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_names, flr2finger_rel_pts, flr2old_finger_pts_trajs, old_traj,
                                                                                  f, closing_pts=closing_pts,
                                                                                  no_collision_cost_first=False, use_collision_cost=False, start_fixed=start_fixed, joint_vel_limits=joint_vel_limits,
@@ -376,6 +380,7 @@ def joint_fit_tps_follow_finger_pts_trajs(robot, manip_name, flr2finger_link_nam
         init_traj = old_traj.copy()
         N = f.N
         init_z = f.z
+
 
     if start_fixed:
         init_traj = np.r_[robot.GetDOFValues(dof_inds)[None,:], init_traj[1:]]

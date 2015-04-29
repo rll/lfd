@@ -20,6 +20,21 @@ def create_cylinder_grid(cyl_pos0, cyl_pos1, cyl_pos2, cyl_radius, cyl_height):
         cyl_sim_objs.append(CylinderSimulationObject("cyl%i"%i, cyl_pos, cyl_radius, cyl_height, dynamic=True))
     return cyl_sim_objs
 
+def plot_transform(env, T, s=0.1):
+    """
+    Plots transform T in openrave environment.
+    S is the length of the axis markers.
+    """
+    h = []
+    x = T[0:3,0]
+    y = T[0:3,1]
+    z = T[0:3,2]
+    o = T[0:3,3]
+    h.append(env.drawlinestrip(points=np.array([o, o+s*x]), linewidth=3.0, colors=np.array([(1,0,0),(1,0,0)])))
+    h.append(env.drawlinestrip(points=np.array([o, o+s*y]), linewidth=3.0, colors=np.array(((0,1,0),(0,1,0)))))
+    h.append(env.drawlinestrip(points=np.array([o, o+s*z]), linewidth=3.0, colors=np.array(((0,0,1),(0,0,1)))))
+    return h
+
 def color_cylinders(cyl_sim_objs):
     for sim_obj in cyl_sim_objs:
         color = np.random.random(3)
@@ -85,15 +100,18 @@ def main():
     cyl_pos1 = np.r_[.7,  .15, table_height+cyl_height/2]
     cyl_pos2 = np.r_[.4, -.15, table_height+cyl_height/2]
     rope_poss = np.array([[.2, -.2, table_height+0.006], 
-                          [.8, -.2, table_height+0.006], 
-                          [.8,  .2, table_height+0.006], 
+                          [0.8, -.2, table_height+0.006], 
+                          [0.8,  .2, table_height+0.006], 
                           [.2,  .2, table_height+0.006]])
+    # rope_poss first item: controls how far the x coordinate of the corners is from the robot 
+    # rope_poss second item: controls how far the y coordinate of the corners is from the robot 
+    # rope_poss last item controls the height of the rope, once created, follows physics simulation  
     
     sim_objs = []
     sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     sim_objs.append(BoxSimulationObject("table", [1, 0, table_height-.1], [.85, .85, .1], dynamic=False))
-    cyl_sim_objs = create_cylinder_grid(cyl_pos0, cyl_pos1, cyl_pos2, cyl_radius, cyl_height)
-    sim_objs.extend(cyl_sim_objs)
+    # cyl_sim_objs = create_cylinder_grid(cyl_pos0, cyl_pos1, cyl_pos2, cyl_radius, cyl_height)
+    # sim_objs.extend(cyl_sim_objs)
     rope_sim_obj = create_rope(rope_poss)
     sim_objs.append(rope_sim_obj)
     
@@ -105,16 +123,21 @@ def main():
     sim.robot.SetDOFValues([0.25], [sim.robot.GetJoint('torso_lift_joint').GetJointIndex()])
     sim_util.reset_arms_to_side(sim)
     
-    color_cylinders(cyl_sim_objs)
+    # color_cylinders(cyl_sim_objs)
     
     env = environment.LfdEnvironment(sim, sim)
     
     # define augmented trajectory
     pick_pos = rope_poss[0] + .1 * (rope_poss[1] - rope_poss[0])
     drop_pos = rope_poss[3] + .1 * (rope_poss[2] - rope_poss[3]) + np.r_[0, .2, 0]
-    pick_R = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
-    drop_R = np.array([[0, 1, 0], [0, 0, -1], [-1, 0, 0]])
+    pick_R = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])  # what is this?
+    drop_R = np.array([[0, 1, 0], [0, 0, -1], [-1, 0, 0]]) # what is this?
     move_height = .2
+    # handles = []
+    # tmp = np.zeros((4, 4))
+    # tmp[:3,:3] = pick_R
+    # tmp[3,3]=1
+    # handles.append(plot_transform(env.world.env, tmp))
     aug_traj = create_augmented_traj(sim.robot, pick_pos, drop_pos, pick_R, drop_R, move_height)
     
     env.execute_augmented_trajectory(aug_traj)

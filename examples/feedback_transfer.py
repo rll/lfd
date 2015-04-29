@@ -5,7 +5,7 @@ from __future__ import division
 import numpy as np
 
 from lfd.environment.simulation import DynamicSimulationRobotWorld
-from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, CylinderSimulationObject
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
 from lfd.environment import environment
 from lfd.environment import sim_util
 from lfd.demonstration.demonstration import Demonstration
@@ -108,9 +108,9 @@ def main():
     traj_transferer = FingerTrajectoryTransferer(sim)
 
     plot_cb = lambda i, i_em, x_nd, y_md, xtarg_nd, wt_n, f, corr_nm, rad: registration_plot_cb(sim, x_nd, y_md, f)
-    # reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-    reg_and_traj_transferer = UnifiedRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
-    test_aug_traj = reg_and_traj_transferer.transfer(demo1, test_scene_state, callback=plot_cb, plotting=True)
+    reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    # reg_and_traj_transferer = UnifiedRegistrationAndTrajectoryTransferer(reg_factory, traj_transferer)
+    test_aug_traj = reg_and_traj_transferer.transfer((demo1, demo2), test_scene_state, callback=plot_cb, plotting=True)
 
     env.execute_augmented_trajectory(test_aug_traj)
 
