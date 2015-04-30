@@ -79,6 +79,24 @@ class LfdEnvironment(object):
         full_cloud = self.world.observe_cloud()
         return demonstration.SceneState(full_cloud, downsample_size=self.downsample_size)
 
+class FeedbackEnvironment(LfdEnvironment):
+    def __init__(self, world, sim, downsample_size = 0):
+        super(FeedbackEnvironment, self).__init__(world, sim, downsample_size)
+
+    def observe_box_robot_scene(self):
+        """ Returns the location and extent of the robot box """
+        pass
+
+    def execute_robot_trajectory(self, robot, trajectory):
+        # robot is an openrave kinbody object
+        import time
+        with robot:
+            for pose in trajectory:
+                robot.SetTransform(pose)
+                # self.sim._update_rave()
+                self.sim.viewer.Step()
+                import pdb; pdb.set_trace()
+
 class GroundTruthRopeLfdEnvironment(LfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):
         """Inits GroundTruthRopeLfdEnvironment

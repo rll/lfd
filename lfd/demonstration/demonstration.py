@@ -25,6 +25,34 @@ class Demonstration(object):
         return "%s(%s, %s, %s)" % (self.__class__.__name__, self.name, self.scene_state.__repr__(), self.aug_traj.__repr__())
 
 
+class DemonstrationRobot(object):
+    def __init__(self, name, scene_states, traj):
+        """Inits DemonstrationRobot
+        A class for storing demonstration for the simplified robot
+        
+        Args:
+            name: demonstration name, which is the same as the ones used for indexing the demonstrations
+            scene_state: demonstration SceneStates (contains a sequence of demonstration scenes)
+            aug_traj: demonstration Trajectory. 
+        """
+        assert len(traj) == len(scene_states)
+        self.name = name
+        self.scene_states = scene_states
+        self.traj = traj
+    
+    def __repr__(self):
+        return "%s(%s, %s, %s)" % (self.__class__.__name__, self.name, self.scene_state.__repr__(), self.aug_traj.__repr__())
+
+class SceneStates(object):
+    def __init__(self, sequence_of_scenes):
+        """ Inits SceneState
+        Args:
+            scene_states - contains a sequence of demonstration scene_states
+        self.sequence_of_scenes = sequence_of_scenes
+        """
+        self.clouds_list = sequence_of_scenes
+
+
 class SceneState(object):
     ids = set()
     def __init__(self, full_cloud, id=None, full_color=None, downsample_size=0):

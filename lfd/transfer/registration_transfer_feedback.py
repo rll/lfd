@@ -30,24 +30,21 @@ class RegistrationAndTrajectoryTransferer(object):
         """
         raise NotImplementedError
 
-class FeedbackRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransferer):
-    def __init__(self, registration_factory, trajectory_transferer,
+class FeedbackRegistrationAndTrajectoryTransferer(object):
+    def __init__(self, env, demo, test_robot, test_scene_state,
                  alpha=settings.ALPHA, # alpha not used.
                  beta_pos=settings.BETA_POS,
                  gamma=settings.GAMMA,
-                 use_collision_cost=settings.USE_COLLISION_COST,
-                 init_trajectory_transferer=None):
-        super(FeedbackRegistrationAndTrajectoryTransferer, self).__init__(registration_factory, trajectory_transferer)
-        if not isinstance(registration_factory, registration.TpsRpmRegistrationFactory):
-            raise NotImplementedError("FeedbackRegistrationAndTrajectoryTransferer only supports TpsRpmRegistrationFactory")
-        if not isinstance(trajectory_transferer, transfer.FingerTrajectoryTransferer):
-            raise NotImplementedError("FeedbackRegistrationAndTrajectoryTransferer only supports FingerTrajectoryTransferer")
-        self.sim = trajectory_transferer.sim
+                 use_collision_cost=settings.USE_COLLISION_COST):
+
+        self.sim = env.sim
+        self.demo = demo
+        self.test_robot = test_robot
+        self.test_scene_state = test_scene_state
         self.alpha = alpha
         self.beta_pos = beta_pos
         self.gamma = gamma # joint velocity constant
         self.use_collision_cost = use_collision_cost
-        self.init_trajectory_transferer = init_trajectory_transferer
 
     def traj_to_points(self, aug_traj, resampling=False):
         """Convert augmented trajectory trajectory to points"""
