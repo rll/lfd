@@ -31,68 +31,123 @@ class RegistrationAndTrajectoryTransferer(object):
         raise NotImplementedError
 
 class FeedbackRegistrationAndTrajectoryTransferer(object):
-    def __init__(self, env, demo, test_robot, test_scene_state,
+    def __init__(self, env, 
                  alpha=settings.ALPHA, # alpha not used.
                  beta_pos=settings.BETA_POS,
                  gamma=settings.GAMMA,
                  use_collision_cost=settings.USE_COLLISION_COST):
 
         self.sim = env.sim
-        self.demo = demo
-        self.test_robot = test_robot
-        self.test_scene_state = test_scene_state
+        self.env = env
         self.alpha = alpha
         self.beta_pos = beta_pos
         self.gamma = gamma # joint velocity constant
         self.use_collision_cost = use_collision_cost
 
-    def traj_to_points(self, aug_traj, resampling=False):
-        """Convert augmented trajectory trajectory to points"""
-        active_lr = "r"
+    def traj_to_points(self, traj):
+        """Convert trajectory to points"""
+        pass
 
-        # rs resampling
-        if resampling:
-            _, timesteps_rs = sim_util.unif_resample(np.c_[(1./settings.JOINT_LENGTH_PER_STEP) * np.concatenate([aug_traj.lr2arm_traj[lr] for lr in active_lr], axis=1),
-                                                           (1./settings.FINGER_CLOSE_RATE) * np.concatenate([aug_traj.lr2finger_traj[lr] for lr in active_lr], axis=1)],
-                                                     1.)
-            demo_aug_traj_rs = aug_traj.get_resampled_traj(timesteps_rs)
-        else:
-            demo_aug_traj_rs = aug_traj
+    def get_scene_state(self, robot, num_x_points, num_y_points):
+        """
+        Get scene state (a set of points)  given the robot 
+        """
+        robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
+        from itertools import product
+        min_x, max_x, min_y, max_y, z = get_object_limits(robot_kinbody)
+        y_points = num_y_points
+        x_points = num_x_points
+        total_points = x_points * y_points
+        all_y_points = np.linspace(min_y, max_y, num = y_points, endpoint=True)
+        all_x_points = np.linspace(min_x, max_x, num = x_points, endpoint=True)
+        all_z_points = np.empty((total_points, 1))
+        all_z_points.fill(z)
+        init_pc = np.array(list(product(all_x_points, all_y_points)))
+        init_pc = np.hstack((init_pc, all_z_points))
+        return init_pc
 
-        lr = 'r'
-        arm_name = {"rl":"leftarm", "r":"rightarm"}[lr]
-        finger_name = "%s_gripper_l_finger_joint"%lr
+    def traj_to_points(self, robot, traj, num_x_points = 3 , num_y_points = 12, plot=False):
+        """
+        Convert trajectory to points
+        """
+        # sample points from the robot (initial pc)
+        robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
+        init_pc = self.get_scene_state(robot, num_x_points, num_y_points)
 
-        flr2demo_finger_pts_traj_rs = sim_util.get_finger_pts_traj(self.sim.robot, lr, (demo_aug_traj_rs.lr2ee_traj[lr], demo_aug_traj_rs.lr2finger_traj[lr]))
-        return flr2demo_finger_pts_traj_rs
+        init_t = robot_kinbody.GetTransform()
+        y_points = num_y_points
+        x_points = num_x_points
+        total_points = y_points * x_points
+        min_x, max_x, min_y, max_y, z = get_object_limits(robot_kinbody)
 
+        # generate pc from trajectory
+        pc_seq = np.empty(((len(traj)), total_points, 3))
+        pc_seq[0,:,:] = init_pc
+        center_pt = np.array([(min_x + max_x) / 2, (min_y + max_y) / 2, z]).reshape(3, 1)
+        for i in range(1, len(traj)):
+            transform_to_pc = traj[i-1]
+            rotation = transform_to_pc[:3,:3]
+            translation = transform_to_pc[:,3] - init_t[:,3]
+            translation = translation[:3].reshape(3, 1)
+            apply_t = lambda x: np.asarray((np.dot(rotation, x.reshape(3, 1) - center_pt)) + center_pt + translation[:3]).reshape(-1)
+            pc_seq[i,:,:] = np.array(map(apply_t, init_pc))
+        return pc_seq
 
-    def points_to_array(self, flr2demo_finger_pts_traj):
+    def points_to_array(self, pts_traj):
         """ Convert points to a flattened numpy array, where each element is an array of length 3"""
-        temp =  np.r_[flr2demo_finger_pts_traj['l'], flr2demo_finger_pts_traj['r']]
-        return temp.reshape(temp.shape[0] * temp.shape[1], temp.shape[2])
+        tmp = pts_traj 
+        return tmp.reshape(tmp.shape[0] * tmp.shape[1], tmp.shape[2])
+
+    def compact_traj(self, traj):
+        """
+        Compactly represent the list of pose as a list of three-array list (x, y, theta)
+        (Not needed for now)
+        """
+        z = traj[2, 3]
+        x, y = traj[:2, 3]
+        theta = None# arctan
+        return (x, y, theta)
 
     # @profile
-    def transfer(self, demos, test_scene_state, callback=None, plotting=False):
+    def transfer(self, demo, robot, test_scene_state, callback=None, plotting=False):
         """
         Trajectory transfer of demonstrations with two segments (baby version)
         """
-        print 'alpha = ', self.alpha
-        print 'beta = ', self.beta_pos
-        print 'gamma = ', self.gamma
-        demo1 = demos[0]
-        demo2 = demos[1]
-        reg = self.registration_factory.register(demo1, test_scene_state, callback=callback)
+        ### TODO: Need to tune parameters !!
+        # print 'alpha = ', self.alpha
+        # print 'beta = ', self.beta_pos
+        print 'gamma = ', self.gamma # only gamma in use (for cost of trajectory)
+
+        demo_pc_seq = demo.scene_states
+        demo_traj = demo.traj
+        demo_robot = demo.robot
+
+        # dual variable for sequence of point clouds
+        points_per_pc = len(demo_pc_seq[0])
+        num_time_steps = len(demo_pc_seq)
+        total_pc_points = points_per_pc * num_time_steps
+        nu = np.zeros((total_pc_points, 3)) # dual variable for point cloud points (1260 x 3)
+
+        # convert trajectory to points 
+        demo_traj_pts = self.points_to_array(demo_pc_seq) #self.traj_to_points() # simple case: (TODO) implement the complicated version
+
+        # dual variable for trajectory
+        lamb = np.zeros(demo_traj_pts.shape)
+
+        # ignore point matching for now
+        ####### PSUEDO CODE #######
+        # while not converged:
+        #       f = argmin 
+        #       tau = argmin
+        # 
 
         ######## INITIALIZATION ##########
 
         # Demonstration trajectory points in an array
         tau_bd1 = self.points_to_array(self.traj_to_points(demo1.aug_traj, resampling=True))
-        tau_bd2 = self.points_to_array(self.traj_to_points(demo2.aug_traj, resampling=True))
 
         # Dual variables for the trajectories
         nu_bd1 = np.zeros(tau_bd1.shape) # 456 x 3
-        nu_bd2 = np.zeros(tau_bd2.shape) 
 
         # TPS Parameters, point clouds, etc. (what the heck is this?)
         (n,d) = reg.f.x_na.shape # 260 x 3

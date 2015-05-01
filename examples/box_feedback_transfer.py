@@ -49,8 +49,8 @@ def create_trajectory(env, robot, save_trajectory = False):
     """ Create demonstration trajectory for the robot """
     robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
     robot_T = robot_kinbody.GetTransform()
-    time_steps1 = 15
-    time_steps2 = 5
+    time_steps1 = 25 
+    time_steps2 = 10
     total_steps = time_steps1 + time_steps2
 
     # Let trajectory be a set of poses of the robot (3 degress of freedom)
@@ -97,7 +97,7 @@ def plot_clouds(env, pc_seq):
         env.sim.viewer.Step()
         raw_input("Look at pc")
 
-def generate_pc_from_traj(env, robot, robot_kinbody, traj, plot=False):
+def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 3, num_y_points = 12, plot=False):
     """
     returns a sequence point clouds, n x k x 3 matrix
     (each pointcloud contains k points)
@@ -106,8 +106,8 @@ def generate_pc_from_traj(env, robot, robot_kinbody, traj, plot=False):
     init_pc = get_scene_state(env, robot)
 
     init_t = robot_kinbody.GetTransform()
-    y_points = 3
-    x_points = 12 
+    y_points = num_y_points
+    x_points = num_x_points
     total_points = y_points * x_points
     min_x, max_x, min_y, max_y, z = get_object_limits(robot_kinbody)
 
@@ -217,8 +217,8 @@ def main():
     sim.viewer.Idle()
     test_scene_state = get_scene_state(env, test_robot)
 
-    reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env, demo, test_robot, test_scene_state) 
-    # test_aug_traj = reg_and_traj_transferer.transfer((demo1, demo2), test_scene_state, callback=plot_cb, plotting=True)
+    reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env)
+    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, plotting=True)
 
     # env.execute_augmented_trajectory(test_aug_traj)
 

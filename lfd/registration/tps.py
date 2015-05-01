@@ -41,6 +41,9 @@ def tps_apply_kernel(distmat, dim):
         return -distmat
     else:
         raise NotImplementedError
+
+def tps_fit_feedback(demo_pc_seq, test_pc_seq, pc):
+    pass
     
     
 def tps_kernel_matrix(x_na):
