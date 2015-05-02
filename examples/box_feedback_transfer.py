@@ -49,8 +49,10 @@ def create_trajectory(env, robot, save_trajectory = False):
     """ Create demonstration trajectory for the robot """
     robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
     robot_T = robot_kinbody.GetTransform()
-    time_steps1 = 25 
-    time_steps2 = 10
+    # time_steps1 = 25 
+    # time_steps2 = 10
+    time_steps1 = 5 
+    time_steps2 = 2 
     total_steps = time_steps1 + time_steps2
 
     # Let trajectory be a set of poses of the robot (3 degress of freedom)
@@ -139,7 +141,9 @@ def create_demo(env, robot):
     # env.execute_robot_trajectory(robot_kinbody, trajectory)
 
     ### generate sequence of pointcloud from trajectory
+    # pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=False)
     pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=True)
+
 
     demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory)
     return demo
@@ -156,7 +160,6 @@ def color_robot(cyl_sim_objs, color=[1, 0, 0]):
 def main():
     # define simulation objects
     sim_objs = []
-    # sim_objs.append(XmlSimulationObject("robots/pr2-beta-static.zae", dynamic=False))
     table_width = 0.25 #0.85
     table_thickness = 0.05
     table_x = 0
@@ -187,11 +190,13 @@ def main():
     robot_y = table_y + table_width * 0.75 + robot_width 
     robot_z = table_z + table_thickness + robot_height
 
-    sim_objs.append(BoxSimulationObject("table", [table_x, table_y, table_z], [table_width, table_width, table_thickness], dynamic=False))
-    sim_objs.append(BoxSimulationObject("obstruction1", [obstruction1_x, obstruction1_y, obstruction1_z], [obstruction1_length, obstruction1_width, obstruction1_height], dynamic=False)) 
-    sim_objs.append(BoxSimulationObject("obstruction2", [obstruction2_x, obstruction2_y, obstruction2_z], [obstruction2_length, obstruction2_width, obstruction2_height], dynamic=False)) 
+    k = 10
 
-    robot = BoxSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=True)
+    sim_objs.append(BoxSimulationObject("table", k*[table_x, table_y, table_z], k*[table_width, table_width, table_thickness], dynamic=False))
+    sim_objs.append(BoxSimulationObject("obstruction1", k*[obstruction1_x, obstruction1_y, obstruction1_z], k*[obstruction1_length, obstruction1_width, obstruction1_height], dynamic=False)) 
+    sim_objs.append(BoxSimulationObject("obstruction2", k*[obstruction2_x, obstruction2_y, obstruction2_z], k*[obstruction2_length, obstruction2_width, obstruction2_height], dynamic=False)) 
+
+    robot = BoxSimulationObject("robot", k*[robot_x, robot_y, robot_z], k*[robot_length, robot_width, robot_height], dynamic=True)
     sim_objs.append(robot)
 
     # initialize simulation world and environment
