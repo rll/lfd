@@ -109,9 +109,9 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         return (x, y, theta)
 
     # @profile
-    def transfer(self, demo, robot, test_scene_state, callback=None, plotting=False):
+    def transfer(self, demo, test_robot, test_scene_state, callback=None, plotting=False):
         """
-        Trajectory transfer of demonstrations with two segments (baby version)
+        Trajectory transfer of demonstrations using dual decomposition incorporating feedback
         """
         ### TODO: Need to tune parameters !!
         # print 'alpha = ', self.alpha
@@ -120,19 +120,39 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
         demo_pc_seq = demo.scene_states
         demo_traj = demo.traj
-        demo_robot = demo.robot
+        # demo_robot = demo.robot
+
+        dim = 2
 
         # dual variable for sequence of point clouds
         points_per_pc = len(demo_pc_seq[0])
         num_time_steps = len(demo_pc_seq)
         total_pc_points = points_per_pc * num_time_steps
-        nu = np.zeros((total_pc_points, 3)) # dual variable for point cloud points (1260 x 3)
+        lamb = np.zeros((total_pc_points, dim)) # dual variable for point cloud points (1260 x 3)
+
+        # convert the dimension of point cloud
+        demo_pc = demo_pc_seq.reshape((total_pc_points, 3)) 
+        demo_pc = demo_pc[:,:dim]
 
         # convert trajectory to points 
-        demo_traj_pts = self.points_to_array(demo_pc_seq) #self.traj_to_points() # simple case: (TODO) implement the complicated version
+        demo_traj_pts = demo_pc_seq #self.traj_to_points() # simple case: (TODO) implement the complicated version
 
-        # dual variable for trajectory
-        lamb = np.zeros(demo_traj_pts.shape)
+        # dual variable for sequence of trajectories
+        points_per_traj = len(demo_traj_pts[0])
+        num_time_steps = len(demo_traj_pts)
+        total_traj_points = points_per_traj * num_time_steps
+        nu_bd = np.zeros((total_traj_points, dim))
+       
+        # convert the dimension of tau_bd
+        tau_bd = demo_traj_pts.reshape((total_traj_points, 3))
+        tau_bd = tau_bd[:,:dim]
+
+        # Setting parameters for tps 
+        bend_coef = 0.0001
+        rot_coef = np.array([0.0001, 0.0001])
+        wt_n = None # unused for now
+        theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
+
 
         # ignore point matching for now
         ####### PSUEDO CODE #######
@@ -142,6 +162,21 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # 
 
         ######## INITIALIZATION ##########
+        # dimension = 2
+        # f = tps.ThinPlateSpline(dimension)
+        #### How to set these parameters??
+        # f.bend_coef = 
+        # f.rot_coef = settings.ROT_REG
+        # f.wt_n = 
+        # f.N = 
+        # f.z = 
+
+
+        # import pdb; pdb.set_trace()
+        # f = tps.initalize_tps(dimension)
+        return
+
+
 
         # Demonstration trajectory points in an array
         tau_bd1 = self.points_to_array(self.traj_to_points(demo1.aug_traj, resampling=True))

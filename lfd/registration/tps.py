@@ -36,14 +36,11 @@ def tps_apply_kernel(distmat, dim):
 
     if dim==2:       
         return 4 * distmat**2 * np.log(distmat+1e-20)
-        
     elif dim ==3:
         return -distmat
     else:
         raise NotImplementedError
 
-def tps_fit_feedback(demo_pc_seq, test_pc_seq, pc):
-    pass
     
     
 def tps_kernel_matrix(x_na):
@@ -88,13 +85,15 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     min .5 tr(x'Hx) + tr(f'x)
     s.t. Ax = 0
     """    
+    import pdb; pdb.set_trace()
     n_vars = H.shape[0]
     assert H.shape[1] == n_vars
     assert f.shape[0] == n_vars
     assert A.shape[1] == n_vars
     n_cnts = A.shape[0] 
     
-    _u,_s,_vh = np.linalg.svd(A.T)
+    # _u,_s,_vh = np.linalg.svd(A.T, full_matrices=False)
+    _u,_s,_vh = np.linalg.svd(A.T, full_matrices=True)
     N = _u[:,n_cnts:]
     # columns of N span the null space
     
@@ -171,6 +170,77 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
         return theta, (N, z)
     return theta
 
+    
+def tps_fit_feedback(x_na, y_ng, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd):
+    ### wt_n seems to not matter in this formulation
+    """
+    Solves the optimization problem (two dimensional)
+    Find A \in \R^{(nk1 + nk2) x 2}
+    Find B \in \R^{2x2} 
+    Find C \in \R^{2x1}
+    
+    Parameters:
+    (n: number of time steps)
+    x_na \in \R^{nk_1 x 2}
+    y_ng (does not matter at all)
+    bend_coef - ???
+    rot_coef - ???
+    wt_n - ??? (don't think i need it) (let them all have weight 1)
+    lamb - dual variables corresponding to points from point cloud \R^{nk_1 x 2}
+    nu_bd - dual variables corresponding to points from trajectory  \R^{nk_2 x 2}
+    tau_bd - points from trajectory \in \R^{nk_2 x 2}
+
+    Make sure we actually get a solution here
+    """
+    print("in tps fit feedback")
+    #### Solving tps with 2 dimension
+    assert x_na.shape[1] == 2
+    assert nu_bd.shape[1] == 2
+    assert tau_bd.shape[1] == 2
+    assert x_na.shape == lamb.shape
+    assert tau_bd.shape == nu_bd.shape
+
+
+    num_pts_from_pc = x_na.shape[0]
+    num_pts_from_robot = tau_bd.shape[0]
+
+    d = x_na.shape[1] 
+    n = num_pts_from_pc + num_pts_from_robot
+
+    Q = np.vstack((x_na, tau_bd))
+    K = tps_kernel_matrix(Q)
+
+    bend_coef = 0.0001 ### TO BE TUNED
+    bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
+    rot_coefs =  np.array([0.0001, 0.0001]) #### (TO BE TUNED)
+
+    ### Let's solve each dimension separately
+    ### Linear constraints
+    R = np.r_[np.zeros((d+1,d+1)), np.c_[np.ones((n,1)), Q]].T # make sure this is correct
+
+    ### Solving for theta 
+    theta = np.empty((1+d+n,d))
+    linear_term = get_feedback_linear_term(K, x_na, lamb, tau_bd, nu_bd)
+    for i in range(d):
+        # trace term in objective
+        H = np.zeros((1+d+n, 1+d+n))
+        H[d+1:,d+1:] = bend_coefs[i] * K
+        H[1:d+1, 1:d+1] = np.diag(rot_coefs) # might be missing some terms
+
+        # linear term in objective
+        # f = np.zeros(n + d + 1)
+        # linear term for b
+        # linear term from trajectory and point cloud
+        f = linear_term[:,i]
+        f[1+i] -= rot_coefs[i]
+
+        # solving for parameters c, B, A
+        theta[:,i] = solve_eqp1(H, f, R) 
+
+    import pdb; pdb.set_trace()
+    return theta
+    
+    
 def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret_factorization=False):
     print("in tps fit decomp")
     import pdb; pdb.set_trace()
@@ -192,22 +262,22 @@ def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret
     if not solve_dim_separately:
         print "SHOULD NOT BE HERE"
         return
-        WQ = wt_n[:,None] * Q
-        QWQ = Q.T.dot(WQ)
-        H = QWQ
-        # adding regularization terms
-        H[d+1:,d+1:] += bend_coef * K_nn
-        H[1:d+1, 1:d+1] += np.diag(rot_coefs)
-        
-        f = -WQ.T.dot(y_ng)
-        # adding regularization term
-        f[1:d+1,0:d] -= np.diag(rot_coefs)
-        f = np.c_[f, lambda_linear_term(K_bn_lambda, tau_bd, lambda_bd)]
-        
-        if ret_factorization:
-            theta, (N, z) = solve_eqp1(H, f, A, ret_factorization=True)
-        else:
-            theta = solve_eqp1(H, f, A)
+        # WQ = wt_n[:,None] * Q
+        # QWQ = Q.T.dot(WQ)
+        # H = QWQ
+        # # adding regularization terms
+        # H[d+1:,d+1:] += bend_coef * K_nn
+        # H[1:d+1, 1:d+1] += np.diag(rot_coefs)
+        # 
+        # f = -WQ.T.dot(y_ng)
+        # # adding regularization term
+        # f[1:d+1,0:d] -= np.diag(rot_coefs)
+        # f = np.c_[f, lambda_linear_term(K_bn_lambda, tau_bd, lambda_bd)]
+        # 
+        # if ret_factorization:
+        #     theta, (N, z) = solve_eqp1(H, f, A, ret_factorization=True)
+        # else:
+        #     theta = solve_eqp1(H, f, A)
     else:
         lambda_term = lambda_linear_term(K_bn_lambda, tau_bd, lambda_bd)
         bend_coefs = np.ones(d) * bend_coef if np.isscalar(bend_coef) else bend_coef
@@ -219,7 +289,6 @@ def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret
         z = np.empty((n,d))
         for i in range(d):
             WQ = wt_n[:,i][:,None] * Q
-            import pdb; pdb.set_trace()
             QWQ = Q.T.dot(WQ)
             H = QWQ
             H[d+1:,d+1:] += bend_coefs[i] * K_nn
@@ -241,8 +310,37 @@ def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret
         return theta, (N, z)
     return theta
 
+def get_feedback_linear_term(K, x_na, lamb, tau_bd, nu_bd):
+    """
+    Returns a matrix that covers the dual linear terms
+    """
+    import pdb; pdb.set_trace()
+    num_pc_points, d = x_na.shape
+    num_traj_points = tau_bd.shape[0]
+    dual_var = np.vstack((lamb, tau_bd))
+    total_points = dual_var.shape[0]
+
+    ### A and B are messed up!!
+    # for A term in tps (this is most likely not correct)
+    A_term_pc = lamb.T.dot(K[:num_pc_points,:])
+    A_term_traj = nu_bd.T.dot(K[num_pc_points:,:]) 
+    # A_term = np.hstack((A_term_pc, A_term_traj))
+    A_term = A_term_pc + A_term_traj
+
+    # for B term in tps
+    b_term_pc = lamb.T.dot(x_na)
+    b_term_traj = nu_bd.T.dot(tau_bd)
+    # B_term = np.hstack((b_term_pc, b_term_traj))
+    B_term = b_term_pc + b_term_traj
+
+    # for C term in tps
+    c_term = dual_var.T.dot(np.ones((total_points, 1)))
+    return np.c_[c_term, B_term, A_term].T
+
+
 def lambda_linear_term(K_bn, tau_bd, lambda_bd):
     # n = x_nd.shape[0]
+    import pdb; pdb.set_trace()
     b, d = lambda_bd.shape
     lambda_bd = lambda_bd.reshape(b, d)
     tau_bd = tau_bd.reshape(b, d)
