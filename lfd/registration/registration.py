@@ -68,7 +68,7 @@ class TpsRpmBijRegistration(Registration):
     
     @staticmethod
     def get_objective2(x_nd, y_md, f, g, corr_nm, rad):
-        r"""Returns the following 10 objectives:
+        """Returns the following 10 objectives:
         
             - :math:`\frac{1}{n} \sum_{i=1}^n \sum_{j=1}^m m_{ij} ||y_j - f(x_i)||_2^2`
             - :math:`\lambda Tr(A_f^\top K A_f)`
