@@ -67,6 +67,34 @@ class XmlSimulationObject(SimulationObject):
     def __repr__(self):
         return "XmlSimulationObject(%s, dynamic=%r)" % (self.xml, self.dynamic)
 
+class BoxRobotSimulationObject(XmlSimulationObject):
+    def __init__(self, name, translation, extents, dynamic=True):
+        xml = """
+        <Robot name="boxbot">
+          <KinBody name="%s">
+            <Body type="%s" name="base">
+              <Translation>%f %f %f</Translation>
+              <Geom type="box">
+                <extents>%f %f %f</extents>
+              </Geom>
+            </Body>
+          </KinBody>
+        </Robot>
+        """ % (name, 'dynamic' if dynamic else 'static', translation[0], translation[1], translation[2], extents[0], extents[1], extents[2])
+        super(BoxRobotSimulationObject, self).__init__(xml, dynamic=dynamic)
+        self.name = name
+        self.translation = translation
+        self.extents = extents
+    
+    def _get_constructor_info(self):
+        args = [self.name, self.translation, self.extents]
+        kwargs = {"dynamic":self.dynamic}
+        return (type(self).__name__, type(self).__module__), args, kwargs
+    
+    def __repr__(self):
+        return "RobotBoxSimulationObject(%s, %s, %s, dynamic=%r)" % (self.name, self.translation, self.extents, self.dynamic)
+
+
 class BoxSimulationObject(XmlSimulationObject):
     def __init__(self, name, translation, extents, dynamic=True):
         xml = """
