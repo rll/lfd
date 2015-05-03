@@ -4,7 +4,7 @@ from __future__ import division
 import numpy as np
 
 from lfd.environment.simulation import DynamicSimulationRobotWorld
-from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject
+from lfd.environment.simulation_object import XmlSimulationObject, BoxSimulationObject, BoxRobotSimulationObject
 from lfd.environment import environment
 from lfd.environment import sim_util
 from lfd.demonstration.demonstration import Demonstration, DemonstrationRobot
@@ -49,10 +49,10 @@ def create_trajectory(env, robot, save_trajectory = False):
     """ Create demonstration trajectory for the robot """
     robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
     robot_T = robot_kinbody.GetTransform()
-    # time_steps1 = 25 
-    # time_steps2 = 10
-    time_steps1 = 5 
-    time_steps2 = 2 
+    time_steps1 = 25 
+    time_steps2 = 10
+    # time_steps1 = 5 
+    # time_steps2 = 2 
     total_steps = time_steps1 + time_steps2
 
     # Let trajectory be a set of poses of the robot (3 degress of freedom)
@@ -195,8 +195,9 @@ def main():
     sim_objs.append(BoxSimulationObject("table", k*[table_x, table_y, table_z], k*[table_width, table_width, table_thickness], dynamic=False))
     sim_objs.append(BoxSimulationObject("obstruction1", k*[obstruction1_x, obstruction1_y, obstruction1_z], k*[obstruction1_length, obstruction1_width, obstruction1_height], dynamic=False)) 
     sim_objs.append(BoxSimulationObject("obstruction2", k*[obstruction2_x, obstruction2_y, obstruction2_z], k*[obstruction2_length, obstruction2_width, obstruction2_height], dynamic=False)) 
-
-    robot = BoxSimulationObject("robot", k*[robot_x, robot_y, robot_z], k*[robot_length, robot_width, robot_height], dynamic=True)
+    # import pdb; pdb.set_trace()
+    robot = BoxRobotSimulationObject("robot", k*[robot_x, robot_y, robot_z], k*[robot_length, robot_width, robot_height], dynamic=False)
+    # robot = BoxSimulationObject("robot", k*[robot_x, robot_y, robot_z], k*[robot_length, robot_width, robot_height], dynamic=True)
     sim_objs.append(robot)
 
     # initialize simulation world and environment
@@ -216,14 +217,15 @@ def main():
     # demo = get_demo()
 
     # create test robot
-    test_robot = BoxSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=True)
+    test_robot = BoxRobotSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=True)
     sim.add_objects([test_robot])
+    import pdb; pdb.set_trace()
     color_robot([test_robot], [0, 0, 1])
     sim.viewer.Idle()
     test_scene_state = get_scene_state(env, test_robot)
 
     reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env)
-    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, plotting=True)
+    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, timestep_dist = 5, plotting=True)
 
     # env.execute_augmented_trajectory(test_aug_traj)
 
