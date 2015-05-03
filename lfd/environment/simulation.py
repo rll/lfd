@@ -47,7 +47,9 @@ class StaticSimulation(object):
             else:
                 self.sim_objs.remove(obj_to_remove)
                 obj_to_remove.remove_from_env()
-        if self.robot and self.robot not in self.env.GetRobots():
+        if self.robot.GetName() == "boxbot":
+            self.robot = None
+        elif self.robot and self.robot not in self.env.GetRobots():
             raise NotImplementedError("Behavior for removing robots has not been defined")
         if consider_finger_collisions:
             self._exclude_gripper_finger_collisions()
@@ -112,7 +114,7 @@ class StaticSimulation(object):
         self.viewer.SetCameraManipulatorMatrix(np.asarray(camera_matrix))
 
     def _exclude_gripper_finger_collisions(self):
-        if not self.robot:
+        if not self.robot or self.robot.GetName() == "boxbot":
             return
         cc = trajoptpy.GetCollisionChecker(self.env)
         for lr in 'lr':
@@ -128,7 +130,7 @@ class StaticSimulation(object):
                             cc.ExcludeCollisionPair(finger_link, link)
 
     def _include_gripper_finger_collisions(self):
-        if not self.robot:
+        if not self.robot or self.robot.GetName() == "boxbot":
             return
         cc = trajoptpy.GetCollisionChecker(self.env)
         for lr in 'lr':
