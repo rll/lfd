@@ -109,7 +109,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         return (x, y, theta)
 
     # @profile
-    def transfer(self, demo, test_robot, test_scene_state, callback=None, plotting=False):
+    def transfer(self, demo, test_robot, test_scene_state, timestep_dist=5, callback=None, plotting=False):
         """
         Trajectory transfer of demonstrations using dual decomposition incorporating feedback
         """
@@ -124,6 +124,13 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
         dim = 2
 
+        # How many time steps of all the demos to actually use (0, timestep_dist, 2*timestep_dist, ...)
+        num_time_steps = len(demo_pc_seq)
+        assert type(timestep_dist) == int
+        time_step_indices = np.arange(0, num_time_steps, timestep_dist)
+        demo_pc_seq = demo_pc_seq[time_step_indices]
+        # demo_traj = demo_traj[time_step_indices]
+
         # dual variable for sequence of point clouds
         points_per_pc = len(demo_pc_seq[0])
         num_time_steps = len(demo_pc_seq)
@@ -135,7 +142,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         demo_pc = demo_pc[:,:dim]
 
         # convert trajectory to points 
-        demo_traj_pts = demo_pc_seq #self.traj_to_points() # simple case: (TODO) implement the complicated version
+        demo_traj_pts = demo_pc_seq[:,:,:] #self.traj_to_points() # simple case: (TODO) implement the complicated version
 
         # dual variable for sequence of trajectories
         points_per_traj = len(demo_traj_pts[0])
@@ -152,6 +159,59 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         rot_coef = np.array([0.0001, 0.0001])
         wt_n = None # unused for now
         theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
+
+        ### initialize thin plate spline stuff
+        f = tps.ThinPlateSpline(dim)
+        f.bend_coef = bend_coef
+        f.rot_coef = rot_coef
+        f.theta = theta
+
+
+        ####### Figure out trajopt call ##########
+        start_fixed = True
+        if start_fixed:
+            pass # do something
+        n_steps = demo_traj.shape[0]
+        manip_name = "base"
+
+        request = {
+            "basic_info": {
+                "n_steps": n_steps,
+                "manip_name": manip_name,
+                "start_fixed": start_fixed
+            },
+            "costs": [
+            { 
+                "type": "joint_vel",
+                "params": {"coeffs": [self.gamma/(n_steps - 1)]}
+            },
+            ],
+            "constraints" : [
+            ],
+        }
+
+        penalty_coeffs = [3000]
+        dist_pen = [0.025]
+        if self.use_collision_cost:
+            ## append collision cost
+            requests["costs"].append(
+                {
+                    "type": "collision",
+                    "params": {
+                        "continuous" : True,
+                        "coeffs" : penalty_coeffs, 
+                        "dist_pen" : dist_pen
+                    }
+                })
+
+        
+        ##### To be implemented #####
+        ############### Update Dual variables ###############
+
+
+
+    
+        
 
 
         # ignore point matching for now
