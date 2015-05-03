@@ -85,7 +85,6 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     min .5 tr(x'Hx) + tr(f'x)
     s.t. Ax = 0
     """    
-    import pdb; pdb.set_trace()
     n_vars = H.shape[0]
     assert H.shape[1] == n_vars
     assert f.shape[0] == n_vars
@@ -314,7 +313,6 @@ def get_feedback_linear_term(K, x_na, lamb, tau_bd, nu_bd):
     """
     Returns a matrix that covers the dual linear terms
     """
-    import pdb; pdb.set_trace()
     num_pc_points, d = x_na.shape
     num_traj_points = tau_bd.shape[0]
     dual_var = np.vstack((lamb, tau_bd))
