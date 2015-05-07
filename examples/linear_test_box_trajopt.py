@@ -34,6 +34,10 @@ def get_object_limits(obj):
 
 def get_rel_pts(rave_robot):
     from itertools import product
+    t = openravepy.matrixFromPose([1, 0, 0, 0, 0, 0, 0])
+    old_t = rave_robot.GetTransform()
+    rave_robot.SetTransform(t)
+
     min_x, max_x, min_y, max_y, z = get_object_limits(rave_robot)
     all_y_points = np.linspace(min_y, max_y, num = 2, endpoint=True)
     all_x_points = np.linspace(min_x, max_x, num = 2, endpoint=True)
@@ -41,6 +45,8 @@ def get_rel_pts(rave_robot):
     all_z_points.fill(0)
     rel_pts = np.array(list(product(all_x_points, all_y_points)))
     rel_pts = np.hstack((rel_pts, all_z_points))
+
+    rave_robot.SetTransform(old_t)
     return rel_pts
 
 def get_scene_state(env, robot, num_x_points, num_y_points):
@@ -112,7 +118,7 @@ def plot_clouds(env, pc_seq):
         env.sim.viewer.Step()
         raw_input("Look at pc")
 
-def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 3, num_y_points = 12, plot=False):
+def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 12, num_y_points = 3, plot=False):
     """
     returns a sequence point clouds, n x k x 3 matrix
     (each pointcloud contains k points)
@@ -233,7 +239,6 @@ def main():
     robot_height = 0.008
     robot_x = table_x + table_width * 0.50
     robot_y = table_y + table_width * 0.75 + robot_width 
-    # robot_z = table_z + table_thickness + robot_height
     # robot_z = table_z + table_thickness + robot_height
     robot_z = 0
 
