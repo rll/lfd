@@ -99,6 +99,7 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     # x = Nz
     # then problem becomes unconstrained minimization .5 z'N'HNz + z'N'f
     # N'HNz + N'f = 0
+    # import pdb; pdb.set_trace()
     L = N.T.dot(H.dot(N))
     R = -N.T.dot(f)
     z = np.linalg.solve(L, R)
@@ -236,7 +237,7 @@ def tps_fit_feedback(x_na, y_ng, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
         # solving for parameters c, B, A
         theta[:,i] = solve_eqp1(H, f, R) 
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     return theta
     
     
@@ -315,7 +316,7 @@ def get_feedback_linear_term(K, x_na, lamb, tau_bd, nu_bd):
     """
     num_pc_points, d = x_na.shape
     num_traj_points = tau_bd.shape[0]
-    dual_var = np.vstack((lamb, tau_bd))
+    dual_var = np.vstack((lamb, nu_bd))
     total_points = dual_var.shape[0]
 
     ### A and B are messed up!!
@@ -413,6 +414,12 @@ class ThinPlateSpline(Transformation):
         self.bend_coef = bend_coef
         self.rot_coef = rot_coef
         self.wt_n = wt_n
+
+    def update_theta(self, theta):
+        d = 2
+        self.trans_g = theta[0]
+        self.lin_ag = theta[1:d+1]
+        self.w_ng = theta[d+1:]
     
     def transform_points(self, x_ma):
         y_ng = tps_eval(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
