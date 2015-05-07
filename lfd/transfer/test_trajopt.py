@@ -25,7 +25,20 @@ def base_pose_to_mat(traj, z):
         result[i,:,:] = mat
     return result
 
-
+def mat_to_base_pose(traj):
+    """
+    Untested
+    """
+    result = np.zeroes((len(traj), 3))
+    for i in range(len(traj)):
+        mat = traj[i]
+        pose = openravepy.poseFromMatrix(mat)
+        x = pose[4]
+        y = pose[5]
+        rot = openravepy.axisAngleFromRotationMatrix(mat)[2]
+        result[i,:] = np.array([x, y, rot])
+    return result
+        
 def plan_trajopt(env, robot, target_pose, plotting=False):
     """
     Trajectory transfer of demonstrations using dual decomposition incorporating feedback
