@@ -15,6 +15,7 @@ from lfd.transfer.registration_transfer_feedback import FeedbackRegistrationAndT
 from lfd.transfer.registration_transfer import UnifiedRegistrationAndTrajectoryTransferer
 from move_rope import create_augmented_traj, create_rope
 from lfd.transfer.test_trajopt import plan_trajopt
+from lfd.transfer.linear_test_trajopt import plan_trajopt_test_linear
 import openravepy
 
 def color_robot(cyl_sim_objs, color=[1, 0, 0]):
