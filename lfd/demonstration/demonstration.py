@@ -26,7 +26,7 @@ class Demonstration(object):
 
 
 class DemonstrationRobot(object):
-    def __init__(self, name, scene_states, traj):
+    def __init__(self, name, scene_states, traj, rel_pts_traj_seq):
         """Inits DemonstrationRobot
         A class for storing demonstration for the simplified robot
         
@@ -39,6 +39,7 @@ class DemonstrationRobot(object):
         self.name = name
         self.scene_states = scene_states
         self.traj = traj
+        self.rel_pts_traj_seq = rel_pts_traj_seq
     
     def __repr__(self):
         return "%s(%s, %s, %s)" % (self.__class__.__name__, self.name, self.scene_state.__repr__(), self.aug_traj.__repr__())
