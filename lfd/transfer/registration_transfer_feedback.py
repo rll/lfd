@@ -142,7 +142,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         demo_pc = demo_pc[:,:dim]
 
         # convert trajectory to points 
-        demo_traj_pts = demo_pc_seq[:,:,:] #self.traj_to_points() # simple case: (TODO) implement the complicated version
+        rel_pts_traj_seq = demo.rel_pts_traj_seq
+        demo_traj_pts = rel_pts_traj_seq[:,:10,:] #self.traj_to_points() # simple case: (TODO) implement the complicated version
 
         # dual variable for sequence of trajectories
         points_per_traj = len(demo_traj_pts[0])

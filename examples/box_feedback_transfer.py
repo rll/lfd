@@ -11,7 +11,8 @@ from lfd.demonstration.demonstration import Demonstration, DemonstrationRobot
 from lfd.registration.registration import TpsRpmRegistrationFactory
 from lfd.registration.plotting_openrave import registration_plot_cb
 from lfd.transfer.transfer import FingerTrajectoryTransferer
-from lfd.transfer.registration_transfer_feedback import FeedbackRegistrationAndTrajectoryTransferer
+# from lfd.transfer.registration_transfer_feedback import FeedbackRegistrationAndTrajectoryTransferer
+from lfd.transfer.feedback_combined import FeedbackRegistrationAndTrajectoryTransferer
 from lfd.transfer.registration_transfer import UnifiedRegistrationAndTrajectoryTransferer
 from move_rope import create_augmented_traj, create_rope
 import openravepy
@@ -30,12 +31,30 @@ def get_object_limits(obj):
 
     return min_x, max_x, min_y, max_y, z
 
-def get_scene_state(env, robot):
+def get_rel_pts(rave_robot):
+    """ Buggy"""
+    from itertools import product
+    t = openravepy.matrixFromPose([1, 0, 0, 0, 0, 0, 0])
+    old_t = rave_robot.GetTransform()
+    rave_robot.SetTransform(t)
+
+    min_x, max_x, min_y, max_y, z = get_object_limits(rave_robot)
+    all_y_points = np.linspace(min_y, max_y, num = 2, endpoint=True)
+    all_x_points = np.linspace(min_x, max_x, num = 2, endpoint=True)
+    all_z_points = np.empty((4, 1))
+    all_z_points.fill(0)
+    rel_pts = np.array(list(product(all_x_points, all_y_points)))
+    rel_pts = np.hstack((rel_pts, all_z_points))
+
+    rave_robot.SetTransform(old_t)
+    return rel_pts
+
+def get_scene_state(env, robot, num_x_points, num_y_points):
     robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
     from itertools import product
     min_x, max_x, min_y, max_y, z = get_object_limits(robot_kinbody)
-    y_points = 3
-    x_points = 12 
+    y_points = num_y_points 
+    x_points = num_x_points 
     total_points = x_points * y_points
     all_y_points = np.linspace(min_y, max_y, num = y_points, endpoint=True)
     all_x_points = np.linspace(min_x, max_x, num = x_points, endpoint=True)
@@ -99,13 +118,13 @@ def plot_clouds(env, pc_seq):
         env.sim.viewer.Step()
         raw_input("Look at pc")
 
-def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 3, num_y_points = 12, plot=False):
+def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 12, num_y_points = 3, plot=False):
     """
     returns a sequence point clouds, n x k x 3 matrix
     (each pointcloud contains k points)
     """
     # sample points from the robot (initial pc)
-    init_pc = get_scene_state(env, robot)
+    init_pc = get_scene_state(env, robot, num_x_points, num_y_points)
 
     init_t = robot_kinbody.GetTransform()
     y_points = num_y_points
@@ -131,6 +150,31 @@ def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 3, num
         plot_clouds(env, pc_seq)
     return pc_seq
 
+def get_target_pose(env, robot, go_through_hole=False):
+    rave_robot = env.sim.env.GetRobots()[0]
+    robot_T = rave_robot.GetTransform()
+    x, y, z, _ = robot_T[:,3]
+    r = abs(0 - x)
+    
+    target_x = 0
+    target_y = y - r
+    
+    if go_through_hole:
+        # import pdb; pdb.set_trace()
+        target_y = y - 0.15 * 2
+
+    target_pose = openravepy.matrixFromAxisAngle([0, 0, np.pi/2])
+    target_pose[0, 3] = target_x
+    target_pose[1, 3] = target_y
+    target_pose[2, 3] = z
+
+    # rave_robot.SetTransform(target_pose)
+    # env.sim.viewer.Step()
+    # raw_input("! look at target")
+    # import pdb; pdb.set_trace()
+
+    return target_pose
+    
 
 def create_demo(env, robot):
     """ Create a demonstration example for the robot """
@@ -141,11 +185,14 @@ def create_demo(env, robot):
     # env.execute_robot_trajectory(robot_kinbody, trajectory)
 
     ### generate sequence of pointcloud from trajectory
-    # pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=False)
-    pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=True)
+    pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=False)
+    # pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=True)
 
+    ### generate sequence of rel_pts trajectory
+    rel_pts_pc_seq = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, num_x_points = 2, num_y_points = 2, plot=False)
+    # rel_pts_pc_seq = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, num_x_points = 2, num_y_points = 2, plot=True)
 
-    demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory)
+    demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory, rel_pts_pc_seq)
     return demo
 
 def color_robot(cyl_sim_objs, color=[1, 0, 0]):
@@ -161,7 +208,8 @@ def main():
     # define simulation objects
     sim_objs = []
     table_width = 0.25 #0.85
-    table_thickness = 0.05
+    # table_thickness = 0.05
+    table_thickness = 0
     table_x = 0
     table_y = 0
     table_z = 0
@@ -173,14 +221,16 @@ def main():
     obstruction1_height = 0.03
     obstruction1_x = obstruction1_length + hole_size / 2
     obstruction1_y = 0
-    obstruction1_z = table_thickness + obstruction1_height
+    # obstruction1_z = table_thickness + obstruction1_height
+    obstruction1_z = 0
 
     obstruction2_length = obstruction1_length
     obstruction2_width = 0.01
     obstruction2_height = obstruction1_height
     obstruction2_x = -(obstruction2_length + hole_size / 2)
     obstruction2_y = 0
-    obstruction2_z = table_thickness + obstruction2_height
+    # obstruction2_z = table_thickness + obstruction2_height
+    obstruction2_z = 0
 
     # on the bottom right corner. a 2D robot with three dimensions of freedom
     robot_length = 0.030
@@ -188,14 +238,14 @@ def main():
     robot_height = 0.008
     robot_x = table_x + table_width * 0.50
     robot_y = table_y + table_width * 0.75 + robot_width 
-    robot_z = table_z + table_thickness + robot_height
+    # robot_z = table_z + table_thickness + robot_height
+    robot_z = 0
 
     k = 10
 
-    sim_objs.append(BoxSimulationObject("table", k*[table_x, table_y, table_z], k*[table_width, table_width, table_thickness], dynamic=False))
+    # sim_objs.append(BoxSimulationObject("table", k*[table_x, table_y, table_z], k*[table_width, table_width, table_thickness], dynamic=False))
     sim_objs.append(BoxSimulationObject("obstruction1", k*[obstruction1_x, obstruction1_y, obstruction1_z], k*[obstruction1_length, obstruction1_width, obstruction1_height], dynamic=False)) 
     sim_objs.append(BoxSimulationObject("obstruction2", k*[obstruction2_x, obstruction2_y, obstruction2_z], k*[obstruction2_length, obstruction2_width, obstruction2_height], dynamic=False)) 
-    # import pdb; pdb.set_trace()
     robot = BoxRobotSimulationObject("robot", k*[robot_x, robot_y, robot_z], k*[robot_length, robot_width, robot_height], dynamic=False)
     # robot = BoxSimulationObject("robot", k*[robot_x, robot_y, robot_z], k*[robot_length, robot_width, robot_height], dynamic=True)
     sim_objs.append(robot)
@@ -208,6 +258,7 @@ def main():
     # env = environment.LfdEnvironment(sim, sim, downsample_size=0.025)
     env = environment.FeedbackEnvironment(sim, sim)
 
+    sim.viewer.Idle()
     # create demo for the demo robot
     demo = create_demo(env, robot)
     # remove demo robot from the scene
@@ -217,15 +268,17 @@ def main():
     # demo = get_demo()
 
     # create test robot
-    test_robot = BoxRobotSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=True)
+    test_robot = BoxRobotSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=False)
     sim.add_objects([test_robot])
-    import pdb; pdb.set_trace()
     color_robot([test_robot], [0, 0, 1])
-    sim.viewer.Idle()
-    test_scene_state = get_scene_state(env, test_robot)
+    test_scene_state = get_scene_state(env, test_robot, 12, 3)
+
+    target_pose = get_target_pose(env, test_robot, go_through_hole=True)
+    rave_robot = env.sim.env.GetRobots()[0]
+    rel_pts = get_rel_pts(rave_robot)
 
     reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env)
-    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, timestep_dist = 5, plotting=True)
+    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, rel_pts, target_pose=target_pose, timestep_dist = 5, plotting=True)
 
     # env.execute_augmented_trajectory(test_aug_traj)
 
