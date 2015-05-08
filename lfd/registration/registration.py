@@ -221,8 +221,10 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             prior_prob_nm = self.prior_fn(demo.scene_state, test_scene_state)
         else:
             prior_prob_nm = None
-        x_nd = demo.scene_state.cloud[:,:3]
-        y_md = test_scene_state.cloud[:,:3]
+        # x_nd = demo.scene_state.cloud[:,:3]
+        # y_md = test_scene_state.cloud[:,:3]
+        x_nd = demo
+        y_md = demo
         
         f, corr = tps.tps_rpm(x_nd, y_md, 
                               f_solver_factory=self.f_solver_factory, 
