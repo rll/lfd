@@ -319,10 +319,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         tau_bd = tau_bd[:,:dim]
 
         # Set up Trajopt parameters
-        # lin_traj_coeff = 10000.0 # (TODO) tune this
-        # lin_pc_coeff = 10000.0
-        lin_traj_coeff = 1000.0 # (TODO) tune this
-        lin_pc_coeff = 1000.0
+        lin_traj_coeff = 10000.0 # (TODO) tune this
+        lin_pc_coeff = 10000.0
         # penalty_coeffs = [7000]
         # penalty_coeffs = [7000]
         # dist_pen = [0.020]
@@ -336,7 +334,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         #### tps diff threhold
         pc_diff_threshold = pow(10, -3) * lamb.size
         #### maximum number of iterations
-        max_iter = 10
+        max_iter = 5
 
         # set base link
         base_link = "base"
@@ -345,7 +343,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # Setting parameters for tps 
         # bend_coef = 0.0001
         # rot_coef = np.array([0.0001, 0.0001])
-        bend_coef = 100000000
+        # bend_coef = 100000000 ## working
+        bend_coef = 100000
         rot_coef = np.array([0.001, 0.001])
         wt_n = None # unused for now
         # theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
@@ -374,9 +373,14 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # raw_input("initial: look at f(tau_bd)")
         # plot_clouds(self.env, pc)
         curr_traj = mat_to_base_pose(demo_traj)
+        eta = 0.00000001
         
         
         for iteration in range(max_iter):
+            eta = eta / 1.5
+            lin_traj_coeff = lin_traj_coeff / 10
+            lin_pc_coeff = lin_pc_coeff / 10
+
             ########################################################
             ################### Set up tps #########################
             ########################################################
@@ -528,7 +532,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                 ###########################################
                 ########## Update dual variables ##########
                 ###########################################
-                eta = 0.00000001
+                # eta = 0.000001
                 # lamb = lamb + eta * pc_diff
                 # nu_bd = nu_bd + eta * traj_diff
                 lamb = lamb - eta * pc_diff

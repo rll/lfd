@@ -268,6 +268,8 @@ def main():
     # demo = get_demo()
 
     # create test robot
+    robot_length += 0.010
+    robot_width += 0.001
     test_robot = BoxRobotSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=False)
     sim.add_objects([test_robot])
     color_robot([test_robot], [0, 0, 1])
@@ -276,8 +278,10 @@ def main():
     target_pose = get_target_pose(env, test_robot, go_through_hole=True)
     rave_robot = env.sim.env.GetRobots()[0]
     rel_pts = get_rel_pts(rave_robot)
+    
+    reg_factory = TpsRpmRegistrationFactory()
 
-    reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env)
+    reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env, reg_factory)
     trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, rel_pts, target_pose=target_pose, timestep_dist = 5, plotting=True)
 
     # env.execute_augmented_trajectory(test_aug_traj)
