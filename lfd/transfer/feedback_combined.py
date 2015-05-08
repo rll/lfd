@@ -21,7 +21,6 @@ def base_pose_to_mat(traj, z):
         q = openravepy.quatFromAxisAngle((0, 0, rot)).tolist()
         pos = [x, y, z]
         mat = openravepy.matrixFromPose(q + pos)
-        # import pdb; pdb.set_trace()
         result[i,:,:] = mat
     return result
 
@@ -46,12 +45,60 @@ def plot_traj(env, traj):
     """
     pass
 
+def plot_robot(env, traj_rel_pts, comment="look at robot trajectory plot", show_now=True, colors=[0, 1, 0]):
+    handles = []
+    if len(traj_rel_pts.shape) == 3:
+        traj_rel_pts = traj_rel_pts.reshape((traj_rel_pts.shape[0] * traj_rel_pts.shape[1], 3))
+    for i in range(len(traj_rel_pts) // 4):
+        index = 4 * i
+        lines = traj_rel_pts[index:index+2]
+        lines = np.vstack((lines, traj_rel_pts[index + 3]))
+        lines = np.vstack((lines, traj_rel_pts[index + 2]))
+        lines = np.vstack((lines, traj_rel_pts[index]))
+        handles.append(env.sim.env.drawlinestrip(points=lines, linewidth=1.0, colors = np.array(colors)))
+        # handles.append(env.sim.env.drawlinestrip(points=np.array(((-0.5, -0.5, 0), (-1.25, 0.5, 0), (-1.5, 1, 0))), linewidth=3.0, colors=np.array(((0, 1, 0), (0, 0, 1), (1, 0, 0)))))
+    if show_now:
+        env.sim.viewer.Step()
+        raw_input(comment)
+    else:
+        return handles
+
+def plot_sampled_demo_pc(env, sampled_pc, comment="look at demo sampled pc", show_now = True, colors=[0, 1, 1]):
+    handles = []
+    handles.append(env.sim.env.plot3(points = sampled_pc, pointsize=3, colors=colors, drawstyle=1))
+    if show_now:
+        env.sim.viewer.Step()
+        raw_input(comment)
+    else:
+        return handles
+
 def plot_clouds(env, pc_seqs):
     # for pc in pc_seqs:
     handles = []
     handles.append(env.sim.env.plot3(points = pc_seqs, pointsize=3, colors=[0, 1, 0], drawstyle=1))
     env.sim.viewer.Step()
     raw_input("look at pc")
+
+def draw_two_pc(env, new_pc, f_on_old_pc):
+    ##### New: red 
+    ##### Old: green
+    new_pc = np.hstack((new_pc, np.zeros((len(new_pc), 1))))
+    f_on_old_pc = np.hstack((f_on_old_pc, np.zeros((len(f_on_old_pc), 1))))
+    handle1 = plot_sampled_demo_pc(env, new_pc, show_now=False, colors = [1, 0, 0])
+    handle2 = plot_sampled_demo_pc(env, f_on_old_pc, show_now=False, colors = [0, 1, 0])
+    env.sim.viewer.Step()
+    raw_input("Compare two point clouds")
+
+def draw_two_traj(env, new_traj, f_on_old_traj):
+    ##### New: red 
+    ##### Old: green
+    new_traj = np.hstack((new_traj, np.zeros((len(new_traj), 1))))
+    f_on_old_traj = np.hstack((f_on_old_traj, np.zeros((len(f_on_old_traj), 1))))
+    handle1 = plot_robot(env, new_traj, show_now=False, colors=[1, 0, 0])
+    handle2 = plot_robot(env, f_on_old_traj, show_now=False, colors=[0, 1, 0])
+    env.sim.viewer.Step()
+    raw_input("Compare two trajectories")
+
 
 def get_new_pc_from_traj(env, orig_pc_at_origin, time_step_indices, traj_mat, plot=False):
     """
@@ -132,6 +179,7 @@ def get_center_points_from_rel_pts(traj_pts):
 
 class FeedbackRegistrationAndTrajectoryTransferer(object):
     def __init__(self, env, 
+                 registration_factory,
                  alpha=settings.ALPHA, # alpha not used.
                  beta_pos=settings.BETA_POS,
                  gamma=settings.GAMMA,
@@ -143,6 +191,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         self.beta_pos = beta_pos
         self.gamma = gamma # joint velocity constant
         self.use_collision_cost = use_collision_cost
+        self.registration_factory = registration_factory
 
     def traj_to_points(self, traj):
         """Convert trajectory to points"""
@@ -229,6 +278,9 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         demo_traj = demo.traj
         rel_pts_traj_seq = demo.rel_pts_traj_seq
 
+        #### Plot demonstration robot trajectory ####
+        plot_robot(self.env, rel_pts_traj_seq)
+
         #### Get orig pc for use later ####
         orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, demo_pc_seq[0])
 
@@ -249,6 +301,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
         # convert the dimension of point cloud
         demo_pc = demo_pc_seq.reshape((total_pc_points, 3)) 
+        plot_sampled_demo_pc(self.env, demo_pc)
         demo_pc = demo_pc[:,:dim]
 
         # convert trajectory to points 
@@ -283,30 +336,37 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         #### tps diff threhold
         pc_diff_threshold = pow(10, -3) * lamb.size
         #### maximum number of iterations
-        max_iter = 5
+        max_iter = 10
 
+        # set base link
+        base_link = "base"
 
         ############## TPS #################
         # Setting parameters for tps 
-        bend_coef = 0.0001
-        rot_coef = np.array([0.0001, 0.0001])
+        # bend_coef = 0.0001
+        # rot_coef = np.array([0.0001, 0.0001])
+        bend_coef = 100000000
+        rot_coef = np.array([0.001, 0.001])
         wt_n = None # unused for now
         # theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
 
-        ### initialize thin plate spline stuff
-        f = tps.ThinPlateSpline(dim)
-        f.bend_coef = bend_coef
-        f.rot_coef = rot_coef
-        # f.theta = theta
-        x_na = np.vstack((demo_pc, tau_bd))
-        base_link = "base"
-        theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
-        import pdb; pdb.set_trace()
-        f.x_na = x_na
-        f.update_theta(theta)
+        #### initialize thin plate spline with the objective function C_TPS{f}
+        first_demo_scene = demo_pc_seq[0]
+        first_demo_scene = first_demo_scene[:,:2]
+        test_scene_state = test_scene_state[:,:2]
+        reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None)
+        f = reg.f
 
-        ######## Initialize trajectory with current f ###########   
-        #### what am i doing??
+        ### initialize thin plate spline stuff
+        f_later = tps.ThinPlateSpline(dim)
+        f_later.bend_coef = bend_coef
+        f_later.rot_coef = rot_coef
+        x_na = np.vstack((demo_pc, tau_bd))
+        f_later.x_na = x_na
+        # theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
+        # f.update_theta(theta)
+
+        # ######## Initialize trajectory with current f ###########   
         # f_on_demo_traj_rel_pts = f.transform_points(tau_bd)# (TODO)
         # center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
         # import pdb; pdb.set_trace()
@@ -316,7 +376,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         curr_traj = mat_to_base_pose(demo_traj)
         
         
-        for i in range(max_iter):
+        for iteration in range(max_iter):
             ########################################################
             ################### Set up tps #########################
             ########################################################
@@ -329,11 +389,11 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
             ########################################################
 
             ######## Initialize trajectory with current f ##########
-            f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
-            center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
-            # pc = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
-            pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
-            plot_clouds(self.env, pc)
+            # if i == 0:
+            # f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
+            # center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
+            # pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
+            # plot_clouds(self.env, pc)
 
             costs = []
             constraints = []
@@ -435,58 +495,62 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
             ######
             # plot_traj(env.sim.env, traj_mat)
+            if iteration >= 1:
 
-            ##### Compute difference in tps (pointcloud) #####
-            orig_pc = demo.scene_states[0]
-            new_pc_sampled = get_new_pc_from_traj(self.env, orig_pc_at_origin, time_step_indices, traj_mat, plot=False)
-            f_on_demo_pc_sampled = f.transform_points(demo_pc)
-            assert new_pc_sampled.shape == f_on_demo_pc_sampled.shape
-            pc_diff = new_pc_sampled - f_on_demo_pc_sampled
-            abs_pc_diff = sum(sum(abs(pc_diff)))
-            print "Abs difference between sampled pointcloud: ", abs_pc_diff
+                ##### Compute difference in tps (pointcloud) #####
+                orig_pc = demo.scene_states[0]
+                new_pc_sampled = get_new_pc_from_traj(self.env, orig_pc_at_origin, time_step_indices, traj_mat, plot=False)
+                f_on_demo_pc_sampled = f.transform_points(demo_pc)
+                assert new_pc_sampled.shape == f_on_demo_pc_sampled.shape
+                pc_diff = new_pc_sampled - f_on_demo_pc_sampled
+                draw_two_pc(self.env, new_pc_sampled, f_on_demo_pc_sampled)
+                abs_pc_diff = sum(sum(abs(pc_diff)))
+                print "Abs difference between sampled pointcloud: ", abs_pc_diff
 
- 
-            ##### Compute difference in trajectory #####
-            # (TODO) figure out if use relative points or normal points here
-            new_traj_pts = get_traj_pts(self.env, rel_pts, traj_mat, plot=True)
-            f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
-            assert new_traj_pts.shape == f_on_demo_traj_rel_pts.shape
-            traj_diff = new_traj_pts - f_on_demo_traj_rel_pts
-            abs_traj_diff = sum(sum(abs(traj_diff)))
-            print "Abs difference between traj pts: ", abs_traj_diff
-            
-            raw_input("inspect new variables and trajectories")
-            import pdb; pdb.set_trace()
+     
+                ##### Compute difference in trajectory #####
+                # (TODO) figure out if use relative points or normal points here
+                new_traj_pts = get_traj_pts(self.env, rel_pts, traj_mat, plot=False)
+                f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
+                assert new_traj_pts.shape == f_on_demo_traj_rel_pts.shape
+                traj_diff = new_traj_pts - f_on_demo_traj_rel_pts
+                draw_two_traj(self.env, new_traj_pts, f_on_demo_traj_rel_pts)
+                abs_traj_diff = sum(sum(abs(traj_diff)))
+                print "Abs difference between traj pts: ", abs_traj_diff
+                
+                raw_input("inspect new variables and trajectories")
 
 
-            ##### Compute cost and print ######
-            if abs_traj_diff < traj_diff_threshold and abs_pc_diff < pc_diff_threshold:
-                break
+                ##### Compute cost and print ######
+                if abs_traj_diff < traj_diff_threshold and abs_pc_diff < pc_diff_threshold:
+                    break
 
-            ###########################################
-            ########## Update dual variables ##########
-            ###########################################
-            eta = 0.0001
-            lamb = lamb - eta * pc_diff
-            nu_bd = nu_bd - eta * traj_diff
-            # lamb = lamb + eta * pc_diff
-            # nu_bd = nu_bd + eta * traj_diff
+                ###########################################
+                ########## Update dual variables ##########
+                ###########################################
+                eta = 0.00000001
+                # lamb = lamb + eta * pc_diff
+                # nu_bd = nu_bd + eta * traj_diff
+                lamb = lamb - eta * pc_diff
+                nu_bd = nu_bd - eta * traj_diff
 
             ########################################################
             ################### Set up tps #########################
             ########################################################
             ## TODO ##
             theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
+            print("============ theta ============")
+            print(theta)
+            f = f_later
             f.update_theta(theta)
             
             ######## get transfered trajectory from current f ######## 
             f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
-            center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
+            f_on_demo_traj_rel_pts = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
+            # center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
             # init_traj = convert_traj_rel_pts_to_init_traj(f_on_demo_traj_rel_pts)
-            # pc = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
-            pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
-            raw_input("look at f(tau_bd)")
-            plot_clouds(self.env, pc)
+            # pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
+            plot_robot(self.env, f_on_demo_traj_rel_pts, "look at f(tau_bd)")
 
 
         return traj_mat
