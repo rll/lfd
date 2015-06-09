@@ -12,6 +12,10 @@ from lfd.registration import registration, tps
 from lfd.transfer import transfer
 from lfd.transfer import planning
 from lfd.util import util
+from lfd.registration.plotting_openrave import registration_plot_cb_2d
+
+### Global variables
+plot_grid=True
 
 def base_pose_to_mat(traj, z):
     result = np.zeros((len(traj), 4, 4))
@@ -360,6 +364,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         f_later.rot_coef = rot_coef
         x_na = np.vstack((demo_pc, tau_bd))
         f_later.x_na = x_na
+        # x_nd = np.hstack((x_na, np.ones((len(x_na), 1)))) 
 
         # Used for trajectory optimization
         curr_traj = mat_to_base_pose(demo_traj)
@@ -529,6 +534,10 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
             print(theta)
             f = f_later
             f.update_theta(theta)
+            
+            if plot_grid:
+                y_md = np.vstack((new_pc_sampled, new_traj_pts))
+                registration_plot_cb_2d(self.env.sim, x_na, y_md, f, z)
             
             ######## get transfered trajectory from current f ######## 
             f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
