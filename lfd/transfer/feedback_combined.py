@@ -351,7 +351,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         first_demo_scene = demo_pc_seq[0]
         first_demo_scene = first_demo_scene[:,:2]
         test_scene_state = test_scene_state[:,:2]
-        reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None) # (TODO) Clean up code in this function
+        reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None, using_feedback=True) # (TODO) Clean up code in this function
         f = reg.f
 
         ### initialize thin plate spline stuff
