@@ -11,8 +11,9 @@ from lfd.demonstration.demonstration import Demonstration, DemonstrationRobot
 from lfd.registration.registration import TpsRpmRegistrationFactory
 from lfd.registration.plotting_openrave import registration_plot_cb
 from lfd.transfer.transfer import FingerTrajectoryTransferer
-# from lfd.transfer.registration_transfer_feedback import FeedbackRegistrationAndTrajectoryTransferer
+# Uncomment the following when using non-test version
 from lfd.transfer.feedback_combined import FeedbackRegistrationAndTrajectoryTransferer
+# from lfd.transfer.test_feedback_on_f import FeedbackRegistrationAndTrajectoryTransferer
 from lfd.transfer.registration_transfer import UnifiedRegistrationAndTrajectoryTransferer
 from move_rope import create_augmented_traj, create_rope
 import openravepy
@@ -268,10 +269,11 @@ def main():
     # demo = get_demo()
 
     # create test robot
-    robot_length += 0.010
-    robot_width += 0.001
+    robot_length += 0.020
+    # robot_width += 0.002
     test_robot = BoxRobotSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=False)
     sim.add_objects([test_robot])
+    rave_robot = env.sim.env.GetRobots()[0]
     color_robot([test_robot], [0, 0, 1])
     test_scene_state = get_scene_state(env, test_robot, 12, 3)
 
@@ -283,8 +285,8 @@ def main():
 
     reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env, reg_factory)
     trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, rel_pts, target_pose=target_pose, timestep_dist = 5, plotting=True)
+    env.execute_robot_trajectory(rave_robot, trajectory)
 
-    # env.execute_augmented_trajectory(test_aug_traj)
 
 if __name__ == '__main__':
     main()
