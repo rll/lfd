@@ -323,11 +323,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # lin_pc_coeff = 10000.0
         lin_traj_coeff = 1000 # (TODO) tune this
         lin_pc_coeff = 1000
-        # penalty_coeffs = [7000]
-        # penalty_coeffs = [7000]
-        # dist_pen = [0.020]
-        penalty_coeffs = [10000]
-        dist_pen = [0.020]
+        penalty_coeffs = [7000]
+        dist_pen = [0.005]
         nu_bd_trajopt_zeros = np.zeros((len(nu_bd), 1))
         lamb_trajopt_zeros = np.zeros((len(lamb), 1))
 
@@ -424,6 +421,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
             # penalty_coeffs = [3000]
             # dist_pen = [0.025]
+            penalty_coeffs[0] = penalty_coeffs[0] * 1.05
             request['costs'] += [{
                 "type": "collision",
                 "name": "col",
