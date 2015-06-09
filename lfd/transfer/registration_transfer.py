@@ -447,7 +447,6 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
         max_iter = 10
         cur_traj = init_traj
         del handles
-
         ########### MAIN LOOP ###############
         for itr in range(max_iter):
           handles = []
@@ -475,6 +474,7 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
             finger_link_name = flr2finger_link_name[finger_lr]
             finger_rel_pts = flr2finger_rel_pts[finger_lr]
             if start_fixed and traj_step==0: continue
+            # import pdb; pdb.set_trace()
             request_i["costs"].append(
                  {"type":"rel_pts_lambdas",
                    "params":{
@@ -509,9 +509,11 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
                               "pos_coeffs":[np.sqrt(beta_pos/n_steps)]*4,
                             }
                           })
+          # import pdb; pdb.set_trace()
           s_traj = json.dumps(request_i);
           with openravepy.RobotStateSaver(robot):
             with util.suppress_stdout():
+                # import pdb; pdb.set_trace()
                 prob = trajoptpy.ConstructProblem(s_traj, robot.GetEnv())
                 if plotting:
                   viewer = trajoptpy.GetViewer(robot.GetEnv())
@@ -543,6 +545,8 @@ class DecompRegistrationAndTrajectoryTransferer(RegistrationAndTrajectoryTransfe
           # update f, look at how this is updated ("tps fit decomp")
           theta, (N, z) = tps.tps_fit_decomp(x_na, y_ng, bend_coefs, rot_coefs, wt_n, tau_bd, -nu_bd, ret_factorization=True)
           f.update(x_na, y_ng, bend_coefs, rot_coefs, wt_n, theta, N=N, z=z)
+          raw_input("look at theta")
+          print(theta)
 
           lr = 'r'
 
