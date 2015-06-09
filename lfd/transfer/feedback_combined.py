@@ -319,8 +319,10 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         tau_bd = tau_bd[:,:dim]
 
         # Set up Trajopt parameters
-        lin_traj_coeff = 10000.0 # (TODO) tune this
-        lin_pc_coeff = 10000.0
+        # lin_traj_coeff = 10000.0 # (TODO) tune this
+        # lin_pc_coeff = 10000.0
+        lin_traj_coeff = 1000 # (TODO) tune this
+        lin_pc_coeff = 1000
         # penalty_coeffs = [7000]
         # penalty_coeffs = [7000]
         # dist_pen = [0.020]
@@ -334,7 +336,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         #### tps diff threhold
         pc_diff_threshold = pow(10, -3) * lamb.size
         #### maximum number of iterations
-        max_iter = 5
+        max_iter = 20
 
         # set base link
         base_link = "base"
@@ -347,13 +349,12 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         bend_coef = 100000
         rot_coef = np.array([0.001, 0.001])
         wt_n = None # unused for now
-        # theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
 
         #### initialize thin plate spline with the objective function C_TPS{f}
         first_demo_scene = demo_pc_seq[0]
         first_demo_scene = first_demo_scene[:,:2]
         test_scene_state = test_scene_state[:,:2]
-        reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None)
+        reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None) # (TODO) Clean up code in this function
         f = reg.f
 
         ### initialize thin plate spline stuff
@@ -362,42 +363,25 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         f_later.rot_coef = rot_coef
         x_na = np.vstack((demo_pc, tau_bd))
         f_later.x_na = x_na
-        # theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
-        # f.update_theta(theta)
 
-        # ######## Initialize trajectory with current f ###########   
-        # f_on_demo_traj_rel_pts = f.transform_points(tau_bd)# (TODO)
-        # center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
-        # import pdb; pdb.set_trace()
-        # pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
-        # raw_input("initial: look at f(tau_bd)")
-        # plot_clouds(self.env, pc)
+        # Used for trajectory optimization
         curr_traj = mat_to_base_pose(demo_traj)
-        eta = 0.00000001
+        # eta = 0.00000001
+        eta = pow(10, -14)
         
         
         for iteration in range(max_iter):
-            eta = eta / 1.5
-            lin_traj_coeff = lin_traj_coeff / 10
-            lin_pc_coeff = lin_pc_coeff / 10
+            # lin_traj_coeff = lin_traj_coeff / 10
+            # lin_pc_coeff = lin_pc_coeff / 10
+            # lin_traj_coeff = lin_traj_coeff / 2
+            # lin_pc_coeff = lin_pc_coeff / 2
+            lin_traj_coeff = lin_traj_coeff / 1.5
+            lin_pc_coeff = lin_pc_coeff / 1.5
 
-            ########################################################
-            ################### Set up tps #########################
-            ########################################################
-            ## TODO ##
-            # theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
-            # f.theta = theta
             
             ########################################################
             ################### Set up trajopt #####################
             ########################################################
-
-            ######## Initialize trajectory with current f ##########
-            # if i == 0:
-            # f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
-            # center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
-            # pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
-            # plot_clouds(self.env, pc)
 
             costs = []
             constraints = []
@@ -431,6 +415,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                     "type": "stationary"
                 }
             }
+            # In the first iteration, initialize trajectory as demo trajectory. Later, initialize trajectory
+            # as previous trajectory
             request["init_info"] = {
                 "type": "given_traj",
                 "data": curr_traj.tolist()
@@ -480,7 +466,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                             "timestep": timestep,
                             # "num_pc_considered": num_pc_considered,
                             # "pc_time_steps": time_step_indices,
-                            "pos_coeffs":[lin_pc_coeff / num_pc_considered] * 4
+                            "pos_coeffs":[lin_pc_coeff / num_pc_considered] * points_per_pc
                         }
                     }
                 )
@@ -499,8 +485,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
             ######
             # plot_traj(env.sim.env, traj_mat)
-            if iteration >= 1:
-
+            if iteration >= 0:
                 ##### Compute difference in tps (pointcloud) #####
                 orig_pc = demo.scene_states[0]
                 new_pc_sampled = get_new_pc_from_traj(self.env, orig_pc_at_origin, time_step_indices, traj_mat, plot=False)
@@ -525,21 +510,20 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                 raw_input("inspect new variables and trajectories")
 
 
-                ##### Compute cost and print ######
+                ##### Break if the difference is under threshold ######
                 if abs_traj_diff < traj_diff_threshold and abs_pc_diff < pc_diff_threshold:
                     break
 
                 ###########################################
                 ########## Update dual variables ##########
                 ###########################################
-                # eta = 0.000001
-                # lamb = lamb + eta * pc_diff
-                # nu_bd = nu_bd + eta * traj_diff
-                lamb = lamb - eta * pc_diff
+                # substraction order looks correct
+                eta = eta / 1.2
+                lamb = lamb - eta * pc_diff 
                 nu_bd = nu_bd - eta * traj_diff
 
             ########################################################
-            ################### Set up tps #########################
+            ################### Solve tps problem ##################
             ########################################################
             ## TODO ##
             theta = tps.tps_fit_feedback(demo_pc, None, bend_coef, rot_coef, wt_n, lamb, nu_bd, tau_bd)
@@ -551,10 +535,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
             ######## get transfered trajectory from current f ######## 
             f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
             f_on_demo_traj_rel_pts = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
-            # center_pts = get_center_points_from_rel_pts(f_on_demo_traj_rel_pts)
-            # init_traj = convert_traj_rel_pts_to_init_traj(f_on_demo_traj_rel_pts)
-            # pc = np.hstack((center_pts, np.zeros((len(center_pts), 1))))
-            plot_robot(self.env, f_on_demo_traj_rel_pts, "look at f(tau_bd)")
+            plot_robot(self.env, f_on_demo_traj_rel_pts, "look at f(tau_bd) after solving for new f")
 
 
         return traj_mat
