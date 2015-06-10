@@ -18,6 +18,11 @@ from lfd.transfer.registration_transfer import UnifiedRegistrationAndTrajectoryT
 from move_rope import create_augmented_traj, create_rope
 import openravepy
 
+###### Paremeters 
+# (TODO): create a file consisting of all parameters setting
+INCLUDE_OBSTRUCTION = False
+INCLUDE_TIMESTEPS = True
+
 def get_object_limits(obj):
     """Returns the bounding box of an object.
     Returns: min_x, max_x, min_y, max_y, z
@@ -316,7 +321,7 @@ def main():
 
     sim.viewer.Idle()
     # create demo for the demo robot
-    demo = create_demo(env, robot, include_obstruction=False)
+    demo = create_demo(env, robot, include_obstruction=INCLUDE_OBSTRUCTION)
     # remove demo robot from the scene
     env.sim.remove_objects([robot])
 
@@ -330,7 +335,7 @@ def main():
     sim.add_objects([test_robot])
     rave_robot = env.sim.env.GetRobots()[0]
     color_robot([test_robot], [0, 0, 1])
-    test_scene_state = get_scene_state(env, test_robot, 12, 3, include_obstruction=False)
+    test_scene_state = get_scene_state(env, test_robot, 12, 3, include_obstruction=INCLUDE_OBSTRUCTION)
 
     target_pose = get_target_pose(env, test_robot, go_through_hole=True)
     rave_robot = env.sim.env.GetRobots()[0]
