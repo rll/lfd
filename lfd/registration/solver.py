@@ -163,7 +163,7 @@ class GpuTpsSolverFactory(TpsSolverFactory):
         n_cnts = A.shape[0]    
         _u,_s,_vh = np.linalg.svd(A.T)
         N = _u[:,n_cnts:].copy()
-        NR = (N[1:1+d,:].T * rot_coef[:2]).copy() # so that it is c-contiguous
+        NR = (N[1:1+d,:].T * rot_coef[:d]).copy() # so that it is c-contiguous
         # NR = (N[1:1+d,:].T * rot_coef).copy() # so that it is c-contiguous
         
         N_gpu = gpuarray.to_gpu(N[1+d:,:])

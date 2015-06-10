@@ -83,9 +83,12 @@ def plot_clouds(env, pc_seqs):
     env.sim.viewer.Step()
     raw_input("look at pc")
 
-def draw_two_pc(env, new_pc, f_on_old_pc):
+def draw_two_pc(env, new_pc, f_on_old_pc, include_timesteps=False):
     ##### New: red 
     ##### Old: green
+    if include_timesteps:
+        new_pc = new_pc[:,:2]
+        f_on_old_pc = f_on_old_pc[:,:2]
     new_pc = np.hstack((new_pc, np.zeros((len(new_pc), 1))))
     f_on_old_pc = np.hstack((f_on_old_pc, np.zeros((len(f_on_old_pc), 1))))
     handle1 = plot_sampled_demo_pc(env, new_pc, show_now=False, colors = [1, 0, 0])
@@ -93,9 +96,12 @@ def draw_two_pc(env, new_pc, f_on_old_pc):
     env.sim.viewer.Step()
     raw_input("Compare two point clouds")
 
-def draw_two_traj(env, new_traj, f_on_old_traj):
+def draw_two_traj(env, new_traj, f_on_old_traj, include_timesteps=False):
     ##### New: red 
     ##### Old: green
+    if include_timesteps:
+        new_traj = new_traj[:,:2]
+        f_on_old_traj = f_on_old_traj[:,:2]
     new_traj = np.hstack((new_traj, np.zeros((len(new_traj), 1))))
     f_on_old_traj = np.hstack((f_on_old_traj, np.zeros((len(f_on_old_traj), 1))))
     handle1 = plot_robot(env, new_traj, show_now=False, colors=[1, 0, 0])
@@ -272,7 +278,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         return (x, y, theta)
 
     # @profile
-    def transfer(self, demo, test_robot, test_scene_state, rel_pts, target_pose=None, timestep_dist=5, callback=None, plotting=False):
+    def transfer(self, demo, test_robot, test_scene_state, rel_pts, target_pose=None, timestep_dist=5, callback=None, plotting=False, include_timesteps = False):
         """
         Trajectory transfer of demonstrations using dual decomposition incorporating feedback
         """
@@ -315,12 +321,23 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         points_per_pc = len(demo_pc_seq[0])
         pc_num_time_steps = len(demo_pc_seq)
         total_pc_points = points_per_pc * pc_num_time_steps
-        lamb = np.zeros((total_pc_points, dim)) # dual variable for point cloud points 
+        if not include_timesteps:
+            lamb = np.zeros((total_pc_points, dim)) # dual variable for point cloud points 
+        else:
+            lamb = np.zeros((total_pc_points, dim + 1)) # dual variable for point cloud points 
 
         # convert the dimension of point cloud
         demo_pc = demo_pc_seq.reshape((total_pc_points, 3)) 
         plot_sampled_demo_pc(self.env, demo_pc)
         demo_pc = demo_pc[:,:dim]
+        time_steps_for_pc = None
+        if include_timesteps:
+            time_steps_for_pc = np.zeros(len(demo_pc))
+            for i in range(len(time_step_indices)):
+                index = i * points_per_pc
+                time_steps_for_pc[index:index + points_per_pc] = np.ones(points_per_pc) * time_step_indices[i]
+            time_steps_for_pc = time_steps_for_pc.reshape((len(time_steps_for_pc), 1))
+            demo_pc = np.hstack((demo_pc, time_steps_for_pc))
 
         # convert trajectory to points 
         rel_pts_traj_seq = demo.rel_pts_traj_seq
@@ -330,11 +347,22 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         points_per_traj = len(demo_traj_pts[0])
         assert len(demo_traj_pts) == total_num_time_steps
         total_traj_points = points_per_traj * total_num_time_steps
-        nu_bd = np.zeros((total_traj_points, dim))
+        if not include_timesteps:
+            nu_bd = np.zeros((total_traj_points, dim))
+        else:
+            nu_bd = np.zeros((total_traj_points, dim+1))
        
         # convert the dimension of tau_bd
         tau_bd = demo_traj_pts.reshape((total_traj_points, 3))
         tau_bd = tau_bd[:,:dim]
+        time_steps_for_traj = None
+        if include_timesteps:
+            time_steps_for_traj = np.zeros(total_num_time_steps * points_per_traj)
+            for i in range(total_num_time_steps):
+                index = i * points_per_traj
+                time_steps_for_traj[index:index + points_per_traj] = np.ones(points_per_traj) * i
+            time_steps_for_traj = time_steps_for_traj.reshape((len(time_steps_for_traj), 1))
+            tau_bd = np.hstack((tau_bd, time_steps_for_traj))
 
         # Set up Trajopt parameters
         # lin_traj_coeff = 10000.0 # (TODO) tune this
@@ -362,18 +390,30 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # rot_coef = np.array([0.0001, 0.0001])
         # bend_coef = 100000000 ## working
         bend_coef = 100000
-        rot_coef = np.array([0.001, 0.001])
+        if not include_timesteps:
+            rot_coef = np.array([0.001, 0.001])
+        else:
+            rot_coef = np.array([0.001, 0.001, 0.001])
+
         wt_n = None # unused for now
 
         #### initialize thin plate spline with the objective function C_TPS{f}
         first_demo_scene = demo_pc_seq[0]
         first_demo_scene = first_demo_scene[:,:2]
         test_scene_state = test_scene_state[:,:2]
+        # if include_timesteps:
+        #     first_demo_scene = np.hstack((first_demo_scene, np.zeros((len(first_demo_scene), 1))))
+        #     test_scene_state = np.hstack((test_scene_state, np.zeros((len(test_scene_state), 1))))
+        # import pdb; pdb.set_trace()
         reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None, using_feedback=True) # (TODO) Clean up code in this function
         f = reg.f
 
         ### initialize thin plate spline stuff
-        f_later = tps.ThinPlateSpline(dim)
+        if not include_timesteps:
+            f_later = tps.ThinPlateSpline(dim)
+        else:
+            f_later = tps.ThinPlateSpline(dim+1)
+
         f_later.bend_coef = bend_coef
         f_later.rot_coef = rot_coef
         x_na = np.vstack((demo_pc, tau_bd))
@@ -383,7 +423,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # Used for trajectory optimization
         curr_traj = mat_to_base_pose(demo_traj)
         # eta = 0.00000001
-        eta = pow(10, -14)
+        # eta = pow(10, -14)
+        eta = pow(10, -12) # for the one with timesteps
         
         
         for iteration in range(max_iter):
@@ -502,14 +543,16 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
             ######
             # plot_traj(env.sim.env, traj_mat)
-            if iteration >= 0:
+            if iteration >= 1:
                 ##### Compute difference in tps (pointcloud) #####
                 orig_pc = demo.scene_states[0]
                 new_pc_sampled = get_new_pc_from_traj(self.env, orig_pc_at_origin, time_step_indices, traj_mat, obstruction_pc = obstruction_pc, plot=False)
+                if include_timesteps:
+                    new_pc_sampled = np.hstack((new_pc_sampled, time_steps_for_pc))
                 f_on_demo_pc_sampled = f.transform_points(demo_pc)
                 assert new_pc_sampled.shape == f_on_demo_pc_sampled.shape
                 pc_diff = new_pc_sampled - f_on_demo_pc_sampled
-                draw_two_pc(self.env, new_pc_sampled, f_on_demo_pc_sampled)
+                draw_two_pc(self.env, new_pc_sampled, f_on_demo_pc_sampled, include_timesteps=include_timesteps)
                 abs_pc_diff = sum(sum(abs(pc_diff)))
                 print "Abs difference between sampled pointcloud: ", abs_pc_diff
 
@@ -517,10 +560,13 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                 ##### Compute difference in trajectory #####
                 # (TODO) figure out if use relative points or normal points here
                 new_traj_pts = get_traj_pts(self.env, rel_pts, traj_mat, plot=False)
+                if include_timesteps:
+                    new_traj_pts = np.hstack((new_traj_pts, time_steps_for_traj))
+                    
                 f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
                 assert new_traj_pts.shape == f_on_demo_traj_rel_pts.shape
                 traj_diff = new_traj_pts - f_on_demo_traj_rel_pts
-                draw_two_traj(self.env, new_traj_pts, f_on_demo_traj_rel_pts)
+                draw_two_traj(self.env, new_traj_pts, f_on_demo_traj_rel_pts, include_timesteps=include_timesteps)
                 abs_traj_diff = sum(sum(abs(traj_diff)))
                 print "Abs difference between traj pts: ", abs_traj_diff
                 
@@ -549,13 +595,17 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
             f = f_later
             f.update_theta(theta)
             
-            if plot_grid:
-                y_md = np.vstack((new_pc_sampled, new_traj_pts))
-                registration_plot_cb_2d(self.env.sim, x_na, y_md, f, z)
+            # if plot_grid:
+            #     y_md = np.vstack((new_pc_sampled, new_traj_pts))
+            #     registration_plot_cb_2d(self.env.sim, x_na, y_md, f, z)
             
             ######## get transfered trajectory from current f ######## 
+            raw_input("calling transform points")
             f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
-            f_on_demo_traj_rel_pts = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
+            if not include_timesteps:
+                f_on_demo_traj_rel_pts = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
+            else:
+                f_on_demo_traj_rel_pts[:,2] = np.zeros(len(f_on_demo_traj_rel_pts))
             plot_robot(self.env, f_on_demo_traj_rel_pts, "look at f(tau_bd) after solving for new f")
 
 

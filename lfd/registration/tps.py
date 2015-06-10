@@ -195,9 +195,9 @@ def tps_fit_feedback(x_na, y_ng, bend_coef, rot_coefs, wt_n, lamb, nu_bd, tau_bd
     if wt_n is None: wt_n = np.ones(len(x_na))
 
     #### Solving tps with 2 dimension
-    assert x_na.shape[1] == 2
-    assert nu_bd.shape[1] == 2
-    assert tau_bd.shape[1] == 2
+    # assert x_na.shape[1] == 2
+    # assert nu_bd.shape[1] == 2
+    # assert tau_bd.shape[1] == 2
     assert x_na.shape == lamb.shape
     assert tau_bd.shape == nu_bd.shape
 
@@ -366,6 +366,7 @@ class ThinPlateSpline(Transformation):
         self.bend_coef = 0
         self.rot_coef = 0
         self.wt_n = np.zeros(0)
+        self.d = d
     
     @staticmethod
     def create_from_optimization(x_na, y_ng, bend_coef, rot_coef, wt_n):
@@ -413,10 +414,9 @@ class ThinPlateSpline(Transformation):
         self.wt_n = wt_n
 
     def update_theta(self, theta):
-        d = 2
         self.trans_g = theta[0]
-        self.lin_ag = theta[1:d+1]
-        self.w_ng = theta[d+1:]
+        self.lin_ag = theta[1:self.d+1]
+        self.w_ng = theta[self.d+1:]
     
     def transform_points(self, x_ma):
         y_ng = tps_eval(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
