@@ -226,7 +226,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
             y_md = test_scene_state.cloud[:,:3]
         else:
             x_nd = demo
-            y_md = demo
+            y_md = test_scene_state
         
         f, corr = tps.tps_rpm(x_nd, y_md, 
                               f_solver_factory=self.f_solver_factory, 

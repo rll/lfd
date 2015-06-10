@@ -266,6 +266,10 @@ def color_robot(cyl_sim_objs, color=[1, 0, 0]):
                     geom.SetDiffuseColor(color)
     
 def main():
+    ##### Don't support incorporating both obstruction pointcloud and time steps
+    if INCLUDE_OBSTRUCTION == True and INCLUDE_TIMESTEPS == True:
+        raise Exception("Does not support including obstrution pointcloud and timesteps at the same time")
+
     # define simulation objects
     sim_objs = []
     table_width = 0.25 #0.85
@@ -329,7 +333,7 @@ def main():
     # demo = get_demo()
 
     # create test robot
-    robot_length += 0.020
+    # robot_length += 0.020
     # robot_width += 0.002
     test_robot = BoxRobotSimulationObject("robot", [robot_x, robot_y, robot_z], [robot_length, robot_width, robot_height], dynamic=False)
     sim.add_objects([test_robot])
@@ -344,7 +348,7 @@ def main():
     reg_factory = TpsRpmRegistrationFactory()
 
     reg_and_traj_transferer = FeedbackRegistrationAndTrajectoryTransferer(env, reg_factory)
-    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, rel_pts, target_pose=target_pose, timestep_dist = 5, plotting=True)
+    trajectory = reg_and_traj_transferer.transfer(demo, test_robot, test_scene_state, rel_pts, target_pose=target_pose, timestep_dist = 5, plotting=True, include_timesteps=INCLUDE_TIMESTEPS)
     env.execute_robot_trajectory(rave_robot, trajectory)
 
 
