@@ -104,25 +104,34 @@ def draw_two_traj(env, new_traj, f_on_old_traj):
     raw_input("Compare two trajectories")
 
 
-def get_new_pc_from_traj(env, orig_pc_at_origin, time_step_indices, traj_mat, plot=False):
+def get_new_pc_from_traj(env, orig_pc_at_origin, time_step_indices, traj_mat, obstruction_pc=None, plot=False):
     """
     Given a trajectory, returns the pointcloud sequence 
     """
     traj = traj_mat[time_step_indices] ## timesteps that matters
-    pc_seq = np.zeros(((len(traj)), orig_pc_at_origin.shape[0], 3))
+    if obstruction_pc == None:
+        total_points_per_timestep = orig_pc_at_origin.shape[0]
+    else:
+        total_points_per_timestep = orig_pc_at_origin.shape[0] + len(obstruction_pc)
+    pc_seq = np.zeros(((len(traj)), total_points_per_timestep, 3))
+
     for i in range(len(traj)):
         transform_to_pc = traj[i]
         rotation = transform_to_pc[:3,:3]
         translation = transform_to_pc[:,3]
         translation = translation[:3].reshape(3, 1)
         apply_t = lambda x: np.asarray(np.dot(rotation, x.reshape(3, 1)) + translation[:3]).reshape(-1)
-        pc_seq[i,:,:] = np.array(map(apply_t, orig_pc_at_origin))
+        if obstruction_pc == None:
+            pc_seq[i,:,:] = np.array(map(apply_t, orig_pc_at_origin))
+        else:
+            pc_seq[i,:,:] = np.vstack((np.array(map(apply_t, orig_pc_at_origin)), obstruction_pc))
+
         if plot:
             plot_clouds(env, np.array(map(apply_t, orig_pc_at_origin)))
 
     # returns a two dimension pointcloud sequence
     pc_seq = pc_seq[:,:, :2]
-    final_pc_seq = pc_seq.reshape((len(time_step_indices) * len(orig_pc_at_origin), 2))
+    final_pc_seq = pc_seq.reshape((len(time_step_indices) * total_points_per_timestep, 2))
     return final_pc_seq
 
 def get_traj_pts(env, rel_pts, traj_mat, plot=False):
@@ -281,12 +290,17 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         demo_pc_seq = demo.scene_states
         demo_traj = demo.traj
         rel_pts_traj_seq = demo.rel_pts_traj_seq
+        obstruction_pc = demo.obstruction_pc
 
         #### Plot demonstration robot trajectory ####
         plot_robot(self.env, rel_pts_traj_seq)
 
         #### Get orig pc for use later ####
-        orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, demo_pc_seq[0])
+        if obstruction_pc == None:
+            orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, demo_pc_seq[0])
+        else:
+            length_of_orig_robot_pc = len(demo_pc_seq[0]) - len(obstruction_pc)
+            orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, demo_pc_seq[0][:length_of_orig_robot_pc])
 
         ### Comment out when no target pose is specified
         target_pose_7 = openravepy.poseFromMatrix(target_pose).tolist()
@@ -491,7 +505,7 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
             if iteration >= 0:
                 ##### Compute difference in tps (pointcloud) #####
                 orig_pc = demo.scene_states[0]
-                new_pc_sampled = get_new_pc_from_traj(self.env, orig_pc_at_origin, time_step_indices, traj_mat, plot=False)
+                new_pc_sampled = get_new_pc_from_traj(self.env, orig_pc_at_origin, time_step_indices, traj_mat, obstruction_pc = obstruction_pc, plot=False)
                 f_on_demo_pc_sampled = f.transform_points(demo_pc)
                 assert new_pc_sampled.shape == f_on_demo_pc_sampled.shape
                 pc_diff = new_pc_sampled - f_on_demo_pc_sampled

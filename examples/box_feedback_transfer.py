@@ -50,7 +50,37 @@ def get_rel_pts(rave_robot):
     rave_robot.SetTransform(old_t)
     return rel_pts
 
-def get_scene_state(env, robot, num_x_points, num_y_points):
+def get_object_pc(obj, num_x_points, num_y_points):
+    min_x, max_x, min_y, max_y, z = get_object_limits(obj)
+    from itertools import product
+    y_points = num_y_points 
+    x_points = num_x_points 
+    total_points = x_points * y_points
+    all_y_points = np.linspace(min_y, max_y, num = y_points, endpoint=True)
+    all_x_points = np.linspace(min_x, max_x, num = x_points, endpoint=True)
+    all_z_points = np.empty((total_points, 1))
+    all_z_points.fill(z)
+    obj_pc = np.array(list(product(all_x_points, all_y_points)))
+    obj_pc = np.hstack((obj_pc, all_z_points))
+    return obj_pc
+
+def get_all_obstructions_pc(env):
+    """
+    Returns the pointcloud for all the obstructions
+    """
+    bodies = env.sim.env.GetBodies() 
+    obstruction_pc = None
+    for body in bodies:
+        if "obstruction" in body.GetName():
+            curr_obj_pc = get_object_pc(body, 3, 3)
+            if obstruction_pc != None:
+                obstruction_pc = np.vstack((obstruction_pc, curr_obj_pc))
+            else:
+                obstruction_pc = curr_obj_pc
+    return obstruction_pc
+    
+
+def get_scene_state(env, robot, num_x_points, num_y_points, include_obstruction=False):
     robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
     from itertools import product
     min_x, max_x, min_y, max_y, z = get_object_limits(robot_kinbody)
@@ -63,6 +93,10 @@ def get_scene_state(env, robot, num_x_points, num_y_points):
     all_z_points.fill(z)
     init_pc = np.array(list(product(all_x_points, all_y_points)))
     init_pc = np.hstack((init_pc, all_z_points))
+    
+    if include_obstruction:
+        obstruction_pc = get_all_obstructions_pc(env)
+        init_pc = np.vstack((init_pc, obstruction_pc))
     return init_pc
 
 def create_trajectory(env, robot, save_trajectory = False):
@@ -119,13 +153,14 @@ def plot_clouds(env, pc_seq):
         env.sim.viewer.Step()
         raw_input("Look at pc")
 
-def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 12, num_y_points = 3, plot=False):
+def generate_pc_from_traj(env, robot, robot_kinbody, traj, obstruction_pc=None,num_x_points = 12, num_y_points = 3, plot=False):
+
     """
     returns a sequence point clouds, n x k x 3 matrix
     (each pointcloud contains k points)
     """
     # sample points from the robot (initial pc)
-    init_pc = get_scene_state(env, robot, num_x_points, num_y_points)
+    init_pc = get_scene_state(env, robot, num_x_points, num_y_points) 
 
     init_t = robot_kinbody.GetTransform()
     y_points = num_y_points
@@ -134,8 +169,12 @@ def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 12, nu
     min_x, max_x, min_y, max_y, z = get_object_limits(robot_kinbody)
 
     # generate pc from trajectory
-    pc_seq = np.empty(((len(traj)), total_points, 3))
-    pc_seq[0,:,:] = init_pc
+    if obstruction_pc == None:
+        pc_seq = np.empty(((len(traj)), total_points, 3))
+        pc_seq[0,:,:] = init_pc
+    else:
+        pc_seq = np.empty(((len(traj)), total_points + len(obstruction_pc), 3))
+        pc_seq[0,:,:] = np.vstack((init_pc, obstruction_pc))
     center_pt = np.array([(min_x + max_x) / 2, (min_y + max_y) / 2, z]).reshape(3, 1)
     for i in range(1, len(traj)):
         transform_to_pc = traj[i-1]
@@ -146,7 +185,11 @@ def generate_pc_from_traj(env, robot, robot_kinbody, traj, num_x_points = 12, nu
         translation = translation[:3].reshape(3, 1)
         # incorrect translation
         apply_t = lambda x: np.asarray((np.dot(rotation, x.reshape(3, 1) - center_pt)) + center_pt + translation[:3]).reshape(-1)
-        pc_seq[i,:,:] = np.array(map(apply_t, init_pc))
+        robot_pc = np.array(map(apply_t, init_pc))
+        if obstruction_pc == None:
+            pc_seq[i,:,:] = robot_pc
+        else:
+            pc_seq[i,:,:] = np.vstack((robot_pc, obstruction_pc))
     if plot:
         plot_clouds(env, pc_seq)
     return pc_seq
@@ -177,7 +220,7 @@ def get_target_pose(env, robot, go_through_hole=False):
     return target_pose
     
 
-def create_demo(env, robot):
+def create_demo(env, robot, include_obstruction=False):
     """ Create a demonstration example for the robot """
     robot_kinbody = robot.get_bullet_objects()[0].GetKinBody()
 
@@ -185,15 +228,27 @@ def create_demo(env, robot):
     trajectory = create_trajectory(env, robot, save_trajectory = True)
     # env.execute_robot_trajectory(robot_kinbody, trajectory)
 
+    ### Add obstruction pointcloud if include_obstruction is True
+    if include_obstruction:
+        obstruction_pc = get_all_obstructions_pc(env)
+    else:
+        obstruction_pc = None
+
     ### generate sequence of pointcloud from trajectory
-    pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=False)
+    pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, obstruction_pc, plot=False)
     # pc_seqs = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, plot=True)
 
     ### generate sequence of rel_pts trajectory
-    rel_pts_pc_seq = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, num_x_points = 2, num_y_points = 2, plot=False)
+    rel_pts_pc_seq = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, obstruction_pc=None, num_x_points = 2, num_y_points = 2, plot=False)
     # rel_pts_pc_seq = generate_pc_from_traj(env, robot, robot_kinbody, trajectory, num_x_points = 2, num_y_points = 2, plot=True)
 
-    demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory, rel_pts_pc_seq)
+                
+    # if not include_obstruction:
+    #     demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory, rel_pts_pc_seq)
+    # else:
+    #     demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory, rel_pts_pc_seq, obstruction_pc)
+
+    demo = DemonstrationRobot("robot_demo_1", pc_seqs, trajectory, rel_pts_pc_seq, obstruction_pc)
     return demo
 
 def color_robot(cyl_sim_objs, color=[1, 0, 0]):
@@ -261,7 +316,7 @@ def main():
 
     sim.viewer.Idle()
     # create demo for the demo robot
-    demo = create_demo(env, robot)
+    demo = create_demo(env, robot, include_obstruction=False)
     # remove demo robot from the scene
     env.sim.remove_objects([robot])
 
@@ -275,7 +330,7 @@ def main():
     sim.add_objects([test_robot])
     rave_robot = env.sim.env.GetRobots()[0]
     color_robot([test_robot], [0, 0, 1])
-    test_scene_state = get_scene_state(env, test_robot, 12, 3)
+    test_scene_state = get_scene_state(env, test_robot, 12, 3, include_obstruction=False)
 
     target_pose = get_target_pose(env, test_robot, go_through_hole=True)
     rave_robot = env.sim.env.GetRobots()[0]
