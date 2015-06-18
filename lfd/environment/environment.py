@@ -93,9 +93,8 @@ class FeedbackEnvironment(LfdEnvironment):
         with robot:
             for pose in trajectory:
                 robot.SetTransform(pose)
-                # self.sim._update_rave()
                 self.sim.viewer.Step()
-                import pdb; pdb.set_trace()
+                raw_input("!! ")
 
 class GroundTruthRopeLfdEnvironment(LfdEnvironment):
     def __init__(self, world, sim, upsample=0, upsample_rad=1, downsample_size=0):
