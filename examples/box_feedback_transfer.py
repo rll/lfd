@@ -16,8 +16,8 @@ from lfd.transfer.feedback_combined import FeedbackRegistrationAndTrajectoryTran
 # from lfd.transfer.test_feedback_on_f import FeedbackRegistrationAndTrajectoryTransferer
 from lfd.transfer.registration_transfer import UnifiedRegistrationAndTrajectoryTransferer
 import openravepy
-from example_utils import *
-from plotting_utils import *
+from lfd.util.example_utils import *
+from lfd.util.plotting_utils import *
 
 ###### Paremeters 
 # (TODO): create a file consisting of all parameters setting
