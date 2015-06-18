@@ -13,6 +13,7 @@ from lfd.transfer import transfer
 from lfd.transfer import planning
 from lfd.util import util
 from lfd.registration.plotting_openrave import registration_plot_cb_2d
+from lfd.collision_checker.collision_checker import CollisionChecker
 
 ### Global variables
 plot_grid=True
@@ -299,14 +300,15 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         obstruction_pc = demo.obstruction_pc
 
         #### Plot demonstration robot trajectory ####
-        plot_robot(self.env, rel_pts_traj_seq)
+        if plotting:
+            plot_robot(self.env, rel_pts_traj_seq)
 
         #### Get orig pc for use later ####
         if obstruction_pc == None:
-            orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, demo_pc_seq[0])
+            orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, test_scene_state)
         else:
             length_of_orig_robot_pc = len(demo_pc_seq[0]) - len(obstruction_pc)
-            orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, demo_pc_seq[0][:length_of_orig_robot_pc])
+            orig_pc_at_origin = get_orig_pc_at_origin(rave_robot, test_scene_state[:length_of_orig_robot_pc])
 
         ### Comment out when no target pose is specified
         target_pose_7 = openravepy.poseFromMatrix(target_pose).tolist()
@@ -328,7 +330,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
 
         # convert the dimension of point cloud
         demo_pc = demo_pc_seq.reshape((total_pc_points, 3)) 
-        plot_sampled_demo_pc(self.env, demo_pc)
+        if plotting:
+            plot_sampled_demo_pc(self.env, demo_pc)
         demo_pc = demo_pc[:,:dim]
         time_steps_for_pc = None
         if include_timesteps:
@@ -404,7 +407,6 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # if include_timesteps:
         #     first_demo_scene = np.hstack((first_demo_scene, np.zeros((len(first_demo_scene), 1))))
         #     test_scene_state = np.hstack((test_scene_state, np.zeros((len(test_scene_state), 1))))
-        # import pdb; pdb.set_trace()
         reg = self.registration_factory.register(first_demo_scene, test_scene_state, callback=None, using_feedback=True) # (TODO) Clean up code in this function
         f = reg.f
 
@@ -423,8 +425,12 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         # Used for trajectory optimization
         curr_traj = mat_to_base_pose(demo_traj)
         # eta = 0.00000001
+        if include_timesteps:
+            eta = pow(10, -12)
+        else:
+            eta = pow(10, -14)
         # eta = pow(10, -14)
-        eta = pow(10, -12) # for the one with timesteps
+        # eta = pow(10, -12) # for the one with timesteps
         
         
         for iteration in range(max_iter):
@@ -552,8 +558,13 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                 f_on_demo_pc_sampled = f.transform_points(demo_pc)
                 assert new_pc_sampled.shape == f_on_demo_pc_sampled.shape
                 pc_diff = new_pc_sampled - f_on_demo_pc_sampled
-                draw_two_pc(self.env, new_pc_sampled, f_on_demo_pc_sampled, include_timesteps=include_timesteps)
-                abs_pc_diff = sum(sum(abs(pc_diff)))
+                if plotting:
+                    draw_two_pc(self.env, new_pc_sampled, f_on_demo_pc_sampled, include_timesteps=include_timesteps)
+                if not include_timesteps:
+                    abs_pc_diff = sum(sum(abs(pc_diff)))
+                else:
+                    abs_pc_diff = sum(sum(abs(pc_diff[:,:2])))
+                    
                 print "Abs difference between sampled pointcloud: ", abs_pc_diff
 
      
@@ -566,11 +577,16 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                 f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
                 assert new_traj_pts.shape == f_on_demo_traj_rel_pts.shape
                 traj_diff = new_traj_pts - f_on_demo_traj_rel_pts
-                draw_two_traj(self.env, new_traj_pts, f_on_demo_traj_rel_pts, include_timesteps=include_timesteps)
-                abs_traj_diff = sum(sum(abs(traj_diff)))
+                if plotting:
+                    draw_two_traj(self.env, new_traj_pts, f_on_demo_traj_rel_pts, include_timesteps=include_timesteps)
+                if not include_timesteps:
+                    abs_traj_diff = sum(sum(abs(traj_diff)))
+                else:
+                    abs_traj_diff = sum(sum(abs(traj_diff[:,:2])))
+
                 print "Abs difference between traj pts: ", abs_traj_diff
                 
-                raw_input("inspect new variables and trajectories")
+                # raw_input("inspect new variables and trajectories")
 
 
                 ##### Break if the difference is under threshold ######
@@ -584,6 +600,8 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                 eta = eta / 1.2
                 lamb = lamb - eta * pc_diff 
                 nu_bd = nu_bd - eta * traj_diff
+
+
 
             ########################################################
             ################### Solve tps problem ##################
@@ -600,14 +618,24 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
             #     registration_plot_cb_2d(self.env.sim, x_na, y_md, f, z)
             
             ######## get transfered trajectory from current f ######## 
-            raw_input("calling transform points")
+            # raw_input("aalling transform points")
             f_on_demo_traj_rel_pts = f.transform_points(tau_bd) # (TODO)
             if not include_timesteps:
                 f_on_demo_traj_rel_pts = np.hstack((f_on_demo_traj_rel_pts, np.zeros((len(f_on_demo_traj_rel_pts), 1))))
             else:
                 f_on_demo_traj_rel_pts[:,2] = np.zeros(len(f_on_demo_traj_rel_pts))
-            plot_robot(self.env, f_on_demo_traj_rel_pts, "look at f(tau_bd) after solving for new f")
 
+            if plotting:
+                plot_robot(self.env, f_on_demo_traj_rel_pts, "look at f(tau_bd) after solving for new f")
+
+        ### Check if final trajectory is collision free
+        collision_checker = CollisionChecker(self.sim.env)
+        bodypart_traj = {}
+        bodypart_traj['base'] = curr_traj
+        collisions = collision_checker.get_traj_collisions(bodypart_traj, include_obj_world_col=False)
+        if collisions == set():
+            raw_input("Final trajectory is collision free")
+        else:
+            raw_input("Final trajectory is not collision free: {}".format(collisions))
 
         return traj_mat
-
