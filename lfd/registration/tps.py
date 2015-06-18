@@ -99,7 +99,6 @@ def solve_eqp1(H, f, A, ret_factorization=False):
     # x = Nz
     # then problem becomes unconstrained minimization .5 z'N'HNz + z'N'f
     # N'HNz + N'f = 0
-    # import pdb; pdb.set_trace()
     L = N.T.dot(H.dot(N))
     R = -N.T.dot(f)
     z = np.linalg.solve(L, R)
@@ -113,7 +112,6 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n, ret_factorization=False):
     """
     X_na: center of the basis function
     """
-    import pdb; pdb.set_trace()
 
     if wt_n is None: wt_n = np.ones(len(x_na))
     n,d = x_na.shape
@@ -240,8 +238,6 @@ def tps_fit_feedback(x_na, y_ng, bend_coef, rot_coefs, wt_n, lamb, nu_bd, tau_bd
     
     
 def tps_fit_decomp(x_na, y_ng, bend_coef, rot_coef, wt_n, tau_bd, lambda_bd, ret_factorization=False):
-    print("in tps fit decomp")
-    import pdb; pdb.set_trace()
     if wt_n is None: wt_n = np.ones(len(x_na))
     n,d = x_na.shape
     
