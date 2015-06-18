@@ -14,188 +14,11 @@ from lfd.transfer import planning
 from lfd.util import util
 from lfd.registration.plotting_openrave import registration_plot_cb_2d
 from lfd.collision_checker.collision_checker import CollisionChecker
+from lfd.util.example_utils import * # (TODO) Don't import everything
+from lfd.util.plotting_utils import *  # (TODO) Don't import everything
 
 ### Global variables
 plot_grid=True
-
-def base_pose_to_mat(traj, z):
-    result = np.zeros((len(traj), 4, 4))
-    for i in range(len(traj)):
-        pose = traj[i]
-        x, y, rot = pose
-        q = openravepy.quatFromAxisAngle((0, 0, rot)).tolist()
-        pos = [x, y, z]
-        mat = openravepy.matrixFromPose(q + pos)
-        result[i,:,:] = mat
-    return result
-
-def mat_to_base_pose(traj):
-    """
-    Untested
-    """
-    result = np.zeros((len(traj), 3))
-    for i in range(len(traj)):
-        mat = traj[i]
-        pose = openravepy.poseFromMatrix(mat)
-        x = pose[4]
-        y = pose[5]
-        rot = openravepy.axisAngleFromRotationMatrix(mat)[2]
-        result[i,:] = np.array([x, y, rot])
-    return result
-
-def plot_traj(env, traj):
-    """ 
-    param env - openrave environment
-    param traj - a list of pose (4x4 matrix)
-    """
-    pass
-
-def plot_robot(env, traj_rel_pts, comment="look at robot trajectory plot", show_now=True, colors=[0, 1, 0]):
-    handles = []
-    if len(traj_rel_pts.shape) == 3:
-        traj_rel_pts = traj_rel_pts.reshape((traj_rel_pts.shape[0] * traj_rel_pts.shape[1], 3))
-    for i in range(len(traj_rel_pts) // 4):
-        index = 4 * i
-        lines = traj_rel_pts[index:index+2]
-        lines = np.vstack((lines, traj_rel_pts[index + 3]))
-        lines = np.vstack((lines, traj_rel_pts[index + 2]))
-        lines = np.vstack((lines, traj_rel_pts[index]))
-        handles.append(env.sim.env.drawlinestrip(points=lines, linewidth=1.0, colors = np.array(colors)))
-        # handles.append(env.sim.env.drawlinestrip(points=np.array(((-0.5, -0.5, 0), (-1.25, 0.5, 0), (-1.5, 1, 0))), linewidth=3.0, colors=np.array(((0, 1, 0), (0, 0, 1), (1, 0, 0)))))
-    if show_now:
-        env.sim.viewer.Step()
-        raw_input(comment)
-    else:
-        return handles
-
-def plot_sampled_demo_pc(env, sampled_pc, comment="look at demo sampled pc", show_now = True, colors=[0, 1, 1]):
-    handles = []
-    handles.append(env.sim.env.plot3(points = sampled_pc, pointsize=3, colors=colors, drawstyle=1))
-    if show_now:
-        env.sim.viewer.Step()
-        raw_input(comment)
-    else:
-        return handles
-
-def plot_clouds(env, pc_seqs):
-    # for pc in pc_seqs:
-    handles = []
-    handles.append(env.sim.env.plot3(points = pc_seqs, pointsize=3, colors=[0, 1, 0], drawstyle=1))
-    env.sim.viewer.Step()
-    raw_input("look at pc")
-
-def draw_two_pc(env, new_pc, f_on_old_pc, include_timesteps=False):
-    ##### New: red 
-    ##### Old: green
-    if include_timesteps:
-        new_pc = new_pc[:,:2]
-        f_on_old_pc = f_on_old_pc[:,:2]
-    new_pc = np.hstack((new_pc, np.zeros((len(new_pc), 1))))
-    f_on_old_pc = np.hstack((f_on_old_pc, np.zeros((len(f_on_old_pc), 1))))
-    handle1 = plot_sampled_demo_pc(env, new_pc, show_now=False, colors = [1, 0, 0])
-    handle2 = plot_sampled_demo_pc(env, f_on_old_pc, show_now=False, colors = [0, 1, 0])
-    env.sim.viewer.Step()
-    raw_input("Compare two point clouds")
-
-def draw_two_traj(env, new_traj, f_on_old_traj, include_timesteps=False):
-    ##### New: red 
-    ##### Old: green
-    if include_timesteps:
-        new_traj = new_traj[:,:2]
-        f_on_old_traj = f_on_old_traj[:,:2]
-    new_traj = np.hstack((new_traj, np.zeros((len(new_traj), 1))))
-    f_on_old_traj = np.hstack((f_on_old_traj, np.zeros((len(f_on_old_traj), 1))))
-    handle1 = plot_robot(env, new_traj, show_now=False, colors=[1, 0, 0])
-    handle2 = plot_robot(env, f_on_old_traj, show_now=False, colors=[0, 1, 0])
-    env.sim.viewer.Step()
-    raw_input("Compare two trajectories")
-
-
-def get_new_pc_from_traj(env, orig_pc_at_origin, time_step_indices, traj_mat, obstruction_pc=None, plot=False):
-    """
-    Given a trajectory, returns the pointcloud sequence 
-    """
-    traj = traj_mat[time_step_indices] ## timesteps that matters
-    if obstruction_pc == None:
-        total_points_per_timestep = orig_pc_at_origin.shape[0]
-    else:
-        total_points_per_timestep = orig_pc_at_origin.shape[0] + len(obstruction_pc)
-    pc_seq = np.zeros(((len(traj)), total_points_per_timestep, 3))
-
-    for i in range(len(traj)):
-        transform_to_pc = traj[i]
-        rotation = transform_to_pc[:3,:3]
-        translation = transform_to_pc[:,3]
-        translation = translation[:3].reshape(3, 1)
-        apply_t = lambda x: np.asarray(np.dot(rotation, x.reshape(3, 1)) + translation[:3]).reshape(-1)
-        if obstruction_pc == None:
-            pc_seq[i,:,:] = np.array(map(apply_t, orig_pc_at_origin))
-        else:
-            pc_seq[i,:,:] = np.vstack((np.array(map(apply_t, orig_pc_at_origin)), obstruction_pc))
-
-        if plot:
-            plot_clouds(env, np.array(map(apply_t, orig_pc_at_origin)))
-
-    # returns a two dimension pointcloud sequence
-    pc_seq = pc_seq[:,:, :2]
-    final_pc_seq = pc_seq.reshape((len(time_step_indices) * total_points_per_timestep, 2))
-    return final_pc_seq
-
-def get_traj_pts(env, rel_pts, traj_mat, plot=False):
-    """
-    Returns the sequence of points representing the robot trajectory
-    """
-    traj_pts = np.zeros((len(traj_mat) * len(rel_pts), len(rel_pts[0])))
-    for i in range(len(traj_mat)):
-        transform_to_pc = traj_mat[i]
-        rotation = transform_to_pc[:3,:3]
-        translation = transform_to_pc[:,3]
-        translation = translation[:3].reshape(3, 1)
-        apply_t = lambda x: np.asarray(np.dot(rotation, x.reshape(3, 1)) + translation[:3]).reshape(-1)
-        index = i * len(rel_pts)
-        traj_pts[index: index + len(rel_pts)] = np.array(map(apply_t, rel_pts))
-        if plot:
-            plot_clouds(env, np.array(map(apply_t, rel_pts)))
-    return traj_pts[:,:2]
-
-def get_orig_pc_at_origin(rave_robot, initial_pc):
-    """
-    Returns the given point cloud centered at origin
-    Make sure the origin pointcloud is centered at the transform though and not rotated!!
-    ### correct ###
-    """
-    robot_t = rave_robot.GetTransform()
-    trans = robot_t[:,3][:3]
-    orig_pc_at_origin = np.zeros((len(initial_pc), len(initial_pc[0])))
-    for i in range(len(initial_pc)):
-        orig_pc_at_origin[i,:] = initial_pc[i] - trans
-    return orig_pc_at_origin
-
-def convert_traj_rel_pts_to_init_traj(traj_pts):
-    """
-    Only works for rectangular shape object
-    """
-    return
-
-    assert len(traj_pts) % 4 == 0
-    traj = np.zeros((len(traj_pts) // 4, 3))
-    for i in range(len(traj_pts) // 4):
-        index = 4 * i
-        center1 = 0.5 * (traj_pts[index] + traj_pts[index + 3])
-        center2 = 0.5 * (traj_pts[index + 1] + traj_pts[index + 2])
-        assert center1 == center2
-        # transform = np.matrixFromAxisAngle([0, 0, 
-        # first and last are diagonal 
-        # second and third are diagonal 
-
-def get_center_points_from_rel_pts(traj_pts):
-    assert len(traj_pts) % 4 == 0
-    center_pts = np.zeros((len(traj_pts) // 4, len(traj_pts[0])))
-    for i in range(len(traj_pts) // 4):
-        index = 4 * i
-        center = 0.5 * (traj_pts[index] + traj_pts[index + 3])
-        center_pts[i,:] = center
-    return center_pts
 
 class FeedbackRegistrationAndTrajectoryTransferer(object):
     def __init__(self, env, 
@@ -204,7 +27,6 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
                  beta_pos=settings.BETA_POS,
                  gamma=settings.GAMMA,
                  use_collision_cost=settings.USE_COLLISION_COST):
-
         self.sim = env.sim
         self.env = env
         self.alpha = alpha
@@ -212,10 +34,6 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         self.gamma = gamma # joint velocity constant
         self.use_collision_cost = use_collision_cost
         self.registration_factory = registration_factory
-
-    def traj_to_points(self, traj):
-        """Convert trajectory to points"""
-        pass
 
     def get_scene_state(self, robot, num_x_points, num_y_points):
         """
@@ -267,16 +85,6 @@ class FeedbackRegistrationAndTrajectoryTransferer(object):
         """ Convert points to a flattened numpy array, where each element is an array of length 3"""
         tmp = pts_traj 
         return tmp.reshape(tmp.shape[0] * tmp.shape[1], tmp.shape[2])
-
-    def compact_traj(self, traj):
-        """
-        Compactly represent the list of pose as a list of three-array list (x, y, theta)
-        (Not needed for now)
-        """
-        z = traj[2, 3]
-        x, y = traj[:2, 3]
-        theta = None# arctan
-        return (x, y, theta)
 
     # @profile
     def transfer(self, demo, test_robot, test_scene_state, rel_pts, target_pose=None, timestep_dist=5, callback=None, plotting=False, include_timesteps = False):
