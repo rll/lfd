@@ -22,6 +22,8 @@ def tps_apply_kernel(distmat, dim):
         k(r) = 4 * r^2 log(r)
        d=3:
         k(r) = -r
+       d=4:
+        k(r) = 4 * log(r)
             
     import numpy as np, scipy.spatial.distance as ssd
     x = np.random.rand(100,2)
@@ -33,10 +35,12 @@ def tps_apply_kernel(distmat, dim):
     d=2: 1/(8*sqrt(pi)) = 0.070523697943469535
     d=3: gamma(-.5)/(16*pi**1.5) = -0.039284682964880184
     """
-    if dim==2:       
+    if dim == 2:       
         return 4 * distmat**2 * np.log(distmat+1e-20)
-    elif dim ==3:
+    elif dim == 3:
         return -distmat
+    elif dim == 4:
+        return 4 * np.log(distmat+1e-20)
     else:
         raise NotImplementedError
     
