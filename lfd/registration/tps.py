@@ -190,7 +190,6 @@ def tps_fit_feedback(x_na, y_ng, bend_coef, rot_coefs, wt_n, lamb, nu_bd, tau_bd
 
     Make sure we actually get a solution here
     """
-    print("in tps fit feedback")
     if wt_n is None: wt_n = np.ones(len(x_na))
 
     #### Solving tps with 2 dimension
