@@ -197,29 +197,49 @@ def plot_clouds(env, pc_seqs):
     env.sim.viewer.Step()
     raw_input("look at pc")
 
+def draw_two_pc_and_traj(env, new_pc, f_on_old_pc, new_traj, f_on_old_traj, include_timesteps=False):
+    if not include_timesteps:
+        new_pc = np.hstack((new_pc, np.zeros((len(new_pc), 1))))
+        f_on_old_pc = np.hstack((f_on_old_pc, np.zeros((len(f_on_old_pc), 1))))
+        new_traj = np.hstack((new_traj, np.zeros((len(new_traj), 1))))
+        f_on_old_traj = np.hstack((f_on_old_traj, np.zeros((len(f_on_old_traj), 1))))
+    time_constant = 0.005
+    new_pc[:,2] = time_constant * new_pc[:,2] 
+    f_on_old_pc[:,2] = time_constant * f_on_old_pc[:,2]
+    new_traj[:,2] = time_constant * new_traj[:,2] 
+    f_on_old_traj[:,2] = time_constant * f_on_old_traj[:,2]
+    handle1 = plot_sampled_demo_pc(env, new_pc, show_now=False, colors = [1, 0, 0])
+    handle2 = plot_sampled_demo_pc(env, f_on_old_pc, show_now=False, colors = [0, 1, 0])
+    handle3 = plot_robot(env, new_traj, show_now=False, colors=[1, 0, 0])
+    handle4 = plot_robot(env, f_on_old_traj, show_now=False, colors=[0, 1, 0])
+    env.sim.viewer.Step()
+    raw_input("Compare two point clouds and two trajs")
+
 def draw_two_pc(env, new_pc, f_on_old_pc, include_timesteps=False):
     ##### New: red 
     ##### Old: green
-    if include_timesteps:
-        new_pc = new_pc[:,:2]
-        f_on_old_pc = f_on_old_pc[:,:2]
-    new_pc = np.hstack((new_pc, np.zeros((len(new_pc), 1))))
-    f_on_old_pc = np.hstack((f_on_old_pc, np.zeros((len(f_on_old_pc), 1))))
+    if not include_timesteps:
+        new_pc = np.hstack((new_pc, np.zeros((len(new_pc), 1))))
+        f_on_old_pc = np.hstack((f_on_old_pc, np.zeros((len(f_on_old_pc), 1))))
+    time_constant = 0.005
+    new_pc[:,2] = time_constant * new_pc[:,2] 
+    f_on_old_pc[:,2] = time_constant * f_on_old_pc[:,2]
     handle1 = plot_sampled_demo_pc(env, new_pc, show_now=False, colors = [1, 0, 0])
-    handle2 = plot_sampled_demo_pc(env, f_on_old_pc, show_now=False, colors = [0, 1, 0])
+    handle2 = plot_sampled_demo_pc(env, f_on_old_pc, show_now=False, colors = [0, 0, 1])
     env.sim.viewer.Step()
     raw_input("Compare two point clouds")
 
 def draw_two_traj(env, new_traj, f_on_old_traj, include_timesteps=False):
     ##### New: red 
     ##### Old: green
-    if include_timesteps:
-        new_traj = new_traj[:,:2]
-        f_on_old_traj = f_on_old_traj[:,:2]
-    new_traj = np.hstack((new_traj, np.zeros((len(new_traj), 1))))
-    f_on_old_traj = np.hstack((f_on_old_traj, np.zeros((len(f_on_old_traj), 1))))
+    if not include_timesteps:
+        new_traj = np.hstack((new_traj, np.zeros((len(new_traj), 1))))
+        f_on_old_traj = np.hstack((f_on_old_traj, np.zeros((len(f_on_old_traj), 1))))
+    time_constant = 0.005
+    new_traj[:,2] = time_constant * new_traj[:,2] 
+    f_on_old_traj[:,2] = time_constant * f_on_old_traj[:,2]
     handle1 = plot_robot(env, new_traj, show_now=False, colors=[1, 0, 0])
-    handle2 = plot_robot(env, f_on_old_traj, show_now=False, colors=[0, 1, 0])
+    handle2 = plot_robot(env, f_on_old_traj, show_now=False, colors=[0, 0, 1])
     env.sim.viewer.Step()
     raw_input("Compare two trajectories")
 
