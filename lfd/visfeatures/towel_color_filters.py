@@ -12,6 +12,16 @@ def extract_nongreen(rgb, depth, T_w_k = None, returnOnlyXyz=True, mask_vals = -
     extract non-green points and downsample
     keep RGB information in the returned data
     """
+    return extract_for_hues(35, 100, rgb, depth, T_w_k = T_w_k, returnOnlyXyz=returnOnlyXyz, mask_vals=mask_vals)
+
+def extract_red(rgb, depth, T_w_k = None, returnOnlyXyz=True, mask_vals = -0.25):
+    """
+    extract non-green points and downsample
+    keep RGB information in the returned data
+    """
+    return extract_for_hues(18, 165, rgb, depth, T_w_k = T_w_k, returnOnlyXyz=returnOnlyXyz, mask_vals=mask_vals)
+
+def extract_for_hues(lt_hue, gt_hue, rgb, depth, T_w_k = None, returnOnlyXyz=True, mask_vals = -0.25):
 
     right_mask_val = None
     bottom_mask_val = None
@@ -33,7 +43,7 @@ def extract_nongreen(rgb, depth, T_w_k = None, returnOnlyXyz=True, mask_vals = -
 
     h_mask = (h<35) | (h>100)
     s_mask = (s >= 0)  # Ranges from 0 to 255
-    v_mask = (v > 90)  # Ranges from 0 to 255
+    v_mask = (v >= 0)  # Ranges from 0 to 255
     nongreen_mask = h_mask & s_mask & v_mask
 
     valid_mask = depth > 0
@@ -56,7 +66,7 @@ def extract_nongreen(rgb, depth, T_w_k = None, returnOnlyXyz=True, mask_vals = -
         y2_mask = xyz_w[:,:,1] > right_mask_val # To cut off gripper at right of image
 
     y_mask = xyz_k[:,:,1] > y_mask_val  # To cut off papers at top of image
-    #x2_mask = xyz_w[:,:,1] < 1.0
+    #x2_mask = xyz_w[:,:,0] > 0.2
 
     good_mask = nongreen_mask & valid_mask & y_mask
     if bottom_mask_val is not None:
@@ -76,6 +86,7 @@ def extract_nongreen(rgb, depth, T_w_k = None, returnOnlyXyz=True, mask_vals = -
         if bottom_mask_val is not None:
             cv2.imshow('xmask', x_mask.astype('uint8')*255)
         cv2.imshow('ymask', y_mask.astype('uint8')*255)
+        #cv2.imshow('x2_mask', x2_mask.astype('uint8')*255)
         #cv2.imshow('x2mask', x2_mask.astype('uint8')*255)
         if right_mask_val is not None:
             cv2.imshow('y2mask', y2_mask.astype('uint8')*255)

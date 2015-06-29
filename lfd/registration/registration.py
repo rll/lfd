@@ -22,8 +22,8 @@ class TpsRpmRegistration(Registration):
         self.rad = rad
     
     def get_objective(self):
-        x_nd = self.demo.scene_state.cloud[:,:3]
-        y_md = self.test_scene_state.cloud[:,:3]
+        x_nd = self.demo.scene_state.get_valid_xyzrgb_cloud()[:,:3]
+        y_md = self.test_scene_state.get_valid_xyzrgb_cloud()[:,:3]
         cost = self.get_objective2(x_nd, y_md, self.f, self.corr, self.rad)
         return cost
     
@@ -77,7 +77,6 @@ class TpsRpmRegistration(Registration):
         nz_corr_nm = corr_nm[corr_nm != 0]
         cost[3] = rad * (nz_corr_nm * np.log(nz_corr_nm)).sum()
         cost[4] = -rad * nz_corr_nm.sum()
-        print cost
         return cost
 
 class TpsRpmBijRegistration(Registration):
@@ -217,10 +216,6 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
         x_nd = demo.scene_state.get_valid_xyzrgb_cloud()[:,:3]
         y_md = test_scene_state.get_valid_xyzrgb_cloud()[:,:3]
 
-        print "New shape of demo:", x_nd.shape
-        print "New shape of test:", y_md.shape
-        print "Shape of vis prior:", prior_prob_nm.shape
-
         f, corr = tps.tps_rpm(x_nd, y_md, 
                               f_solver_factory=self.f_solver_factory, 
                               n_iter=self.n_iter, em_iter=self.em_iter, 
@@ -252,6 +247,7 @@ class TpsRpmRegistrationFactory(RegistrationFactory):
     def viscost(self, demo, test_scene_state):
         reg = self.register(demo, test_scene_state, plotting=False, plot_cb=None)
         cost = reg.get_objective_withviscost(self.prior_nm)
+            
         return cost.sum()
 
 class TpsRpmBijRegistrationFactory(RegistrationFactory):

@@ -304,7 +304,7 @@ def tps_rpm(x_nd, y_md, f_solver_factory=None,
                 fsolve.solve(wt_n, xtarg_nd, reg, f) #TODO: handle ouliers in source and round by BEND_COEF_DIGITS
         
         if plotting and (i%plotting==0 or i==(n_iter-1)):
-            plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
+            plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f, rad)
         
     return f, corr_nm
 
@@ -408,5 +408,7 @@ def balance_matrix3_cpu(prob_nm, max_iter, row_priors, col_priors, outlierfrac, 
 try:
     from tps_gpu import balance_matrix3_gpu
     balance_matrix3 = balance_matrix3_gpu
+    print "GPU SUCCESS: Imported balance_matrix3_gpu"
 except:
     balance_matrix3 = balance_matrix3_cpu
+    print "GPU FAIL: Could not import balance_matrix3_gpu"

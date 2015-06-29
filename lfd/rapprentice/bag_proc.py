@@ -106,7 +106,7 @@ def add_kinematics_to_group(group, linknames, manipnames, jointnames, robot):
 @func_utils.once
 def get_robot():
     env = openravepy.Environment()
-    env.Load("robots/pr2-beta-static.zae")
+    env.Load("robots/pr2-beta-static-ft.dae")
     robot = env.GetRobots()[0]
     return robot
     

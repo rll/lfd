@@ -14,9 +14,9 @@ def plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj,
     
     n_steps = len(ee_trajs[0])
     dof_inds = sim_util.dof_inds_from_name(robot, manip_name)
-    assert old_traj.shape[0] == n_steps
-    assert old_traj.shape[1] == len(dof_inds)
-    assert len(ee_link_names) == len(ee_trajs)
+    assert old_traj.shape[0] == n_steps, "ERROR: old_traj.shape[0] must equal n_steps, (" + str(old_traj.shape[0]) + " vs. " + str(n_steps) + ")"
+    assert old_traj.shape[1] == len(dof_inds), "ERROR: old_traj.shape[1] must equal DOF, (" + str(old_traj.shape[1]) + " vs. " + str(len(dof_inds)) + ")"
+    assert len(ee_link_names) == len(ee_trajs), "ERROR: ee_link_names and ee_trajs must be same length, (" + str(len(ee_link_names)) + " vs. " + str(len(ee_trajs))
         
     if no_collision_cost_first:
         init_traj, _ = plan_follow_trajs(robot, manip_name, ee_link_names, ee_trajs, old_traj, 

@@ -1,4 +1,4 @@
-import numpy as np, random, scipy
+import numpy as np, random, scipy, math
 import scipy.spatial.distance as ssd
 from scipy import spatial
 from scipy.stats import entropy                                             
@@ -73,6 +73,25 @@ def get_labels_distance(labels1, labels2):
     #return np.linalg.norm(np.array(labels1_hist) - np.array(labels2_hist))
     return chi_squared_hist_distance(labels1_hist, labels2_hist)
 
+def get_label_pairs_distance(labels1, labels2):
+    # Returns distance between each pair of label types, in the order:
+    #     [dist_0_0, dist_0_1, dist_0_2, ..., dist_10_9, dist_10_10]
+    max_value = max(max(labels1), max(labels2))
+    labels1_hist = [0]*(max_value+1)
+    labels2_hist = [0]*(max_value+1)
+    labels1_list = list(labels1)
+    labels2_list = list(labels2)
+    for i in xrange(len(labels1_hist)):
+        if i == BACKGROUND_LABEL:
+            continue
+        labels1_hist[i] = labels1_list.count(i) / float(len(labels1_list))
+        labels2_hist[i] = labels2_list.count(i) / float(len(labels2_list))
+    pairs_dist = np.zeros((len(labels1_hist), len(labels2_hist)))
+    for i in xrange(len(labels1_hist)):
+        for j in xrange(len(labels2_hist)):
+            pairs_dist[i][j] = labels1_hist[i] - labels2_hist[j]
+    return tuple(pairs_dist.reshape((len(labels1_hist)*len(labels2_hist),)).tolist())
+
 def get_xyzrgb_downsampled_cloud(cloud_xyzrgb, ds_size):
     n,d = cloud_xyzrgb.shape
     assert d == 6, "XYZRGB downsampling requires cloud with dimension 6"
@@ -94,12 +113,15 @@ def get_potential_corner_pts(xyz_ds, xyz_full, alexnet_features, rgb, net, T_w_k
     valid_mask_ds = alexnet_features[3]
     xyz_ds = xyz_ds[valid_mask_ds,:]
     corner_pts = np.array([xyz_ds[i,:] for i in range(len(xyz_ds)) if label_predicts_ds[i] in CORNER_LABELS])
+    if len(corner_pts) == 0:
+        print "There are no corner points"
+        return (None, [], [], [], [])
     tree = spatial.KDTree(xyz_full[:,:-3])
     indices = tree.query_ball_point(corner_pts[:,:-3], 0.01)
     indices_nodups = set()
     for index_list in indices:
         indices_nodups.update(index_list)
-    indices_nodups = random.sample(indices_nodups, NUM_CORNER_PTS_TO_ADD) 
+    indices_nodups = random.sample(indices_nodups, min(len(indices_nodups), NUM_CORNER_PTS_TO_ADD)) 
     print "\tNumber of potential corner pts:", len(indices_nodups)
     pts_to_add = xyz_full[list(indices_nodups),:]
 
@@ -108,7 +130,7 @@ def get_potential_corner_pts(xyz_ds, xyz_full, alexnet_features, rgb, net, T_w_k
     print "\tNumber of actual corner pts:", len([1 for p in label_predicts if p in CORNER_LABELS])
     return (pts_to_add, label_predicts, label_scores, label_features, valid_mask)
 
-def get_alexnet_features(xyz_full_orig, rgb, T_w_k, net, ds_size, args):
+def get_alexnet_features(xyz_full_orig, rgb, T_w_k, net, ds_size, args, use_vis=False):
     # xyz_full should still be in BGR, not RGB
     # adds corners if args.extra_corners == 1
     xyz_full = np.copy(xyz_full_orig)
@@ -119,16 +141,18 @@ def get_alexnet_features(xyz_full_orig, rgb, T_w_k, net, ds_size, args):
     else:
         xyz_ds = xyz_full
 
-    if not args.use_vis:
-        return (xyz_ds, None, None. None)
+    if not use_vis and not args.use_vis:
+        return (xyz_ds, None, None, None)
 
     assert net != None, "If using visual features, must provide a trained net"
     alexnet_features = predictCrossing3D(xyz_ds[:,:3], rgb, net, T_w_k=T_w_k)
-    if not args.extra_corners:
+    if not args.extra_corners or not args.use_vis:
         return (xyz_ds, None, alexnet_features, None)
 
     potential_corner_pts, label_predicts_add, label_scores_add, label_features_add, valid_mask_add = \
         get_potential_corner_pts(xyz_ds, xyz_full, alexnet_features, rgb, net, T_w_k)
+    if potential_corner_pts == None:
+        return (xyz_ds, xyz_ds, alexnet_features, alexnet_features)
     xyz_ds_100corners = np.concatenate((xyz_ds, potential_corner_pts), axis=0)
     label_predicts0 = np.concatenate((alexnet_features[0], label_predicts_add), axis=0)
     label_scores0 = np.concatenate((alexnet_features[1], label_scores_add), axis=0)
@@ -140,17 +164,24 @@ def get_alexnet_features(xyz_full_orig, rgb, T_w_k, net, ds_size, args):
 
     return (xyz_ds, xyz_ds_100corners, alexnet_features, alexnet_features_100corners)
 
-def compute_score_costs(scores1, scores2):                                      
-    n_scores1 = len(scores1)                                                    
-    n_scores2 = len(scores2)                                                    
+def kl_divergence(scores1, scores2):
+    entropy_1to2 = entropy(scipy.asarray(scores1), scipy.asarray(scores2))
+    entropy_2to1 = entropy(scipy.asarray(scores2), scipy.asarray(scores1))
+    if math.isinf(entropy_1to2):
+        return entropy_2to1
+    if math.isinf(entropy_2to1):
+        return entropy_1to2
+
+    return  (entropy_1to2 + entropy_2to1) / 2.0
+
+def compute_score_costs(all_scores1, all_scores2):
+    n_scores1 = len(all_scores1)                                                    
+    n_scores2 = len(all_scores2)                                                    
     score_cost_matrix = np.zeros([n_scores1, n_scores2])
-    #import IPython as ipy
-    #ipy.embed()
     for i in range(n_scores1):                                                  
         for j in range(n_scores2):                                              
             # To make the distance symmetric, make it (D_{KL}(P||Q) + D_{KL}(Q||P)) / 2
-            score_cost_matrix[i, j] = (entropy(scipy.asarray(scores1[i]), scipy.asarray(scores2[j])) + \
-                                       entropy(scipy.asarray(scores2[j]), scipy.asarray(scores1[i]))) / 2.0
+            score_cost_matrix[i, j] = kl_divergence(all_scores1[i], all_scores2[j])
                                                                                 
     return score_cost_matrix
 
@@ -207,15 +238,16 @@ def new_vis_cost_fn(demo_state, test_state, beta = 1, corners_mult = 1):
     new_xyz = test_state.cloud[valid_mask1,:]
     print (orig_num_pts - len(old_xyz) - len(new_xyz)), "points ignored because out of image range"
 
-    vis_cost_xy = compute_score_costs(label_scores0, label_scores1)
-    import IPython as ipy
-    ipy.embed()
+    #vis_cost_xy = compute_score_costs(label_scores0, label_scores1)
+    vis_cost_xy = np.zeros([len(label_predicts0), len(label_predicts1)])
     for i in range(len(label_predicts0)):
         for j in range(len(label_predicts1)):
             if label_predicts0[i] in CORNER_LABELS and label_predicts1[j] not in CORNER_LABELS:
-                vis_cost_xy[i,j] *= corners_mult
+                #vis_cost_xy[i,j] *= corners_mult
+                vis_cost_xy[i,j] = corners_mult
             if label_predicts0[i] not in CORNER_LABELS and label_predicts1[j] in CORNER_LABELS:
-                vis_cost_xy[i,j] *= corners_mult
+                #vis_cost_xy[i,j] *= corners_mult
+                vis_cost_xy[i,j] = corners_mult
 
     vis_cost_xy = beta * vis_cost_xy
     #vis_cost_xy = BETA * ab_cost_with_threshold(old_xyz, new_xyz, THRESHOLD) # for color

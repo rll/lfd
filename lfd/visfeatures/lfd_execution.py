@@ -1,44 +1,20 @@
 #!/usr/bin/env python
 
 import argparse
-usage="""
-Actually run on the robot without pausing or animating 
-./do_task.py ~/Data/overhand2/all.h5 --execution=1 --animation=0
-"""
-parser = argparse.ArgumentParser(usage=usage)
-parser.add_argument("h5file", type=str)
-parser.add_argument("net_info_folder", type=str)  # folder that contains alexnet_deploy.prototxt, alexnet_train_iter_10000, mean.npy
-
-parser.add_argument("--cloud_proc_func", default="extract_nongreen")
-parser.add_argument("--cloud_proc_mod", default="towel_color_filters")
-    
-parser.add_argument("--animation", type=int, default=0)
-parser.add_argument("--parallel", type=int, default=1)
-parser.add_argument("--interactive",action="store_true")
-
-parser.add_argument("--prompt", action="store_true")
-parser.add_argument("--select_manual", action="store_true")
-
-
-parser.add_argument("--use_vis", action="store_true")
-parser.add_argument("--downsample", action="store_true")
-parser.add_argument("--extra_corners", type=int, default=1)
-parser.add_argument("--soft_limits", action="store_true")
-args = parser.parse_args()
-
 ###################
 import cloudprocpy, trajoptpy
 import sys, os, numpy as np, h5py, time, IPython as ipy, math
 import importlib
 
-from rapprentice import registration, berkeley_pr2, task_execution
+from lfd.rapprentice import registration, berkeley_pr2, task_execution
 from lfd.rapprentice.util import redprint
 from lfd.demonstration.demonstration import Demonstration, VisFeaturesSceneState
 from lfd.environment import sim_util, exec_util
 from lfd.registration.registration import TpsRpmRegistrationFactory
+from lfd.visfeatures.towel_color_filters import extract_red
 
 # Import ROS stuff
-from rapprentice import PR2
+from lfd.rapprentice import PR2
 import rospy
 
 from alexnet_helper import get_alexnet
@@ -46,16 +22,15 @@ import plotting_plt_shhuang, vis_utils, misc_util
 
 import subprocess
 
+CLOUD_PROC_FUNC = extract_red
 DS_SIZE = .025
-POSTFIX = 'saved_alexnet_labels.h5' 
+POSTFIX = 'saved_2conv3fc4_labels.h5'
 NUM_DEMOS_TO_CHECK = 5  # Change back to 3
 HIST_COEFF = 10
 TESTCLOUDS_F = 'saved_test_clouds_demsel.h5'
 THRESHOLD = 0.15
 BETA = 10
-
-cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
-cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
+GAMMA = 1000.0
 
 def find_closest_manual(demofile):
     "for now, just prompt the user"
@@ -73,13 +48,13 @@ def registration_cost(demo_info, test_state, tps_rpm_factory=None):
     if tps_rpm_factory == None:
         tps_rpm_factory = Globals.tps_rpm_factory
 
-    assert not args.use_vis or (demo_info.scene_state.alexnet_features is not None or test_state.alexnet_features is not None), "If using visual features, must provide SceneStates with precomputed Alexnet features"
+    assert not Globals.args.use_vis or (demo_info.scene_state.alexnet_features is not None or test_state.alexnet_features is not None), "If using visual features, must provide SceneStates with precomputed Alexnet features"
 
     return tps_rpm_factory.viscost(demo_info, test_state)  # Computes objective cost, multiplying it by -1 because we're selecting for maximum score later
 
-def get_demo_state(demofile, cloud_id, demos_saved_alexnet, net):
+def get_demo_state(demofile, cloud_id, demos_saved_alexnet, net, args, demo_clouds=None):
     # Returns a Demonstration object with VisFeaturesSceneState (alexnet_features = None if use_vis == False)
-    if cloud_id not in Globals.demo_clouds:
+    if demo_clouds is None or cloud_id not in demo_clouds:
         if demos_saved_alexnet != None:  # Clouds already have RGB, not BGR
             seg = demos_saved_alexnet[cloud_id]
             cloud_xyz = seg['cloud_xyz_full'][()]
@@ -111,16 +86,16 @@ def get_demo_state(demofile, cloud_id, demos_saved_alexnet, net):
 
         visfeatures_scene = VisFeaturesSceneState(cloud_xyz_ds, cloud_xyz_ds_100corners, cloud_xyz, alexnet_features,
                                                   alexnet_features_100corners)
-        Globals.demo_clouds[cloud_id] = Demonstration(cloud_id, visfeatures_scene, None)
-
-    return Globals.demo_clouds[cloud_id]
+        return Demonstration(cloud_id, visfeatures_scene, None)
+    else:
+        return demo_clouds[cloud_id]
 
 def find_closest_auto(test_state, demofile, demos_saved_alexnet, net, tps_rpm_factory):
     # Filter out all but 3 demos based on histogram matching
     demos_with_states = set(Globals.demo_clouds.keys())
     for k in demofile:  # Store all demos in Globals.demo_clouds
         if k not in demos_with_states:
-            get_demo_state(demofile, k, demos_saved_alexnet, net)
+            Globals.demo_clouds[k] = get_demo_state(demofile, k, demos_saved_alexnet, net, Globals.args, demo_clouds=Globals.demo_clouds)
 
     demo_keys = list(Globals.demo_clouds.keys())
     print demo_keys
@@ -138,12 +113,15 @@ def find_closest_auto(test_state, demofile, demos_saved_alexnet, net, tps_rpm_fa
     tps_rpm_factory.n_iter = 10
     Globals.tps_rpm_factory = tps_rpm_factory
 
-    if args.parallel:
-        from joblib import Parallel, delayed
-        costs = Parallel(n_jobs=5,verbose=100)(delayed(registration_cost)(Globals.demo_clouds[k], test_state) for k in demo_keys)
-    else:
-        print "Not running in parallel"
-        costs = [registration_cost(Globals.demo_clouds[k], test_state, tps_rpm_factory) for k in demo_keys]
+    #if args.parallel:
+    #    from joblib import Parallel, delayed
+    #    costs = Parallel(n_jobs=5,verbose=100)(delayed(registration_cost)(Globals.demo_clouds[k], test_state) for k in demo_keys)
+    #else:
+    #    print "Not running in parallel"
+    #    costs = [registration_cost(Globals.demo_clouds[k], test_state, tps_rpm_factory) for k in demo_keys]
+
+    print "Not running in parallel"
+    costs = [registration_cost(Globals.demo_clouds[k], test_state, tps_rpm_factory) for k in demo_keys]
    
     print demo_keys
     print "old costs for selection:", costs
@@ -168,15 +146,14 @@ def colored_plot_cb(x_nd, y_md, x_color, y_color, f, s_cloud_id, plot_color=1, p
     #if output_prefix is not None:                                           
     #    plt.savefig(output_prefix + '_' + s_cloud_id + '_' + vis + '.png')  
 
-def get_alexnet_from_info_folder(net_info_folder):
+def get_alexnet_from_info_folder(net_info_folder, deploy_file="alexnet_deploy.prototxt", model_file="alexnet_train_iter_10000", small_cnn=False):
     oldstdout_fno, oldstderr_fno = misc_util.suppress_stdout()
 
-    net_prototxt = os.path.join(net_info_folder, 'alexnet_deploy.prototxt') 
-    net_model = os.path.join(net_info_folder, 'alexnet_train_iter_10000')   
+    net_prototxt = os.path.join(net_info_folder, deploy_file) 
+    net_model = os.path.join(net_info_folder, model_file + ".caffemodel")   
     net_mean = os.path.join(net_info_folder, 'mean.npy')
 
-    net = get_alexnet(net_prototxt, net_model, net_mean)
-    #unsuppress_stdout(_stderr, _stdout)
+    net = get_alexnet(net_prototxt, net_model, net_mean, small_cnn=small_cnn)
     misc_util.unsuppress_stdout(oldstdout_fno, oldstderr_fno)
     return net
 
@@ -193,10 +170,11 @@ def pr2_goto_start_posture():
     Globals.pr2.rarm.goto_posture('side')
     Globals.pr2.larm.goto_posture('side')            
     Globals.pr2.join_all()
+    print "PR2 is now at start position"
     Globals.pr2.update_rave()
 
 def setup():
-    trajoptpy.SetInteractive(args.interactive)
+    trajoptpy.SetInteractive(Globals.args.interactive)
 
     rospy.init_node("exec_task",disable_signals=True)
     Globals.pr2 = PR2.PR2()
@@ -204,7 +182,15 @@ def setup():
     Globals.robot = Globals.pr2.robot
     Globals.viewer = trajoptpy.GetViewer(Globals.env)
 
-    if args.soft_limits:
+    #if not args.remove_table:
+    #    print "Adding table"
+    #    Globals.env.Load('table.xml')
+    #    body = Globals.env.GetKinBody('table')
+    #    if Globals.viewer:
+    #        Globals.viewer.SetTransparency(body,0.9)
+    #    Globals.table_height = Globals.env.GetKinBody('table').GetLinks()[0].GetGeometries()[0].GetTransform()[2, 3]
+
+    if Globals.args.soft_limits:
         Globals.pr2._set_rave_limits_to_soft_joint_limits()
 
 def save_test_cloud(new_xyz, new_xyz_full, rgb, depth, T_w_k, alexnet_features):
@@ -238,6 +224,36 @@ def exclude_gripper_finger_collisions():
                 cc.ExcludeCollisionPair(finger_link, link)
 
 def main():
+
+    usage="""
+    Actually run on the robot without pausing or animating 
+    ./do_task.py ~/Data/overhand2/all.h5 --execution=1 --animation=0
+    """
+    parser = argparse.ArgumentParser(usage=usage)
+    parser.add_argument("h5file", type=str)
+    parser.add_argument("net_info_folder", type=str)  # folder that contains alexnet_deploy.prototxt, alexnet_train_iter_10000, mean.npy
+
+    #parser.add_argument("--cloud_proc_func", default="extract_nongreen")
+    #parser.add_argument("--cloud_proc_mod", default="towel_color_filters")
+    
+    parser.add_argument("--animation", type=int, default=0)
+    parser.add_argument("--parallel", type=int, default=1)
+    parser.add_argument("--interactive",action="store_true")
+
+    parser.add_argument("--prompt", action="store_true")
+    parser.add_argument("--select_manual", action="store_true")
+
+    parser.add_argument("--use_vis", action="store_true")
+    parser.add_argument("--downsample", action="store_true")
+    parser.add_argument("--extra_corners", type=int, default=1)
+    parser.add_argument("--soft_limits", action="store_true")
+    parser.add_argument("--remove_table", action="store_true")
+    args = parser.parse_args()
+
+    Globals.args = args
+    #Globals.cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
+    #Globals.cloud_proc_func = getattr(Globals.cloud_proc_mod, args.cloud_proc_func)
+
     setup()
     pr2_goto_start_posture()
     demofile = h5py.File(args.h5file, 'r')
@@ -249,7 +265,7 @@ def main():
     net = None
     if args.use_vis:  # load alexnet model
         print "Loading Alexnet model"
-        net = get_alexnet_from_info_folder(args.net_info_folder)
+        net = get_alexnet_from_info_folder(args.net_info_folder, deploy_file="small_cnn_deploy.prototxt", model_file="towelcnn_train_iter_10000", small_cnn=True)
 
     demos_saved_alexnet = None
     if os.path.isfile(args.h5file[:-3]+POSTFIX):
@@ -262,16 +278,16 @@ def main():
     prior_fn = None
     if args.use_vis:
         prior_fn = lambda demo_state, test_state: vis_utils.vis_cost_fn(demo_state, test_state, beta=BETA)
-    tps_rpm_factory = TpsRpmRegistrationFactory(Globals.demo_clouds, n_iter=10, reg_init=10, reg_final=0.4, \
+    tps_rpm_factory = TpsRpmRegistrationFactory(Globals.demo_clouds, n_iter=10, reg_init=0.1, reg_final=0.001, \
                                    rot_reg=np.r_[1e-4, 1e-4, 1e-1], \
-                                   rad_init=0.01, rad_final = 0.00005, outlierprior=0.01, outlierfrac=0.01, prior_fn=prior_fn)
+                                   rad_init=0.01, rad_final = 0.00005, outlierprior=1e-3, outlierfrac=1e-3, prior_fn=prior_fn)
     while True:
         pr2_goto_start_posture()
         redprint("Acquire point cloud")
             
         rgb, depth = grabber.getRGBD()
         T_w_k = berkeley_pr2.get_kinect_transform(Globals.robot)
-        new_xyz_full = cloud_proc_func(rgb, depth, T_w_k, returnOnlyXyz=True)
+        new_xyz_full = CLOUD_PROC_FUNC(rgb, depth, T_w_k, returnOnlyXyz=True)
 
         (new_xyz, new_xyz_100corners, alexnet_features, alexnet_features_100corners) = vis_utils.get_alexnet_features(new_xyz_full, rgb, T_w_k, net, DS_SIZE, args)
 
@@ -310,7 +326,9 @@ def main():
 
             redprint("Generating end-effector trajectory")    
 
-            demo_state = get_demo_state(demofile, seg_name, demos_saved_alexnet, net)
+            demo_state = get_demo_state(demofile, seg_name, demos_saved_alexnet, net, args, demo_clouds=Globals.demo_clouds)
+            if seg_name not in Globals.demo_clouds:
+                Globals.demo_clouds[seg_name] = demo_state
             old_xyz = np.concatenate((demo_state.scene_state.cloud, demo_state.scene_state.color), axis=1)
             old_xyz_full = np.concatenate((demo_state.scene_state.full_cloud, demo_state.scene_state.full_color), axis=1)
 
@@ -342,7 +360,7 @@ def main():
                    valid_old_xyz[:,-3:], vis_utils.bgr_to_rgb(valid_new_xyz[:,-3:]), tps_rpm_f.f, \
                    seg_name, x_labels=demo_state_with_extra_pts.alexnet_features[0], y_labels=test_state.alexnet_features[0], label_colors=label_colors)
 
-            success = exec_util.execute_traj(Globals, seg_name,  demofile[seg_name], handles, tps_rpm_f.f, old_xyz[:,:-3], new_xyz[:,:-3], args)
+            success = exec_util.execute_traj(Globals, seg_name,  demofile[seg_name], handles, tps_rpm_f.f, old_xyz[:,:-3], new_xyz[:,:-3], args, gamma=GAMMA)
 
 def get_extra_points():
     z_axis = [(0,0,1), (0,0,1.5)]

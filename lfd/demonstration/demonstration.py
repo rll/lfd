@@ -107,9 +107,12 @@ class VisFeaturesSceneState(SceneState):
 
     def get_valid_xyzrgb_cloud(self):
         # Returns XYZRGB cloud with point i kept iff valid_mask[i] == True
-        valid_mask = self.alexnet_features[3]
-        valid_mask = np.array(list(valid_mask) + [True]*(len(self.cloud) - len(valid_mask)))
-        return  np.concatenate((self.cloud[valid_mask,:], self.color[valid_mask,:]), axis=1)
+        if self.alexnet_features != None:
+            valid_mask = self.alexnet_features[3]
+            valid_mask = np.array(list(valid_mask) + [True]*(len(self.cloud) - len(valid_mask)))
+            return np.concatenate((self.cloud[valid_mask,:], self.color[valid_mask,:]), axis=1)
+        else:
+            return np.concatenate((self.cloud, self.color), axis=1)
 
 class TimestepState(object):
     def __init__(self, rope_nodes, robot, step=None):

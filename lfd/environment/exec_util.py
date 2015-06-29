@@ -4,7 +4,8 @@
 
 import openravepy, numpy as np, rospy
 from rapprentice.yes_or_no import yes_or_no
-from rapprentice import animate_traj, math_utils as mu, planning, plotting_openrave, pr2_trajectories, resampling
+from rapprentice import animate_traj, math_utils as mu, plotting_openrave, pr2_trajectories, resampling
+from lfd.rapprentice import planning
 from lfd.environment import sim_util
 from lfd.visfeatures import misc_util
 from lfd.rapprentice.util import redprint
@@ -13,9 +14,10 @@ import roslib
 roslib.load_manifest('joint_states_listener_arms')
 from joint_states_listener_arms.srv import ReturnJointStates
 
+#JOINT_LENGTH_PER_STEP = 0.05
 JOINT_LENGTH_PER_STEP = 0.05
-L_HAS_OBJ_MIN = 0.01  # adjust for thinner/thicker towel
-R_HAS_OBJ_MIN = 0.01
+L_HAS_OBJ_MIN = 0.0010  # adjust for thinner/thicker towel
+R_HAS_OBJ_MIN = 0.0005
 HAS_OBJ_MAX = 0.03
 
 def has_object(lr_arm):
@@ -31,11 +33,12 @@ def has_object(lr_arm):
         return False
 
     print "Position of ", lr_arm, " gripper: ", resp.position
+    print "Position of ", lr_arm, " gripper: ", get_joint(["%s_gripper_joint"%lr_arm]).position
 
     if lr_arm == 'l':
-        return L_HAS_OBJ_MIN < resp.position < HAS_OBJ_MAX
+        return L_HAS_OBJ_MIN < resp.position[0] < HAS_OBJ_MAX
     else:
-        return R_HAS_OBJ_MIN < resp.position < HAS_OBJ_MAX
+        return R_HAS_OBJ_MIN < resp.position[0] < HAS_OBJ_MAX
 
 def binarize_gripper(angle):
     open_angle = .08
@@ -50,8 +53,10 @@ def set_gripper_maybesim(lr, value, pr2, robot, execute=1):
         gripper.set_angle(value)
         pr2.join_all()
 
-        if value == 0 and not has_object(lr):
-            return False
+        #import time
+        #time.sleep(0.2)
+        #if value == 0 and not has_object(lr):
+        #    return False
     else:
         robot.SetDOFValues([value*5], [robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()])
     return True
@@ -95,7 +100,7 @@ def get_ee_traj_from_joint_traj(sim_env, lr, joint_or_full_traj):
             ee_traj.append(ee_link.GetTransform())
     return np.array(ee_traj)
 
-def execute_traj(sim_env, seg_name, seg_info, handles, f, old_xyz, new_xyz, args, execute=1):
+def execute_traj(sim_env, seg_name, seg_info, handles, f, old_xyz, new_xyz, args, execute=1, gamma = 1000.0):
     link2eetraj = {}
     for lr in 'lr':
         link_name = "%s_gripper_tool_frame"%lr
@@ -119,6 +124,7 @@ def execute_traj(sim_env, seg_name, seg_info, handles, f, old_xyz, new_xyz, args
 
         ################################    
         redprint("Generating joint trajectory for segment %s, part %i"%(seg_name, i_miniseg))
+        print "Gamma in execute_traj", gamma
             
         # figure out how we're gonna resample stuff
         lr2oldtraj = {}
@@ -129,10 +135,17 @@ def execute_traj(sim_env, seg_name, seg_info, handles, f, old_xyz, new_xyz, args
                 lr2oldtraj[lr] = old_joint_traj   
         if len(lr2oldtraj) > 0:
             old_total_traj = np.concatenate(lr2oldtraj.values(), 1)
-            _, timesteps_rs = sim_util.unif_resample(old_total_traj, JOINT_LENGTH_PER_STEP)
+            print "old traj shape:", old_total_traj.shape[0]
+            if old_total_traj.shape[0] < 30:
+                print "resampling more"
+                _, timesteps_rs = sim_util.unif_resample(old_total_traj, JOINT_LENGTH_PER_STEP / 2.0)
+            else:
+                _, timesteps_rs = sim_util.unif_resample(old_total_traj, JOINT_LENGTH_PER_STEP)
+            print "Timesteps:", len(timesteps_rs)
        
         ### Generate fullbody traj
         bodypart2traj = {}            
+        print "\t lr2oldtraj: ", lr2oldtraj.items()
         for (lr,old_joint_traj) in lr2oldtraj.items():
 
             manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
@@ -141,17 +154,21 @@ def execute_traj(sim_env, seg_name, seg_info, handles, f, old_xyz, new_xyz, args
 
             ee_link_name = "%s_gripper_tool_frame"%lr
             new_ee_traj = link2eetraj[ee_link_name][i_start:i_end+1]          
+            print "\t Resampling trajectory"
+
             new_ee_traj_rs = resampling.interp_hmats(timesteps_rs, np.arange(len(new_ee_traj)), new_ee_traj)
             if execute: sim_env.pr2.update_rave()
 
+            print "\t Planning trajectory"
             oldstdout_fno, oldstderr_fno = misc_util.suppress_stdout()
-            new_joint_traj = planning.plan_follow_traj(sim_env.robot, manip_name,
-                             sim_env.robot.GetLink(ee_link_name), new_ee_traj_rs, old_joint_traj_rs)
+            new_joint_traj, obj_value, pose_costs = planning.plan_follow_traj(sim_env.robot, manip_name,
+                             sim_env.robot.GetLink(ee_link_name), new_ee_traj_rs, old_joint_traj_rs, gamma = gamma * 1.0)
             misc_util.unsuppress_stdout(oldstdout_fno, oldstderr_fno)
 
             part_name = {"l":"larm", "r":"rarm"}[lr]
             bodypart2traj[part_name] = new_joint_traj
 
+            print "\t Getting list of hmats"
             # Get list of hmats for gripper trajectory after TrajOpt --> Visualize as line
             trajopt_ee_traj = get_ee_traj_from_joint_traj(sim_env, lr, new_joint_traj)
             handles.append(sim_env.env.drawlinestrip(trajopt_ee_traj[:,:3,3], 2, (0,0,1,1)))

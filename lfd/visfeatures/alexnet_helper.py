@@ -4,7 +4,7 @@ import caffe, numpy as np
 import IPython as ipy
 from rapprentice import berkeley_pr2
 
-def get_alexnet(net_prototxt, net_model, net_mean):
+def get_alexnet(net_prototxt, net_model, net_mean, small_cnn=False):
     # The three inputs are files that store the corresponding Alexnet info
     is_lenet = False
     if "lenet" == net_prototxt.split("_")[0]:
@@ -20,9 +20,12 @@ def get_alexnet(net_prototxt, net_model, net_mean):
         net = caffe.Classifier(net_prototxt, net_model)
         net.set_phase_test()
         net.set_mode_gpu()  # Can change to cpu instead of gpu
-        net.set_mean('data', np.load(net_mean))
-        net.set_raw_scale('data', 255)
-        net.set_channel_swap('data', (2,1,0))
+        if small_cnn:
+            net.set_mean('data', np.load(net_mean)[0])
+        else:
+            net.set_mean('data', np.load(net_mean))
+            #net.set_raw_scale('data', 255)
+            #net.set_channel_swap('data', (2,1,0))
 
     return net
 
@@ -48,8 +51,10 @@ def predictLabel2D(xy, image, net):
         x_start = xy[i, 0] - offset
         y_start = xy[i, 1] - offset
         
-        patch = image[y_start:y_start+patch_size, x_start:x_start+patch_size, :] / 255.0
-        patch = np.asarray(patch[:, :, [2, 1, 0]])  # since the image is read using cv2
+        patch = image[y_start:y_start+patch_size, x_start:x_start+patch_size, :]
+        #patch = patch / 255.0
+        patch = patch.astype(float)
+        #patch = np.asarray(patch[:, :, [2, 1, 0]])  # since the image is read using cv2
         patches_indices.append((patch, i))
         
     patches, indices = zip(*patches_indices)
@@ -107,8 +112,10 @@ def predictCrossing2D(xy, image, net, image_name = None):
     for i in range(len(xy)):
         x_start = xy[i, 0] - offset
         y_start = xy[i, 1] - offset
-        patch = image[y_start:y_start+patch_size, x_start:x_start+patch_size, :] / 255.0
-        patch = np.asarray(patch[:, :, [2, 1, 0]])
+        patch = image[y_start:y_start+patch_size, x_start:x_start+patch_size, :]
+        #patch = patch / 255.0
+        patch = patch.astype(float)
+        #patch = np.asarray(patch[:, :, [2, 1, 0]])
         patches_indices.append((patch, i))
 
     patches, indices = zip(*patches_indices)

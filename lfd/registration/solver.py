@@ -96,5 +96,7 @@ class CpuTpsSolverFactory(TpsSolverFactory):
 try:
     from solver_gpu import GpuTpsSolverFactory
     AutoTpsSolverFactory = GpuTpsSolverFactory
+    print "GPU SUCCESS: imported gpu tps solver"
 except:
     AutoTpsSolverFactory = CpuTpsSolverFactory
+    print "GPU FAILED: could not import gpu tps solver"

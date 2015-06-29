@@ -67,9 +67,11 @@ def plot_tps_registration_proj_2d(x_nd, y_md, f, res, x_color, y_color, xwarped_
     plotting_plt.plot_warped_grid_proj_2d(lambda xyz: xyz, grid_mins[:2], grid_maxs[:2], z=x_median[2], xres=res[0], yres=res[1], draw=False)
     
     plt.subplot(222, aspect='equal')
-    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='+', s=50)
+    #plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='+', s=50)
+    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, edgecolors=y_colors, marker='+', s=50)
     xwarped_nd = f.transform_points(x_nd)
-    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
+    #plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
+    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=x_colors, facecolors='none', marker='o', s=50)
     plot2_axis = plt.axis()
 
     plt.subplot(223, aspect='equal')

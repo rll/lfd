@@ -125,9 +125,10 @@ def plot_warped_grid_proj_2d(f, mins, maxes, z=.0, xres = .1, yres = .1, color =
 
     lc = matplotlib.collections.LineCollection(lines,colors=color,lw=1)
     ax = plt.gca()
-    ax.add_collection(lc)
+    added_lines = ax.add_collection(lc)
     if draw:
         plt.draw()
+    return added_lines
 
 def plot_tps_registration(x_nd, y_md, f, res = (.1, .1, .04), x_color=None, y_color=None, proj_2d=False):
     """

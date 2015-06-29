@@ -18,7 +18,8 @@ parser.add_argument("outputdir", type=str)
 parser.add_argument("--cloud_proc_func", default="extract_nongreen")
 parser.add_argument("--cloud_proc_mod", default="towel_color_filters")
     
-parser.add_argument("--use_vis", action="store_true")
+parser.add_argument("--use_vis", action="store_true") # Note: even when use_vis is not set, alexnet features are still calculated
+                                                      # so that the output plots are useful (e.g. show whether corners are matched)
 parser.add_argument("--downsample", action="store_true")
 parser.add_argument("--extra_corners", type=int, default=1)
 args = parser.parse_args()
@@ -43,8 +44,8 @@ POSTFIX = 'saved_alexnet_labels.h5'
 NUM_DEMOS_TO_CHECK = 5  # Change back to 3
 HIST_COEFF = 10
 THRESHOLD = 0.15
-BETA = 10
-CORNERS_MULT = 100
+BETA = 1000
+CORNERS_MULT = 0.1
 
 cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
 cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
@@ -73,23 +74,22 @@ def get_demo_state(demofile, cloud_id, demos_saved_alexnet, net):
 
             alexnet_features = None
             alexnet_features_100corners = None
-            if args.use_vis:
-                features = {}
-                features['fc7'] = seg['fc7_ds'][()]
-                features['fc8'] = seg['fc8_ds'][()]
-                alexnet_features = [seg['predicts_ds'][()], seg['scores_ds'][()], features, seg['validmask_ds'][()]]
+            features = {}
+            features['fc7'] = seg['fc7_ds'][()]
+            features['fc8'] = seg['fc8_ds'][()]
+            alexnet_features = [seg['predicts_ds'][()], seg['scores_ds'][()], features, seg['validmask_ds'][()]]
 
-                if args.extra_corners:
-                    features_100corners = {}
-                    features_100corners['fc7'] = seg['fc7_ds_100corners'][()]
-                    features_100corners['fc8'] = seg['fc8_ds_100corners'][()]
-                    alexnet_features_100corners = [seg['predicts_ds_100corners'][()], seg['scores_ds_100corners'][()], \
+            if args.use_vis and args.extra_corners:
+                features_100corners = {}
+                features_100corners['fc7'] = seg['fc7_ds_100corners'][()]
+                features_100corners['fc8'] = seg['fc8_ds_100corners'][()]
+                alexnet_features_100corners = [seg['predicts_ds_100corners'][()], seg['scores_ds_100corners'][()], \
                                                    features_100corners, seg['validmask_ds_100corners'][()]]
         else:
             seg = demofile[cloud_id]
             redprint("Calculating Alexnet for demo")
             cloud_xyz = np.asarray(seg['cloud_xyz'][()])
-            (cloud_xyz_ds, cloud_xyz_ds_100corners, alexnet_features, alexnet_features_100corners) = vis_util.get_alexnet_features(cloud_xyz, seg['rgb'][()], seg['T_w_k'][()], net, DS_SIZE, args)
+            (cloud_xyz_ds, cloud_xyz_ds_100corners, alexnet_features, alexnet_features_100corners) = vis_utils.get_alexnet_features(cloud_xyz, seg['rgb'][()], seg['T_w_k'][()], net, DS_SIZE, args, use_vis=True)
 
         visfeatures_scene = VisFeaturesSceneState(cloud_xyz_ds, cloud_xyz_ds_100corners, cloud_xyz, alexnet_features,
                                                   alexnet_features_100corners)
@@ -106,15 +106,16 @@ def find_closest_auto(test_state, demofile, demos_saved_alexnet, net, tps_rpm_fa
 
     demo_keys = list(Globals.demo_clouds.keys())
     print demo_keys
-    hist_distances = [(vis_utils.get_labels_distance(test_state.alexnet_features_wocorners[0], \
-                                                     Globals.demo_clouds[k].scene_state.alexnet_features_wocorners[0]), i) \
-                      for (i,k) in enumerate(demo_keys)]
-    hist_distances = [(d,i) for (d,i) in hist_distances if not math.isnan(d)]
-    print "Histogram distances:", hist_distances
-    top_hist_distances = sorted(hist_distances)[:NUM_DEMOS_TO_CHECK]
-    demo_keys_with_vals = [(demo_keys[i], x) for (x,i) in top_hist_distances]
-    demo_keys = [demo_keys[i] for (x,i) in top_hist_distances]
-    print "REMAINING DEMOS:", demo_keys_with_vals
+    if args.use_vis:
+        hist_distances = [(vis_utils.get_labels_distance(test_state.alexnet_features_wocorners[0], \
+                                                         Globals.demo_clouds[k].scene_state.alexnet_features_wocorners[0]), i) \
+                          for (i,k) in enumerate(demo_keys)]
+        hist_distances = [(d,i) for (d,i) in hist_distances if not math.isnan(d)]
+        print "Histogram distances:", hist_distances
+        top_hist_distances = sorted(hist_distances)[:NUM_DEMOS_TO_CHECK]
+        demo_keys_with_vals = [(demo_keys[i], x) for (x,i) in top_hist_distances]
+        demo_keys = [demo_keys[i] for (x,i) in top_hist_distances]
+        print "REMAINING DEMOS:", demo_keys_with_vals
 
     tps_rpm_factory.demos = Globals.demo_clouds
     tps_rpm_factory.n_iter = 10
@@ -124,11 +125,14 @@ def find_closest_auto(test_state, demofile, demos_saved_alexnet, net, tps_rpm_fa
     costs = [registration_cost(Globals.demo_clouds[k], test_state, tps_rpm_factory) for k in demo_keys]
    
     print demo_keys
-    print "old costs for selection:", costs
-    costs = [(c + HIST_COEFF * top_hist_distances[i][0], i) for (i,c) in enumerate(costs) if not math.isnan(c)]
+    if args.use_vis:
+        print "old costs for selection:", costs
+        costs = [(i, c + HIST_COEFF * top_hist_distances[i][0]) for (i,c) in enumerate(costs) if not math.isnan(c)]
+    else:
+        costs = enumerate(costs)
     print "costs for selection", costs
-    sorted_costs = sorted(costs, key=lambda x: x[0])   
-    return [(demo_keys[i], i, c) for (c,i) in sorted_costs]
+    sorted_costs = sorted(costs, key=lambda x: x[1])
+    return [(demo_keys[i], i, c) for (i,c) in sorted_costs]
             
 def colored_plot_cb(x_nd, y_md, x_color, y_color, f, save_filename, plot_color=1, proj_2d=1, x_labels=None, y_labels=None, label_colors=None):
     z_intercept = np.mean(x_nd[:,2])
@@ -188,9 +192,8 @@ def main():
     demofile = h5py.File(args.h5file, 'r')
 
     net = None
-    if args.use_vis:  # load alexnet model
-        print "Loading Alexnet model"
-        net = get_alexnet_from_info_folder(args.net_info_folder)
+    print "Loading Alexnet model"
+    net = get_alexnet_from_info_folder(args.net_info_folder)
 
     demos_saved_alexnet = None
     if os.path.isfile(args.h5file[:-3]+POSTFIX):
@@ -203,7 +206,7 @@ def main():
         prior_fn = lambda demo_state, test_state: vis_utils.new_vis_cost_fn(demo_state, test_state, beta=BETA, corners_mult=CORNERS_MULT)
     tps_rpm_factory = TpsRpmRegistrationFactory(Globals.demo_clouds, n_iter=10, reg_init=10, reg_final=0.001, \
                                    rot_reg=np.r_[1e-4, 1e-4, 1e-1], \
-                                   rad_init=0.01, rad_final = 0.00005, outlierprior=0.01, outlierfrac=0.01, prior_fn=prior_fn)
+                                   rad_init=0.01, rad_final = 0.00005, outlierprior=0.0001, outlierfrac=0.0001, prior_fn=prior_fn)
 
     testh5file = h5py.File(args.testh5file, 'r')
 
@@ -214,11 +217,13 @@ def main():
         if not test_k.startswith('pickupdiagcorners'):
             continue
         (rgb, depth, T_w_k, new_xyz_full) = load_test_cloud(testh5file, test_k)
-        (new_xyz, new_xyz_100corners, alexnet_features, alexnet_features_100corners) = vis_utils.get_alexnet_features(new_xyz_full, rgb, T_w_k, net, DS_SIZE, args)
+        (new_xyz, new_xyz_100corners, alexnet_features, alexnet_features_100corners) = vis_utils.get_alexnet_features(new_xyz_full, rgb, T_w_k, net, DS_SIZE, args, use_vis=True)
+
+        # alexnet_features contains the test state's alexnet features, which will be used only in plotting if use_vis=False
 
         test_state = VisFeaturesSceneState(new_xyz, new_xyz_100corners, new_xyz_full, alexnet_features, alexnet_features_100corners)
 
-        if args.extra_corners:
+        if args.use_vis and args.extra_corners:
             new_xyz = new_xyz_100corners
             alexnet_features = alexnet_features_100corners
 
@@ -261,7 +266,7 @@ def main():
             colored_plot_cb(valid_old_xyz[:,:-3], valid_new_xyz[:,:-3], \
                    valid_old_xyz[:,-3:], vis_utils.bgr_to_rgb(valid_new_xyz[:,-3:]), tps_rpm_f.f, \
                    save_filename, x_labels=demo_state_with_extra_pts.alexnet_features[0], y_labels=test_state.alexnet_features[0], label_colors=label_colors)
-    
+                
     testh5file.close()
     demofile.close()
 
