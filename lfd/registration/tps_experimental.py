@@ -1,13 +1,15 @@
 from __future__ import division
-
+import scipy as scipy
 import settings
 import numpy as np
+
 import scipy.spatial.distance as ssd
 import scipy.optimize as so
 import transformation
 from transformation import Transformation
 from tps import tps_kernel_matrix, tps_kernel_matrix2, tps_grad, loglinspace, nan2zero, prepare_fit_ThinPlateSpline, balance_matrix3
-
+from lfd.rapprentice import clouds
+import IPython as ipy
 class ThinPlateSpline(Transformation):
     """
     Attributes:
@@ -25,6 +27,8 @@ class ThinPlateSpline(Transformation):
             g: dimension of a target point. Default is the same as the dimension of a source point.
         """
         l, a = x_la.shape
+        self.l = l
+        self.a = a
         n = ctrl_na.shape[0]
         assert a == ctrl_na.shape[1]
         if g is None:
@@ -41,7 +45,9 @@ class ThinPlateSpline(Transformation):
         self.NKN_nn = self.N_bn[a+1:, :].T.dot(self.K_nn.dot(self.N_bn[a+1:, :]))
         
         trans_g = np.zeros(g)
+        
         lin_ag = np.eye(a, g)
+        
         self._z_ng = None
         self.z_ng = np.r_[trans_g[None, :], lin_ag, np.zeros((n-a-1, g))]
     
@@ -186,6 +192,8 @@ def solve_qp(H, f):
 
     x = np.linalg.solve(H, -f)
     return x
+
+
 
 def tpsn_fit(f, y_lg, v_rg, bend_coef, rot_coef, wt_l, wt_r):
     l, r, a = f.l, f.r, f.a
@@ -683,6 +691,8 @@ def tps_cov_obj(z_knd, f_k, p_ktd, L_ktkn=None, w_t=None):
     k, t, d = p_ktd.shape
     Lz_ktd = L_ktkn.dot(z_knd.reshape((-1,d)))
     energy = (1/k) * np.sum(np.square(Lz_ktd))
+    # import IPython
+    # IPython.embed()
     grad_knd = (1/k) * 2 * L_ktkn.T.dot(Lz_ktd).reshape(-1)
 
     # if w_t is None:
@@ -725,6 +735,659 @@ def params_to_multi_tps(z_knd, f_k):
         f.z_ng = z_knd[i*d:(i+n)*d]
         i += n
     return f_k
+
+
+def tps_fit(f_k, y_lgs, bend_coef, rot_coef, wt_ls, LLprime, cov_coef):
+    """
+    f_k is all the ThinPlateSplines
+    y_lgs is all the xtargets
+    bend_coef and rot_coef defined as earlier
+    wt_ls is all the different weights combined
+    L_ktkn encodes sum of covariances
+    """
+    # print(cov_coef)
+    H_nns = []
+    f_ngs = []
+    z_ngsizes = []
+    # for each thin plate spline we calculate H_nn and f_ng(g_r in the derivation)
+    for (f, y_lg, wt_l) in zip(f_k, y_lgs, wt_ls):
+        l, a = f.l, f.a
+        g = y_lg.shape[1]
+        
+        if wt_l is None: wt_l = np.ones(l)
+        rot_coef = np.ones(a) * rot_coef if np.isscalar(rot_coef) else rot_coef
+
+        WQN_ln = wt_l[:,None] * f.QN_ln
+        NR_na = f.N_bn[1:1+a,:].T * rot_coef
+        H_nn = f.QN_ln.T.dot(WQN_ln)
+        H_nn += bend_coef * f.NKN_nn
+        
+        H_nn += NR_na.dot(f.N_bn[1:1+a,:])
+        H_nns.append(H_nn)
+        f_ng = -WQN_ln.T.dot(y_lg)
+        f_ng -= NR_na
+        f_ngs.append(f_ng)
+        z_ngsizes.append(f_ng.shape[0])
+        
+    k = len(f_k)
+    # import IPython
+    # IPython.embed()
+    H_nncombined = scipy.linalg.block_diag(*H_nns) + LLprime*cov_coef
+    #stack the f_ng's just like the grs are stacked in the derivation
+    f_ngcombined = np.vstack(f_ngs)
+
+    #solve the qp
+    z_ngs = solve_qp(H_nncombined, f_ngcombined)
+    #re divide the resulting z_ngs into the individual z_ng and then set the appropriate f.z_ng for each thin plate spline
+    curr_marker = 0
+    for i in range(k):
+        f_k[i].z_ng = z_ngs[curr_marker:curr_marker+z_ngsizes[i]]
+        curr_marker+=z_ngsizes[i]
+
+
+    return (1/k)*np.trace(z_ngs.T.dot(LLprime).dot(z_ngs)), np.trace(z_ngs.T.dot(H_nncombined).dot(z_ngs) - 2*z_ngs.T.dot(f_ngcombined))
+    # print("DONE ONCE")
+
+def tps_rpm(x_kld, y_md, p_ktd, f_k, w_t, w_pc, prior_prob_lms = None,
+             n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+             reg_init=settings.REG[0], reg_final=settings.REG[1], 
+             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+             rot_reg=settings.ROT_REG, 
+             outlierprior=settings.OUTLIER_PRIOR, cov_coef= settings.COV_COEF, outlierfrac=settings.OUTLIER_FRAC, 
+             callback=None, args=(),  multi_args=()):
+    """
+    TODO: hyperparameters
+
+
+    x_kld is all the k source point clouds
+    y_md is the target point cloud
+    p_ktd are the k trajectories
+    f_k are the k ThinPlateSplines
+    w_t are the weights used for the covariances
+    """
+    print("Starting tps rpm")
+    k = len(x_kld)
+    
+    regs = loglinspace(reg_init, reg_final, n_iter)
+    rads = loglinspace(rad_init, rad_final, n_iter)
+    # setting the scales for all the different thin plate splines individually as there are a number of them now
+    for f, x_ld in zip(f_k, x_kld):
+        scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_ld,axis=0) - np.min(x_ld,axis=0))
+        f.lin_ag = np.diag(scale) # align the mins and max
+        f.trans_g = np.median(y_md,axis=0) - np.median(x_ld,axis=0) * scale  # align the medians
+    
+    # set up outlier priors for source and target scenes same as earlier
+    m, _ = y_md.shape
+
+    y_priors = np.ones(m)*outlierprior
+    
+    L_ktkn = compute_sum_var_matrix(f_k, p_ktd, w_t=w_t)
+    LLprime = (1/k)*L_ktkn.T.dot(L_ktkn)
+
+    for i, (reg, rad) in enumerate(zip(regs, rads)):
+        for i_em in range(em_iter):
+            corr_lms = []
+            xtarg_lds = []
+            wt_ls = []
+            # for each thin plate spline do the correspondence optimization independently as the covariance term does not depend on the correspondences
+            for f, x_ld, w_p, prior_prob_lm in zip(f_k, x_kld, w_pc, prior_prob_lms):
+                # print("traj")
+                l, d = x_ld.shape
+                x_priors = np.ones(l)*outlierprior
+                xwarped_ld = f.transform_points()
+                dist_lm = ssd.cdist(xwarped_ld, y_md, 'sqeuclidean')
+                prob_lm = np.exp( -dist_lm / (2*rad) )
+                # prob_lm *= prior_prob_lm
+                # prob_lm = prob_lm*(1.0/np.max(prob_lm))
+                
+                corr_lm, _, _ =  balance_matrix3(prob_lm, 10, x_priors, y_priors, outlierfrac)
+                corr_lms.append(corr_lm)
+                xtarg_ld, wt_l = prepare_fit_ThinPlateSpline(x_ld, y_md, corr_lm)
+                # uncoment for weight
+                # temp = np.multiply(wt_l, w_p)
+                # temp *= np.sum(wt_l)/np.sum(temp)
+                # wt_l = temp
+                xtarg_lds.append(xtarg_ld)
+                wt_ls.append(wt_l)
+            # once the correspondences are fixed, switch to coordinate descent on f, and hence compute L, and call tps_fit, which sets all the different f's in f_k
+           
+            print("before")
+            cov_obj_term, res_obj = tps_fit(f_k, xtarg_lds, reg, rot_reg, wt_ls, LLprime, cov_coef)
+    import IPython
+    # IPython.embed()
+    return f_k, corr_lms
+
+def tps_fit_single(f, y_lg, bend_coef, rot_coef, wt_l):
+    """
+    f_k is all the ThinPlateSplines
+    y_lgs is all the xtargets
+    bend_coef and rot_coef defined as earlier
+    wt_ls is all the different weights combined
+    L_ktkn encodes sum of covariances
+    """
+    # print(cov_coef)
+    
+    # for each thin plate spline we calculate H_nn and f_ng(g_r in the derivation)
+    l, a = f.l, f.a
+    g = y_lg.shape[1]
+    
+    if wt_l is None: wt_l = np.ones(l)
+    rot_coef = np.ones(a) * rot_coef if np.isscalar(rot_coef) else rot_coef
+
+    WQN_ln = wt_l[:,None] * f.QN_ln
+    NR_na = f.N_bn[1:1+a,:].T * rot_coef
+    H_nn = f.QN_ln.T.dot(WQN_ln)
+    H_nn += bend_coef * f.NKN_nn
+    
+    H_nn += NR_na.dot(f.N_bn[1:1+a,:])
+    f_ng = -WQN_ln.T.dot(y_lg)
+    f_ng -= NR_na
+        
+    # import IPython
+    # IPython.embed()
+    #stack the f_ng's just like the grs are stacked in the derivation
+
+    #solve the qp
+    z_ng = solve_qp(H_nn, f_ng)
+    #re divide the resulting z_ngs into the individual z_ng and then set the appropriate f.z_ng for each thin plate spline
+    f.z_ng = z_ng
+
+
+    return f
+    # print("DONE ONCE")
+
+def compute_P_matrix(x_ld, y_md, sigma_2, f, w):
+
+    l, d = x_ld.shape
+    m, _ = y_md.shape
+    P = np.zeros((l,m))
+    i = 0
+    j = 0
+    outlierterm = ((2*np.pi*sigma_2)**(d/2))*(w/(1-w))*(l/m)
+    for y in y_md:
+        i = 0
+        normalizedsum = 0
+        for x in x_ld:
+            P[i,j] = np.exp(-1/(2*sigma_2)*(np.linalg.norm(y-f.transform_points(x))**2))
+            normalizedsum += P[i,j]
+            i += 1
+        P[:,j] = P[:,j]/(normalizedsum + outlierterm)
+        j += 1
+    return P
+
+
+
+def cpd_tps(x_ld, y_md, f=None, em_iter=20, bend_coef=settings.REG[0],
+             rot_coef=settings.ROT_REG, w=0.01, 
+             callback=None, args=()):
+    """
+    TODO: hyperparameters
+
+
+    x_kld is all the k source point clouds
+    y_md is the target point cloud
+    p_ktd are the k trajectories
+    f_k are the k ThinPlateSplines
+    w_t are the weights used for the covariances
+    """
+    print("Starting tps rpm single")
+    # k = len(x_kld)
+    l, d = x_ld.shape
+    import IPython
+    # IPython.embed()
+    import tps
+    #initialize sigma square
+    DNM = 2
+    sigma_2 = 0
+    for i in x_ld:
+        for j in y_md:
+            sigma_2 += np.linalg.norm(x_ld - y_md)**2
+    sigma_2 = sigma_2*1/DNM
+    # set up outlier priors for source and target scenes same as earlier
+    m, _ = y_md.shape
+
+    
+    P = np.zeros((l,m))
+    
+    for i_em in range(em_iter):
+        
+        # for each thin plate spline do the correspondence optimization independently as the covariance term does not depend on the correspondences
+        l, a = f.l, f.a
+            # print("traj")
+        #E STEP
+        P = compute_P_matrix(x_ld, y_md, sigma_2, f, w)
+        #M STEP
+        Np = np.ones((l,)).dot(P).dot(np.ones((m,)))
+        NR_na = f.N_bn[1:1+a,:].T * rot_coef
+        H_nn = (f.N_bn.T.dot(f.Q_lb.T).dot(np.diag(P.dot(np.ones((m,))))).dot(f.Q_lb).dot(f.N_bn) + bend_coef*sigma_2*f.NKN_nn + sigma_2*NR_na.dot(f.N_bn[1:1+a,:]))
+        f_ng = -(f.N_bn.T.dot(f.Q_lb.T).dot(P).dot(y_md) + sigma_2*NR_na)
+        z_ng = solve_qp(H_nn, f_ng)
+        f.z_ng = z_ng
+        Pt1 = np.diag(P.T.dot(np.ones((l,))))
+        P1 = np.diag(P.dot(np.ones((m,))))
+        PY = P.dot(y_md)
+        theta = f.N_bn.dot(z_ng)
+        sigma_2 = (1/(Np*d))*(np.trace(y_md.T.dot(Pt1).dot(y_md)) - 2*np.trace(PY.T.dot(f.Q_lb).dot(theta)) + np.trace(theta.T.dot(f.Q_lb.T).dot(P1).dot(f.Q_lb).dot(theta)))
+        callback(f.transform_points(), None, args[0])
+    return f
+
+
+def tps_rpm_single(x_ld, y_md, w_pc, f=None, prior_prob_lm = None,
+             n_iter=50, em_iter=settings.EM_ITER, 
+             reg_init=settings.REG[0], reg_final=settings.REG[1], 
+             rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+             rot_reg=settings.ROT_REG, 
+             outlierpriorx=0.01, outlierpriory=0.7, cov_coef= settings.COV_COEF, outlierfrac=0.01, 
+             callback=None, args=(),  multi_args=()):
+    """
+    TODO: hyperparameters
+
+
+    x_kld is all the k source point clouds
+    y_md is the target point cloud
+    p_ktd are the k trajectories
+    f_k are the k ThinPlateSplines
+    w_t are the weights used for the covariances
+    """
+    print("Starting tps rpm single")
+    # k = len(x_kld)
+    l, d = x_ld.shape
+    import IPython
+    # IPython.embed()
+    import tps
+    # f = tps.ThinPlateSpline(d)
+
+    regs = loglinspace(reg_init, reg_final, n_iter)
+    rads = loglinspace(rad_init, rad_final, n_iter)
+    # setting the scales for all the different thin plate splines individually as there are a number of them now
+    
+    # scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_ld,axis=0) - np.min(x_ld,axis=0))
+    # f.lin_ag = np.diag(scale) # align the mins and max
+    # f.trans_g = np.median(y_md,axis=0) - np.median(x_ld,axis=0) * scale  # align the medians
+    
+    # set up outlier priors for source and target scenes same as earlier
+    m, _ = y_md.shape
+
+    y_priors = np.ones(m)*outlierpriory
+
+    for i, (reg, rad) in enumerate(zip(regs, rads)):
+        for i_em in range(em_iter):
+            
+            # for each thin plate spline do the correspondence optimization independently as the covariance term does not depend on the correspondences
+           
+                # print("traj")
+            
+            x_priors = np.ones(l)*outlierpriorx
+            xwarped_ld = f.transform_points()
+            dist_lm = ssd.cdist(xwarped_ld, y_md, 'sqeuclidean')
+            prob_lm = np.exp( -dist_lm / (2*rad) )
+            # prob_lm *= prior_prob_lm
+            # prob_lm = prob_lm*(1.0/np.max(prob_lm))
+            corr_lm, _, _ =  balance_matrix3(prob_lm, 10, x_priors, y_priors, outlierfrac)
+            xtarg_ld, wt_l = prepare_fit_ThinPlateSpline(x_ld, y_md, corr_lm)
+            # uncoment for weight
+            # temp = np.multiply(wt_l, w_pc)
+            # temp *= np.sum(wt_l)/np.sum(temp)
+            # wt_l = temp
+            # once the correspondences are fixed, switch to coordinate descent on f, and hence compute L, and call tps_fit, which sets all the different f's in f_k
+            tps_fit_single(f, xtarg_ld, reg, rot_reg, wt_l)
+            # 
+            # f = tps.ThinPlateSpline.create_from_optimization(x_ld, xtarg_ld, reg, rot_reg, wt_l)
+            callback(f.transform_points(), None, args[0])
+    import IPython
+    # IPython.embed()
+    return f, corr_lm
+
+
+def pairwise_tps_rpm_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None, prior_prob_lms = None,
+                            n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                            reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                            rot_reg=settings.ROT_REG, 
+                            cov_coef=settings.COV_COEF, 
+                            w_t=None, w_pc=None, outlierprior = settings.OUTLIER_PRIOR,
+                            callback=None, args=(), 
+                            multi_callback=None, multi_args=(), ds=0.025):
+
+    # x_kld: source points k (l x d)
+    # y_md: target points (m x d)
+    # p_ktd: trajectory k (t x d)
+    # ctrl_knd: control points k (n x d) [l = k in some cases]
+    # print("INSIDE HERE1")
+    if f_init_k is None:
+        print("IN first if")
+        if ctrl_knd is None:
+            ctrl_knd = x_kld
+        else:
+            if len(ctrl_knd) != len(x_kld):
+                raise ValueError("The number of control points in ctrl_knd is different from the number of point sets in x_kld")
+        f_k = []
+        # intitalize z from independent optimizations
+        f_k = []
+        for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, ctrl_knd):
+            n, d = ctrl_nd.shape
+            f = tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=n_iter, opt_iter=opt_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init, rad_final=rad_final, rot_reg=rot_reg, callback=callback, args=args)
+            f_k.append(f)
+    else:  
+        print("IN second if")
+        if len(f_init_k) != len(x_kld):
+            raise ValueError("The number of ThinPlateSplines in f_init_k is different from the number of point sets in x_kld")
+        f_k = f_init_k
+    z_knd = multi_tps_to_params(f_k)
+
+    if multi_callback is not None:
+        print("displaying env")
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
+        
+
+    def opt_multi_callback(z_knd):
+        params_to_multi_tps(z_knd, f_k)
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
+
+    # call made to tps_rpm function to run the whole optimization using TPS-RPM    
+    f_k, _ = tps_rpm(x_kld, y_md, p_ktd, f_k, w_t, w_pc, prior_prob_lms=prior_prob_lms, em_iter=em_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init,rad_final=rad_final,rot_reg=rot_reg, outlierprior=outlierprior, cov_coef = cov_coef, callback=None, multi_args=multi_args)
+    #testing this part, remove if necessary
+    if multi_callback is not None:
+        raw_input("FINAL output")
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
+    return f_k
+
+
+def pairwise_tps_cpd_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None, prior_prob_lms = None,
+                            em_iter=20, cov_coef=100, bend_coef=10000,
+                            rot_reg=np.ones(3)*1000, 
+                            w_t=None, outlierfrac = 0.8, allcolors = None, targetcolors = None,
+                            callback=None, args=(), 
+                            multi_callback=None, multi_args=()):
+
+    # x_kld: source points k (l x d)
+    # y_md: target points (m x d)
+    # p_ktd: trajectory k (t x d)
+    # ctrl_knd: control points k (n x d) [l = k in some cases]
+    # print("INSIDE HERE1")
+    if f_init_k is None:
+        print("IN first if")
+        if ctrl_knd is None:
+            ctrl_knd = x_kld
+        else:
+            if len(ctrl_knd) != len(x_kld):
+                raise ValueError("The number of control points in ctrl_knd is different from the number of point sets in x_kld")
+        f_k = []
+        # intitalize z from independent optimizations
+        f_k = []
+        for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, ctrl_knd):
+            n, d = ctrl_nd.shape
+            f = tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=n_iter, opt_iter=opt_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init, rad_final=rad_final, rot_reg=rot_reg, callback=callback, args=args)
+            f_k.append(f)
+    else:  
+        print("IN second if")
+        if len(f_init_k) != len(x_kld):
+            raise ValueError("The number of ThinPlateSplines in f_init_k is different from the number of point sets in x_kld")
+        f_k = f_init_k
+
+    if multi_callback is not None:
+        print("displaying env")
+        # multi_callback(f_k, y_md, p_ktd, *multi_args)
+    
+    # call made to tps_rpm function to run the whole optimization using TPS-RPM    
+    f_k = tps_cpd_nonrigid_complete(x_kld, y_md, p_ktd, w_t=w_t, prior_prob_lms=prior_prob_lms, f_k=f_k, \
+        cov_coef=cov_coef, em_iter=em_iter, bend_coef=bend_coef, \
+        rot_coef=rot_reg, omega=outlierfrac, callback=callback, args=args)
+    #testing this part, remove if necessary
+    if multi_callback is not None:
+        raw_input("FINAL output")
+        multi_callback(f_k, y_md, p_ktd, multi_args[0], allcolors, targetcolors=targetcolors, disp_demos=False)
+    return f_k
+
+def tps_cpd_nonrigid_complete(x_kld, y_md, p_ktd, w_t = None, prior_prob_lms = None, f_k=None, cov_coef = 100, em_iter=20, bend_coef=10000,
+            rot_coef=np.ones(3)*1000, omega=0.8, 
+            callback=None, args=()):
+    """
+    TODO: hyperparameters
+
+    x_kld is all the k source point clouds
+    y_md is the target point cloud
+    p_ktd are the k trajectories
+    f_k are the k ThinPlateSplines
+    w_t are the weights used for the covariances
+    """
+    print("Starting tps_cpd")
+    k = len(x_kld)
+    l, d = x_kld[0].shape
+    m, _ = y_md.shape
+    a = d
+    # ipy.embed()
+
+    if f_k is None:
+        f_k = []
+        for x_ld in x_kld:
+           f_k.append(ThinPlateSpline(x_ld, x_ld))
+    x_kldarr = np.vstack(x_kld)
+    xwarped_ld = x_kldarr
+    alldemopoints, _ = x_kldarr.shape
+    QN = []
+    NRN_nas = []
+    NR_nas = []
+    NKN_nns = []
+    z_ngsizes = []
+    for f in f_k:
+        QN.append(f.QN_ln)
+        temp = (f.N_bn[1:1+a,:].T * rot_coef)
+        NRN_nas.append(temp.dot(f.N_bn[1:1+a,:]))
+        NR_nas.append(temp)
+        NKN_nns.append(f.NKN_nn)
+        z_ngsizes.append(f.z_ng.shape[0])
+    QN = scipy.linalg.block_diag(*QN)
+    NRN_na = scipy.linalg.block_diag(*NRN_nas)
+    NR_na = np.vstack(NR_nas)
+    NKN_nn = scipy.linalg.block_diag(*NKN_nns)
+    #initialize sigma square
+    sigma_2 = ssd.cdist(x_kldarr, y_md, 'sqeuclidean').sum() / (d*alldemopoints*m)
+    # if callback is not None:
+    #     callback(f_k)
+    # ipy.embed()
+    
+    L_ktkn = compute_sum_var_matrix(f_k, p_ktd, w_t=w_t)
+    LLprime = (1/k)*L_ktkn.T.dot(L_ktkn)
+
+    for i_em in range(em_iter):
+        # for each thin plate spline do the correspondence optimization independently as the covariance term does not depend on the correspondences
+        #E STEP
+        print("Start E Step")
+        dist_lm = ssd.cdist(xwarped_ld, y_md, 'sqeuclidean')
+        P_lm = np.exp( -dist_lm / (2*sigma_2) )
+        if prior_prob_lms is not None:
+            P_lm *= prior_prob_lms
+        else:
+            P_lm *= (1/alldemopoints)
+        outlierterm = ((2*np.pi*sigma_2)**(d/2))*(omega/(1-omega))*(1/m)
+        P_lm /= (P_lm.sum(axis=0) + outlierterm)
+        # ipy.embed()
+        #M STEP
+        Np = P_lm.sum()
+
+        PQN_ln = P_lm.sum(axis=1)[:,None] * QN
+        
+        H_nn = QN.T.dot(PQN_ln)
+        H_nn += bend_coef * sigma_2 * NKN_nn
+        H_nn += sigma_2 * NRN_na
+        H_nn += cov_coef*LLprime
+
+        f_ng = -QN.T.dot(P_lm).dot(y_md)
+        f_ng -= sigma_2 * NR_na
+
+        z_ng = solve_qp(H_nn, f_ng)
+        print("finish Z calc")
+        # ipy.embed()
+        #need to split these guys up
+        # f.z_ng = z_ng
+        curr_marker = 0
+        xwarped_ld = []
+        for i in range(k):
+            f_k[i].z_ng = z_ng[curr_marker:curr_marker+z_ngsizes[i]]
+            curr_marker+=z_ngsizes[i]
+            xwarped_ld.append(f_k[i].transform_points())
+        print("finish warping")
+        xwarped_ld = np.vstack(xwarped_ld)
+        sigma_2 = (1/(Np*d)) * (np.trace(y_md.T.dot(P_lm.sum(axis=0)[:,None] * y_md))
+            - 2*np.trace(P_lm.dot(y_md).T.dot(xwarped_ld))
+            + np.trace(xwarped_ld.T.dot(P_lm.sum(axis=1)[:,None] * xwarped_ld)))
+        print("finish sigma calc")
+        # ipy.embed()
+        # if callback is not None:
+        #     callback(f_k)
+    return f_k
+
+
+def pairwise_tps_rpm_cov_nn(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None, allcolors=None, targetcolors=None, prior_prob_lms = None,
+                            n_iter=settings.N_ITER, em_iter=settings.EM_ITER, 
+                            reg_init=settings.REG[0], reg_final=settings.REG[1], 
+                            rad_init=settings.RAD[0], rad_final=settings.RAD[1], 
+                            rot_reg=settings.ROT_REG, 
+                            cov_coef=settings.COV_COEF, 
+                            w_t=None, w_pc=None, outlierprior = settings.OUTLIER_PRIOR,
+                            callback=None, args=(), 
+                            multi_callback=None, multi_args=(), ds=0.025):
+
+    # x_kld: source points k (l x d)
+    # y_md: target points (m x d)
+    # p_ktd: trajectory k (t x d)
+    # ctrl_knd: control points k (n x d) [l = k in some cases]
+    # print("INSIDE HERE1")
+    import IPython
+    # IPython.embed()
+    if f_init_k is None:
+        print("IN first if")
+        if ctrl_knd is None:
+            ctrl_knd = x_kld
+        else:
+            if len(ctrl_knd) != len(x_kld):
+                raise ValueError("The number of control points in ctrl_knd is different from the number of point sets in x_kld")
+        f_k = []
+        # intitalize z from independent optimizations
+        f_k = []
+        for (x_ld, p_td, ctrl_nd) in zip(x_kld, p_ktd, ctrl_knd):
+            n, d = ctrl_nd.shape
+            f = tps_l2(x_ld, y_md, ctrl_nd=ctrl_nd, n_iter=n_iter, opt_iter=opt_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init, rad_final=rad_final, rot_reg=rot_reg, callback=callback, args=args)
+            f_k.append(f)
+    else:  
+        print("IN second if")
+        if len(f_init_k) != len(x_kld):
+            raise ValueError("The number of ThinPlateSplines in f_init_k is different from the number of point sets in x_kld")
+        f_k = f_init_k
+    z_knd = multi_tps_to_params(f_k)
+
+    # if multi_callback is not None:
+    #     print("displaying env")
+    #     multi_callback(f_k, y_md, p_ktd, *multi_args)
+        
+
+    def opt_multi_callback(z_knd):
+        params_to_multi_tps(z_knd, f_k)
+        multi_callback(f_k, y_md, p_ktd, *multi_args)
+
+    # call made to tps_rpm function to run the whole optimization using TPS-RPM    
+    f_k, _ = tps_rpm(x_kld, y_md, p_ktd, f_k, w_t, w_pc, prior_prob_lms=prior_prob_lms, em_iter=em_iter, reg_init=reg_init, reg_final=reg_final, rad_init=rad_init,rad_final=rad_final,rot_reg=rot_reg, outlierprior=outlierprior, cov_coef = cov_coef, callback=None, multi_args=multi_args)
+    #testing this part, remove if necessary
+    pcs = []
+    trajs = []
+    overallcolor = [] 
+
+    for f, p_td, color in zip(f_k, p_ktd, allcolors):
+        pcs.append(f.transform_points())
+        trajs.append(f.transform_points(p_td))
+        overallcolor.append(color)
+    trajs = np.array(trajs)
+    totalpts = np.vstack(pcs)
+    overallnear = totalpts
+    overallcolor = np.vstack(overallcolor)
+    import IPython
+    # IPython.embed()
+    # multi_callback(f_k, y_md, p_ktd, *multi_args)
+    # callback(totalpts, None, args[0])
+    # import IPython
+    # IPython.embed()
+    # window_radius = 0.02
+    # overallnear = []
+    # overallcolor = []
+    # overallleftovers = []
+    # # code to find intersection of the various point clouds
+    # for pc,colors, i in zip(pcs, allcolors, range(len(f_k))):
+    #     valid_indices_total = []
+    #     for pc2, i2 in zip(pcs, range(len(f_k))):
+    #         if i!=i2:
+    #             dists = np.min(ssd.cdist(pc, pc2,'euclidean'), axis = 1)
+    #             valid_indices = np.where(dists<window_radius)
+    #             if valid_indices_total == []:
+    #                 valid_indices_total = valid_indices
+    #             else:
+    #                 valid_indices_total = np.intersect1d(valid_indices_total, valid_indices)
+    #     # leftoverpoints = np.delete(pc, valid_indices_total)
+    #     # overallleftovers.append(leftoverpoints)
+    #     overallnear.append(pc[valid_indices_total]) 
+    #     overallcolor.append(colors[valid_indices_total])
+    # overallnear = np.vstack(overallnear)
+    # overallcolor = np.vstack(overallcolor)
+    import pickle
+    # data = {"overallcolor":overallcolor, "overallnear":overallnear, "trajs": trajs}
+    # data = pickle.load(open( "save.p", "rb" ) )
+    # overallnear = data["overallnear"]
+    # overallcolor = data["overallcolor"]
+    # trajs = data["trajs"]
+    # # overallleftovers = np.vstack(overallleftovers)
+    # uppoints = np.where(overallnear[:,2] > -2)[0]
+    # overallnear = overallnear[uppoints]
+    # overallcolor = overallcolor[uppoints]
+    # allcolors1 = np.vstack(allcolors)
+    # callback(overallnear, allcolors1, args[0])
+    m, _ = y_md.shape
+    l, d = overallnear.shape
+    print("calculating function matrix")
+    #calculating the function matrix
+    # kernel_mat = np.zeros((l,m))
+    #     #do the color matrix calculation
+    # print('color')
+    # i = 0
+    # j = 0
+    # traj_r = 0.001
+    # for n in overallcolor:
+    #     j = 0
+    #     for n2 in targetcolors:
+    #         kernel_mat[i,j] = np.exp(-np.linalg.norm(n-n2)**2 / (traj_r**2))
+    #         j += 1
+    #     i+=1
+    # print("done minning once")
+    # import IPython
+    # IPython.embed()
+    p_td_inital = np.mean(trajs, axis=0)
+    # #need to register points with test scene now
+    # traj_rad2 = 0.01
+    # dist_2 = ssd.cdist(overallnear, p_td_inital, 'sqeuclidean')
+    # dist_min = np.min(dist_2, axis=1)
+    # w_2=np.exp(-dist_min / (traj_rad2**2))
+    # # w_2 = np.zeros(overallnear.shape[0])
+    # # temp = np.where(overallnear[:,2]>0.9)[0]
+    # # w_2[temp] = 1
+    # f_initial = ThinPlateSpline(overallnear, overallnear)
+    # # f, _ = tps_rpm_single(overallnear, y_md, p_td_inital, f_initial, prior_prob_lm=kernel_mat, w_pc = w_2, em_iter=em_iter, reg_init=100, reg_final=10, rad_init=1000,rad_final=100,rot_reg=rot_reg, cov_coef = cov_coef, args= args, callback=callback, multi_args=multi_args)
+    # f, _ = tps_rpm_single(overallnear, y_md, f=f_initial, prior_prob_lm=kernel_mat, w_pc = w_2, em_iter=2, reg_init=100, reg_final=.01, rad_init=2,rad_final=0.0002,rot_reg=rot_reg, cov_coef = cov_coef, args= args, callback=callback, multi_args=multi_args)
+    # # f.x_la = f.x_na
+    # print("Done matching")
+    # import IPython
+    # IPython.embed()
+    # colors = np.c_[np.zeros(len(overallnear)), np.zeros(len(overallnear)), w_2]
+    # if callback is not None:
+    #     raw_input("FINAL output TESTING YEEEE")
+    #     callback(overallnear, overallcolor, args[0])
+    #end testing
+    f = tps_cpd(overallnear, y_md)
+    # callback(f.transform_points(), None, args[0])
+    if multi_callback is not None:
+        raw_input("FINAL output")
+        multi_callback([f], y_md, [p_td_inital], *multi_args)
+    return f_k
+
+
 
 def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None, 
                             n_iter=settings.L2_N_ITER, opt_iter=settings.L2_OPT_ITER, 
@@ -771,5 +1434,6 @@ def pairwise_tps_l2_cov(x_kld, y_md, p_ktd, ctrl_knd=None, f_init_k=None,
     f_k = params_to_multi_tps(z_knd, f_k)
     if multi_callback is not None:
         multi_callback(f_k, y_md, p_ktd, *multi_args)
-
+    # import IPython
+    # IPython.embed()
     return f_k
